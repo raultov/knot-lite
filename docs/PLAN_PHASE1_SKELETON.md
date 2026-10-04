@@ -1589,3 +1589,182 @@ shape and prints the generated tool schema.
    but any well-formed JSON-RPC object with a `method` gets an answer.)
 5. Responses are emitted in arrival order (fast failures answered first) — P1.12 must collect by
    `id`, as planned.
+
+### P1.4 — config + utils
+
+- Implemented as specified: pure `resolve` with injected `env`/`dotenv`/`cwd`, `env_path_from`,
+  `read_dotenv` (dotenvy `Error::not_found()` for the NotFound case), `Config::load_cli` /
+  `Config::load_mcp`, `init_logging` (stderr, no ANSI, `RUST_LOG` with level fallback).
+- All 15 planned unit tests present and green; no test touches the real process environment.
+- No deviations.
+
+### P1.5 — index layout + manifest
+
+- Implemented as specified. All 8 planned unit tests green. No deviations.
+
+### P1.6 — capability
+
+- **Deviation (clippy, fixed conservatively):** the plan's
+  `detect_with(lang, overrides, path_var, pathext, windows, is_exec)` has six parameters and
+  trips `clippy::too_many_arguments` at the repository threshold of 5. Reshaped to
+  `detect_with(lang, overrides, path_var, lookup)` where `lookup: &dyn Fn(&str) -> Option<PathBuf>`
+  is built by `which_in`'s (5-parameter, at-threshold) binding; `detect` wires the real
+  environment and `default_lookup` is the shared test/production binding. `which_in` itself
+  matches the plan exactly.
+- `which_in` behaviour, as planned: bare names searched on `PATH`; values with a separator or
+  absolute are checked directly (no PATH search); `PATHEXT` suffixes are appended only with
+  `windows = true` and only when `program` has no extension. Default `PATHEXT`
+  `".COM;.EXE;.BAT;.CMD"` ([`DEFAULT_PATHEXT`]).
+- Test-fixture note (Linux case-sensitive FS vs Windows semantics): fixtures create files whose
+  names match the *probed suffix case* (`tsls.cmd` for pathext `.cmd;.exe`, `tsls.EXE` for the
+  upper-case default `PATHEXT`); real Windows resolves case-insensitively. `windows_tries_pathext_in_order`
+  proves order by asserting both `.cmd;.exe` → `tsls.cmd` and `.exe;.cmd` → `tsls.exe`.
+- `scan_repository` runs `git init` via `std::process::Command` inside its own tempdir only (the
+  single documented shelling-out exception). `.gitignore` files are only honoured inside a git
+  repository (knot's `discover_files` does not set `require_git(false)`, so neither does the
+  scan); when `git` is unavailable the gitignore assertion is skipped with an explicit message.
+  On this machine `git` was available and the assertion ran.
+- Drift-guard test `every_knot_supported_extension_has_a_label` passes against knot's
+  `SUPPORTED_EXTENSIONS` (41 extensions covered by Appendix B).
+- No `#[expect]`, no `#[allow]`.
+
+### P1.7 — error + cli_tools
+
+- **Task-order deviation:** `models/params.rs` (the P1.8 structs) landed in the P1.7 commit
+  because the `run_*` signatures reference `SearchParams`/`CallersParams`/`ExploreParams`/
+  `FilesParams`; without them P1.7 cannot compile. `from_tool` stayed in P1.9 next to the tool
+  structs (as the plan assigns).
+- All planned tests green (`NotIndexed`/`NotImplemented`/`Unsupported` mapping, formatter
+  tests, side-effect freedom).
+
+### P1.8 — cli_args
+
+- Flags, short options and defaults are identical to knot's `src/models/cli_args.rs` (verified
+  by reading it): `Search` uses `-m` (max-results), `-r` (repo), `-k` (kinds), `-p` (path),
+  `-o` (output) — no short-flag clash exists in knot's derive; `Callers` uses `-m`/`-k`
+  explicitly for `max_targets`/`kinds`.
+- Minor addition: `Commands` derives `Debug` (the plan's sketch does not) so test failures can
+  print the parsed variant.
+- `clap`'s `default_value_t` works with the `ValueEnum`-derived `OutputFormat` (verified).
+
+### P1.9 — repo_scope + mcp_tools
+
+- **Deviation (cargo-dupes, fixed by de-duplication):** the four query tools' `handle` methods
+  were structurally identical (10+ lines each after rustfmt) and tripped the zero-duplication
+  ratchet. Extracted a single parameterised definition — `macro_rules! impl_query_tool_handle`
+  in `mcp_tools/mod.rs` (one body, four invocations) — keeping `Tool::handle` in the plan's
+  shape. `cargo dupes` is back to 0 groups; no `.dupes-ignore.toml` entry was needed.
+- **Task-order note:** `mcp_handler.rs`'s type (`KnotLiteMcpHandler`, `new`, `new_dry_run`,
+  `config`, `DRY_RUN_MESSAGE`, `tools()`) landed in the P1.9 commit because
+  `mcp_tools::query_tool` and the tool tests reference it; `dispatch()`, the `ServerHandler`
+  impl and `build_server_details` completed it in P1.10.
+- All planned schema tests green (one assertion per Appendix A row), including
+  `parse_args_rejects_missing_required` (message prefix `invalid arguments for find_callers`).
+
+### P1.10 — mcp_handler
+
+- **Deviation (per P1.3):** `ListToolsResult.cache_scope` is set to
+  `ListToolsResultCacheScope::Public` (the enum has no `Default`, so the plan's
+  `cache_scope: Default::default()` does not compile). Tool lists are not user-specific.
+- Drift guards implemented exactly as planned (`source_between` over `include_str!`), dry-run
+  refuses every tool with `DRY_RUN_MESSAGE`, unknown tools convert to `isError: true`.
+- `call_params` test helper uses `RequestMetaObject::new("2026-07-28", ClientCapabilities::default())`
+  as planned (verified in P1.3).
+
+### P1.11 — binaries + run_cli
+
+- `rust_mcp_sdk::mcp_server` does not re-export `TransportOptions`/`McpServer`/`RequestContext`/
+  `ServerDetails` — the binary imports them from the crate root (P1.3 table). `server.start()`
+  is a `McpServer` trait method, so `rust_mcp_sdk::McpServer` must be in scope.
+- Acceptance smoke (debug build): `./target/debug/knot-lite status` prints the table;
+  `./target/debug/knot-lite callers foo` exits **2** with the `NotIndexed` text.
+- Lib tests: `run_cli_status_json_on_tempdir`, `run_cli_callers_not_indexed_maps_to_exit_2`,
+  `run_cli_foreign_repo_flag_errors_with_exit_1`, `exit_code_for_plain_error_is_1` — all green.
+
+### P1.12 — stdio integration test
+
+- **Deviations (per P1.3 findings):**
+  1. Assertion 1 reads `result._meta["io.modelcontextprotocol/serverInfo"].name == "knot-lite"`
+     (`DiscoverResult` has no top-level `serverInfo` field).
+  2. Assertion 6 (unknown tool) asserts the recorded variant: JSON-RPC **result** with
+     `isError: true` and text `Unknown tool: nope` (not a protocol error).
+  3. The optional negative test asserts the recorded code: a request without `_meta` is answered
+     with JSON-RPC `error.code = -32601` ("No handler is implemented for custom requests.") —
+     the error member is present as the plan expected.
+- Every stdout line is JSON-parsed (log-leakage guard); responses collected by `id`; the child is
+  killed and waited at the end. Fully cross-platform (no shell).
+- `cargo test --test mcp_stdio` green; `make check` output shows the `tests/mcp_stdio.rs` run.
+
+### P1.13 — docs
+
+- opencode 2 MCP syntax verified against its documentation (2026-10-04): `opencode.jsonc` with
+  `"mcp": { "<name>": { "type": "local", "command": [...], "enabled": true } }` and an optional
+  `"environment"` map for env vars (note: `environment`, not `env`). The README example is
+  confirmed accurate.
+- README commands run once each:
+  - `make install DESTDIR=/tmp/knot-lite-install` (release build 1 m 40 s; binaries copied —
+    run with a redirected `DESTDIR` so nothing is written outside the repository per ground rule 1)
+  - `knot-lite status` / `-o json` / `-o markdown` (outputs shown in P1.15)
+  - `knot-lite callers foo` → exit 2
+  - `make check`, `make test-lib`, `make check CRATE_DIR=docs/spikes/phase0`, `make e2e`
+    (skip message), `make dupes-cleanup` (no stale entries)
+- Naming blockquote added to `docs/spikes/phase0-results.md` under the title block; nothing else
+  changed; `summarize` was not re-run.
+
+### P1.14 — clippy curves
+
+Method: `CLIPPY_CONF_DIR` **is** honoured (verified with `too-many-arguments-threshold = 1` →
+92 hits and `excessive-nesting-threshold = 1` → 308 hits; `src/lib.rs` was `touch`ed per run
+because cargo's fingerprint does not hash the conf dir). Counts via
+`--message-format=json` and the `clippy::<lint>` code.
+
+| Lint | knot-lite measured curve (2026-10-04) | Value kept | Tightened? |
+|---|---|---|---|
+| `too_many_arguments` | 3 → 12 \| 4 → 6 \| 5 → 0 | 5 | no (already the documented point) |
+| `type_complexity` | 100 → 10 \| 150 → 6 \| 200 → 0 | **200** | **no** — later target 150 has 6 violations |
+| `excessive_nesting` | 4 → 0 \| 5 → 0 \| 6 → 0 | **5** | **yes** — 6 → 5 (0 violations; code nests ≤ 4) |
+| `too_many_lines` | 50 → 1 \| 80 → 0 \| 100 → 0 | 100 | no |
+| `cognitive_complexity` | 10 → 2 \| 15 → 0 \| 20 → 0 | 20 | no |
+
+Curves recorded in `clippy.toml` under the knot curves. Only the documented later target
+`excessive-nesting-threshold = 5` was applied, and only because its measured count is 0.
+**Reported to the human:** `type-complexity-threshold` stays at 200 (150 would add 6 violations;
+it may be tightened when those six are refactored).
+
+### P1.15 — final gate, smoke runs, hand-off
+
+- `make check` (root): fmt ✓, clippy ✓ (clean), tests ✓ (109 lib + 2 bin targets + 1 stdio
+  integration + doctests), dupes **0 exact / 0 near groups, 0.0 % of 938 lines** (43 units).
+- `make check CRATE_DIR=docs/spikes/phase0`: ✓ (89 lib tests; dupes 0 groups over 211 units /
+  6 037 lines).
+- `make dupes-cleanup`: no stale entries. `make e2e`: skipped (script absent, as designed).
+- `tests/mcp_stdio.rs` run confirmed visible in the `make check` output.
+- **validator** subagent: both gates fully green, dupes reported explicitly as above,
+  `mcp_stdio` confirmed in the test step; no code changed by the validator.
+- Release build smoke runs (wall times, 2026-10-04, this machine):
+
+  | Run | Wall time | Result |
+  |---|---|---|
+  | `knot-lite --repo-path ~/.knot/repos/knot status` | 19 ms | rust 166 / ts 17 / js 8 / java 4 all **tier 3** (rust-analyzer, typescript-language-server, jdtls found); markdown/csharp/varnish/… tier 2; files-only 84 (`.sh` 30, `.scm` 15, …); excluded 4 |
+  | `knot-lite --repo-path ~/.knot/repos/knot-site status -o markdown` | 9 ms | typescript 50 / javascript 7 tier 3; files-only 14; excluded 17 (binary 14) |
+  | `knot-lite --repo-path ~/.knot/repos/spring-ai status -o json` | 193 ms | totals 3 056 files (tier3 2 278, tier2 241, tier1 380, tier0 157); java row tier 3 (jdtls found) |
+  | `knot-lite status` (knot-lite itself) | 19 ms | rust tier 3; see P1.11 table |
+  | `knot-lite --repo-path ~/.knot/repos/knot callers resolve_reference_intents` | 4 ms | exit **2**, `NotIndexed` text |
+
+  Expected on this machine (plan §8/P1.15): rust, typescript, javascript and java at tier 3 —
+  observed exactly that on `knot`; nothing was tuned to match. `Makefile`/`Dockerfile`/`.sh`
+  appear under files-only (`.sh` is in every top-10 list; `Makefile`/`Dockerfile` key by name).
+- Nothing written: `ls -a ~/.knot/repos/knot | grep -c knot-lite` → **0**. `../knot` untouched
+  (its pre-existing ` M Dockerfile` remains the human's edit).
+- Manual stdio smoke (release binary, `knot-lite-mcp --repo-path ~/.knot/repos/knot`, Appendix C
+  requests), trimmed transcript:
+
+  ```
+  1 server/discover: {"serverInfo":"knot-lite","supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}
+  2 tools/list: ['explore_file', 'find_callers', 'list_files', 'search_hybrid_context', 'status']
+  3 status isError: null | schema: knot-lite/status/v1 | totals: {"files":362,"tier0":4,"tier1":84,"tier2":79,"tier3":195}
+  4 find_callers isError: true | text: find_callers: knot-lite has no index for repository 'knot' (...)
+  ```
+
+- Exceptions reported: **none** — zero `#[expect]`, zero `#[allow]`, zero `.dupes-ignore.toml`
+  entries in the repository.
