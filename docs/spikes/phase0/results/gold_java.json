@@ -1,0 +1,1735 @@
+{
+  "schema": "knot-rag-spike/gold/v1",
+  "lang": "java",
+  "repo": "spring-ai",
+  "estimated": true,
+  "systems": {
+    "heuristic": {
+      "micro": {
+        "precision": 0.8806,
+        "recall": 0.5435802469135802,
+        "tp": 4403.0,
+        "fp": 597.0,
+        "fn": 3697.0,
+        "found": 5000.0,
+        "gold": 8100.0
+      },
+      "macro": {
+        "precision": 0.837310609977317,
+        "recall": 0.49527621270619265,
+        "targets_with_gold": 23,
+        "targets_with_found": 21
+      },
+      "by_category": {
+        "abstract_class": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "interface": {
+          "precision": 0.9030662710187932,
+          "recall": 0.7217391304347827,
+          "tp": 1826.0,
+          "fp": 196.0,
+          "fn": 704.0,
+          "found": 2022.0,
+          "gold": 2530.0
+        },
+        "interface_method": {
+          "precision": 0.6666666666666666,
+          "recall": 0.008917197452229299,
+          "tp": 14.0,
+          "fp": 7.0,
+          "fn": 1556.0,
+          "found": 21.0,
+          "gold": 1570.0
+        },
+        "method": {
+          "precision": 0.989010989010989,
+          "recall": 0.20930232558139536,
+          "tp": 90.0,
+          "fp": 1.0,
+          "fn": 340.0,
+          "found": 91.0,
+          "gold": 430.0
+        },
+        "type": {
+          "precision": 0.8610421836228288,
+          "recall": 0.6888825865002836,
+          "tp": 2429.0,
+          "fp": 392.0,
+          "fn": 1097.0,
+          "found": 2821.0,
+          "gold": 3526.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 0.9518599562363238,
+          "recall": 0.9808342728297632,
+          "tp": 870.0,
+          "fp": 44.0,
+          "fn": 17.0,
+          "found": 914.0,
+          "gold": 887.0
+        },
+        "macro": {
+          "precision": 0.8942725927925993,
+          "recall": 0.7282359999751304,
+          "targets_with_gold": 23,
+          "targets_with_found": 21
+        }
+      }
+    },
+    "knot_db": {
+      "micro": {
+        "precision": 0.8815498895804056,
+        "recall": 0.5420987654320988,
+        "tp": 4391.0,
+        "fp": 590.0,
+        "fn": 3709.0,
+        "found": 4981.0,
+        "gold": 8100.0
+      },
+      "macro": {
+        "precision": 0.86498440769034,
+        "recall": 0.48952118692545393,
+        "targets_with_gold": 23,
+        "targets_with_found": 17
+      },
+      "by_category": {
+        "abstract_class": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "interface": {
+          "precision": 0.9030662710187932,
+          "recall": 0.7217391304347827,
+          "tp": 1826.0,
+          "fp": 196.0,
+          "fn": 704.0,
+          "found": 2022.0,
+          "gold": 2530.0
+        },
+        "interface_method": {
+          "precision": 1.0,
+          "recall": 0.0012738853503184713,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 1568.0,
+          "found": 2.0,
+          "gold": 1570.0
+        },
+        "method": {
+          "precision": 0.989010989010989,
+          "recall": 0.20930232558139536,
+          "tp": 90.0,
+          "fp": 1.0,
+          "fn": 340.0,
+          "found": 91.0,
+          "gold": 430.0
+        },
+        "type": {
+          "precision": 0.8610421836228288,
+          "recall": 0.6888825865002836,
+          "tp": 2429.0,
+          "fp": 392.0,
+          "fn": 1097.0,
+          "found": 2821.0,
+          "gold": 3526.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 0.9567627494456763,
+          "recall": 0.9729425028184893,
+          "tp": 863.0,
+          "fp": 39.0,
+          "fn": 24.0,
+          "found": 902.0,
+          "gold": 887.0
+        },
+        "macro": {
+          "precision": 0.9282190852143876,
+          "recall": 0.641279478236,
+          "targets_with_gold": 23,
+          "targets_with_found": 17
+        }
+      }
+    },
+    "knot_db_calls": {
+      "micro": {
+        "precision": 0.998911860718172,
+        "recall": 0.11333333333333333,
+        "tp": 918.0,
+        "fp": 1.0,
+        "fn": 7182.0,
+        "found": 919.0,
+        "gold": 8100.0
+      },
+      "macro": {
+        "precision": 0.9166666666666666,
+        "recall": 0.13996328613978895,
+        "targets_with_gold": 23,
+        "targets_with_found": 12
+      },
+      "by_category": {
+        "abstract_class": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 44.0,
+          "found": 0.0,
+          "gold": 44.0
+        },
+        "interface": {
+          "precision": 1.0,
+          "recall": 0.004347826086956522,
+          "tp": 11.0,
+          "fp": 0.0,
+          "fn": 2519.0,
+          "found": 11.0,
+          "gold": 2530.0
+        },
+        "interface_method": {
+          "precision": 1.0,
+          "recall": 0.0012738853503184713,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 1568.0,
+          "found": 2.0,
+          "gold": 1570.0
+        },
+        "method": {
+          "precision": 0.989010989010989,
+          "recall": 0.20930232558139536,
+          "tp": 90.0,
+          "fp": 1.0,
+          "fn": 340.0,
+          "found": 91.0,
+          "gold": 430.0
+        },
+        "type": {
+          "precision": 1.0,
+          "recall": 0.2311401020986954,
+          "tp": 815.0,
+          "fp": 0.0,
+          "fn": 2711.0,
+          "found": 815.0,
+          "gold": 3526.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 0.991701244813278,
+          "recall": 0.26944757609921083,
+          "tp": 239.0,
+          "fp": 2.0,
+          "fn": 648.0,
+          "found": 241.0,
+          "gold": 887.0
+        },
+        "macro": {
+          "precision": 0.9160714285714286,
+          "recall": 0.2514549559808968,
+          "targets_with_gold": 23,
+          "targets_with_found": 12
+        }
+      }
+    },
+    "lsp": {
+      "micro": {
+        "precision": 0.9410613842015163,
+        "recall": 0.9501234567901234,
+        "tp": 7696.0,
+        "fp": 482.0,
+        "fn": 404.0,
+        "found": 8178.0,
+        "gold": 8100.0
+      },
+      "macro": {
+        "precision": 0.9554263663806027,
+        "recall": 0.9742218600871123,
+        "targets_with_gold": 23,
+        "targets_with_found": 24
+      },
+      "by_category": {
+        "abstract_class": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "interface": {
+          "precision": 0.8323268206039076,
+          "recall": 0.9260869565217391,
+          "tp": 2343.0,
+          "fp": 472.0,
+          "fn": 187.0,
+          "found": 2815.0,
+          "gold": 2530.0
+        },
+        "interface_method": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1570.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1570.0,
+          "gold": 1570.0
+        },
+        "method": {
+          "precision": 0.993006993006993,
+          "recall": 0.9906976744186047,
+          "tp": 426.0,
+          "fp": 3.0,
+          "fn": 4.0,
+          "found": 429.0,
+          "gold": 430.0
+        },
+        "type": {
+          "precision": 0.9981922265742693,
+          "recall": 0.9395916052183778,
+          "tp": 3313.0,
+          "fp": 6.0,
+          "fn": 213.0,
+          "found": 3319.0,
+          "gold": 3526.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 0.4655444502893214,
+          "recall": 0.9977452085682075,
+          "tp": 885.0,
+          "fp": 1016.0,
+          "fn": 2.0,
+          "found": 1901.0,
+          "gold": 887.0
+        },
+        "macro": {
+          "precision": 0.5156098229405475,
+          "recall": 0.9994972099511742,
+          "targets_with_gold": 23,
+          "targets_with_found": 24
+        }
+      }
+    },
+    "lsp_calls": {
+      "micro": {
+        "precision": 1.0,
+        "recall": 0.2411111111111111,
+        "tp": 1953.0,
+        "fp": 0.0,
+        "fn": 6147.0,
+        "found": 1953.0,
+        "gold": 8100.0
+      },
+      "macro": {
+        "precision": 1.0,
+        "recall": 0.41222995167657467,
+        "targets_with_gold": 23,
+        "targets_with_found": 10
+      },
+      "by_category": {
+        "abstract_class": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 44.0,
+          "found": 0.0,
+          "gold": 44.0
+        },
+        "interface": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 2530.0,
+          "found": 0.0,
+          "gold": 2530.0
+        },
+        "interface_method": {
+          "precision": 1.0,
+          "recall": 0.9726114649681529,
+          "tp": 1527.0,
+          "fp": 0.0,
+          "fn": 43.0,
+          "found": 1527.0,
+          "gold": 1570.0
+        },
+        "method": {
+          "precision": 1.0,
+          "recall": 0.9906976744186047,
+          "tp": 426.0,
+          "fp": 0.0,
+          "fn": 4.0,
+          "found": 426.0,
+          "gold": 430.0
+        },
+        "type": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 3526.0,
+          "found": 0.0,
+          "gold": 3526.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 0.12750455373406194,
+          "recall": 0.07891770011273957,
+          "tp": 70.0,
+          "fp": 479.0,
+          "fn": 817.0,
+          "found": 549.0,
+          "gold": 887.0
+        },
+        "macro": {
+          "precision": 0.27723508794845003,
+          "recall": 0.322463768115942,
+          "targets_with_gold": 23,
+          "targets_with_found": 10
+        }
+      }
+    }
+  },
+  "targets": [
+    {
+      "id": "java-01",
+      "gold_size": 765.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.5254901960784314,
+          "tp": 402.0,
+          "fp": 0.0,
+          "fn": 363.0,
+          "found": 402.0,
+          "gold": 765.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.5254901960784314,
+          "tp": 402.0,
+          "fp": 0.0,
+          "fn": 363.0,
+          "found": 402.0,
+          "gold": 765.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 765.0,
+          "found": 0.0,
+          "gold": 765.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.9424836601307189,
+          "tp": 721.0,
+          "fp": 0.0,
+          "fn": 44.0,
+          "found": 721.0,
+          "gold": 765.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 765.0,
+          "found": 0.0,
+          "gold": 765.0
+        }
+      }
+    },
+    {
+      "id": "java-02",
+      "gold_size": 401.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.3333333333333333,
+          "recall": 0.0024937655860349127,
+          "tp": 1.0,
+          "fp": 2.0,
+          "fn": 400.0,
+          "found": 3.0,
+          "gold": 401.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 401.0,
+          "found": 0.0,
+          "gold": 401.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 401.0,
+          "found": 0.0,
+          "gold": 401.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 401.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 401.0,
+          "gold": 401.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9975062344139651,
+          "tp": 400.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 400.0,
+          "gold": 401.0
+        }
+      }
+    },
+    {
+      "id": "java-03",
+      "gold_size": 186.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 1.0,
+          "fn": 186.0,
+          "found": 1.0,
+          "gold": 186.0
+        },
+        "knot_db": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 1.0,
+          "fn": 186.0,
+          "found": 1.0,
+          "gold": 186.0
+        },
+        "knot_db_calls": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 1.0,
+          "fn": 186.0,
+          "found": 1.0,
+          "gold": 186.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 186.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 186.0,
+          "gold": 186.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 186.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 186.0,
+          "gold": 186.0
+        }
+      }
+    },
+    {
+      "id": "java-04",
+      "gold_size": 253.0,
+      "per_system": {
+        "heuristic": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 253.0,
+          "found": 0.0,
+          "gold": 253.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 253.0,
+          "found": 0.0,
+          "gold": 253.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 253.0,
+          "found": 0.0,
+          "gold": 253.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 253.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 253.0,
+          "gold": 253.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 253.0,
+          "found": 0.0,
+          "gold": 253.0
+        }
+      }
+    },
+    {
+      "id": "java-05",
+      "gold_size": 414.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.004830917874396135,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 412.0,
+          "found": 2.0,
+          "gold": 414.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.004830917874396135,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 412.0,
+          "found": 2.0,
+          "gold": 414.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.004830917874396135,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 412.0,
+          "found": 2.0,
+          "gold": 414.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 414.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 414.0,
+          "gold": 414.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9830917874396136,
+          "tp": 407.0,
+          "fp": 0.0,
+          "fn": 7.0,
+          "found": 407.0,
+          "gold": 414.0
+        }
+      }
+    },
+    {
+      "id": "java-06",
+      "gold_size": 1077.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.7386206896551725,
+          "recall": 0.9944289693593314,
+          "tp": 1071.0,
+          "fp": 379.0,
+          "fn": 6.0,
+          "found": 1450.0,
+          "gold": 1077.0
+        },
+        "knot_db": {
+          "precision": 0.7386206896551725,
+          "recall": 0.9944289693593314,
+          "tp": 1071.0,
+          "fp": 379.0,
+          "fn": 6.0,
+          "found": 1450.0,
+          "gold": 1077.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.6100278551532033,
+          "tp": 657.0,
+          "fp": 0.0,
+          "fn": 420.0,
+          "found": 657.0,
+          "gold": 1077.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.9962859795728877,
+          "tp": 1073.0,
+          "fp": 0.0,
+          "fn": 4.0,
+          "found": 1073.0,
+          "gold": 1077.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 1077.0,
+          "found": 0.0,
+          "gold": 1077.0
+        }
+      }
+    },
+    {
+      "id": "java-07",
+      "gold_size": 472.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.7935368043087971,
+          "recall": 0.9364406779661016,
+          "tp": 442.0,
+          "fp": 115.0,
+          "fn": 30.0,
+          "found": 557.0,
+          "gold": 472.0
+        },
+        "knot_db": {
+          "precision": 0.7935368043087971,
+          "recall": 0.9364406779661016,
+          "tp": 442.0,
+          "fp": 115.0,
+          "fn": 30.0,
+          "found": 557.0,
+          "gold": 472.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 472.0,
+          "found": 0.0,
+          "gold": 472.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 472.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 472.0,
+          "gold": 472.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 472.0,
+          "found": 0.0,
+          "gold": 472.0
+        }
+      }
+    },
+    {
+      "id": "java-08",
+      "gold_size": 264.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.011363636363636364,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 261.0,
+          "found": 3.0,
+          "gold": 264.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 264.0,
+          "found": 0.0,
+          "gold": 264.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 264.0,
+          "found": 0.0,
+          "gold": 264.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 264.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 264.0,
+          "gold": 264.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9848484848484849,
+          "tp": 260.0,
+          "fp": 0.0,
+          "fn": 4.0,
+          "found": 260.0,
+          "gold": 264.0
+        }
+      }
+    },
+    {
+      "id": "java-09",
+      "gold_size": 283.0,
+      "per_system": {
+        "heuristic": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 283.0,
+          "found": 0.0,
+          "gold": 283.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 283.0,
+          "found": 0.0,
+          "gold": 283.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 283.0,
+          "found": 0.0,
+          "gold": 283.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 283.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 283.0,
+          "gold": 283.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9858657243816255,
+          "tp": 279.0,
+          "fp": 0.0,
+          "fn": 4.0,
+          "found": 279.0,
+          "gold": 283.0
+        }
+      }
+    },
+    {
+      "id": "java-10",
+      "gold_size": 577.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 577.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 577.0,
+          "gold": 577.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 577.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 577.0,
+          "gold": 577.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.019064124783362217,
+          "tp": 11.0,
+          "fp": 0.0,
+          "fn": 566.0,
+          "found": 11.0,
+          "gold": 577.0
+        },
+        "lsp": {
+          "precision": 0.9955654101995566,
+          "recall": 0.7781629116117851,
+          "tp": 449.0,
+          "fp": 2.0,
+          "fn": 128.0,
+          "found": 451.0,
+          "gold": 577.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 577.0,
+          "found": 0.0,
+          "gold": 577.0
+        }
+      }
+    },
+    {
+      "id": "java-11",
+      "gold_size": 57.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.5454545454545454,
+          "recall": 0.10526315789473684,
+          "tp": 6.0,
+          "fp": 5.0,
+          "fn": 51.0,
+          "found": 11.0,
+          "gold": 57.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 57.0,
+          "found": 0.0,
+          "gold": 57.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 57.0,
+          "found": 0.0,
+          "gold": 57.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 57.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 57.0,
+          "gold": 57.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.5614035087719298,
+          "tp": 32.0,
+          "fp": 0.0,
+          "fn": 25.0,
+          "found": 32.0,
+          "gold": 57.0
+        }
+      }
+    },
+    {
+      "id": "java-12",
+      "gold_size": 134.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.7089552238805971,
+          "tp": 95.0,
+          "fp": 0.0,
+          "fn": 39.0,
+          "found": 95.0,
+          "gold": 134.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.7089552238805971,
+          "tp": 95.0,
+          "fp": 0.0,
+          "fn": 39.0,
+          "found": 95.0,
+          "gold": 134.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 134.0,
+          "found": 0.0,
+          "gold": 134.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.8880597014925373,
+          "tp": 119.0,
+          "fp": 0.0,
+          "fn": 15.0,
+          "found": 119.0,
+          "gold": 134.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 134.0,
+          "found": 0.0,
+          "gold": 134.0
+        }
+      }
+    },
+    {
+      "id": "java-13",
+      "gold_size": 20.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.6666666666666666,
+          "recall": 0.3,
+          "tp": 6.0,
+          "fp": 3.0,
+          "fn": 14.0,
+          "found": 9.0,
+          "gold": 20.0
+        },
+        "knot_db": {
+          "precision": 0.6666666666666666,
+          "recall": 0.3,
+          "tp": 6.0,
+          "fp": 3.0,
+          "fn": 14.0,
+          "found": 9.0,
+          "gold": 20.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.1,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 18.0,
+          "found": 2.0,
+          "gold": 20.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 20.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 20.0,
+          "gold": 20.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 20.0,
+          "found": 0.0,
+          "gold": 20.0
+        }
+      }
+    },
+    {
+      "id": "java-14",
+      "gold_size": 1045.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.0028708133971291866,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 1042.0,
+          "found": 3.0,
+          "gold": 1045.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.0028708133971291866,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 1042.0,
+          "found": 3.0,
+          "gold": 1045.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.0009569377990430622,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 1044.0,
+          "found": 1.0,
+          "gold": 1045.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1045.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1045.0,
+          "gold": 1045.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 1045.0,
+          "found": 0.0,
+          "gold": 1045.0
+        }
+      }
+    },
+    {
+      "id": "java-15",
+      "gold_size": 220.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.3,
+          "tp": 66.0,
+          "fp": 0.0,
+          "fn": 154.0,
+          "found": 66.0,
+          "gold": 220.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.3,
+          "tp": 66.0,
+          "fp": 0.0,
+          "fn": 154.0,
+          "found": 66.0,
+          "gold": 220.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.3,
+          "tp": 66.0,
+          "fp": 0.0,
+          "fn": 154.0,
+          "found": 66.0,
+          "gold": 220.0
+        },
+        "lsp": {
+          "precision": 0.9863013698630136,
+          "recall": 0.9818181818181818,
+          "tp": 216.0,
+          "fp": 3.0,
+          "fn": 4.0,
+          "found": 219.0,
+          "gold": 220.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9818181818181818,
+          "tp": 216.0,
+          "fp": 0.0,
+          "fn": 4.0,
+          "found": 216.0,
+          "gold": 220.0
+        }
+      }
+    },
+    {
+      "id": "java-16",
+      "gold_size": 1163.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.9785038693035254,
+          "tp": 1138.0,
+          "fp": 0.0,
+          "fn": 25.0,
+          "found": 1138.0,
+          "gold": 1163.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.9785038693035254,
+          "tp": 1138.0,
+          "fp": 0.0,
+          "fn": 25.0,
+          "found": 1138.0,
+          "gold": 1163.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.13069647463456577,
+          "tp": 152.0,
+          "fp": 0.0,
+          "fn": 1011.0,
+          "found": 152.0,
+          "gold": 1163.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.820292347377472,
+          "tp": 954.0,
+          "fp": 0.0,
+          "fn": 209.0,
+          "found": 954.0,
+          "gold": 1163.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 1163.0,
+          "found": 0.0,
+          "gold": 1163.0
+        }
+      }
+    },
+    {
+      "id": "java-17",
+      "gold_size": 44.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "knot_db": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 44.0,
+          "found": 0.0,
+          "gold": 44.0
+        },
+        "lsp": {
+          "precision": 0.9777777777777777,
+          "recall": 1.0,
+          "tp": 44.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 45.0,
+          "gold": 44.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 44.0,
+          "found": 0.0,
+          "gold": 44.0
+        }
+      }
+    },
+    {
+      "id": "java-18",
+      "gold_size": 329.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.7928388746803069,
+          "recall": 0.9422492401215805,
+          "tp": 310.0,
+          "fp": 81.0,
+          "fn": 19.0,
+          "found": 391.0,
+          "gold": 329.0
+        },
+        "knot_db": {
+          "precision": 0.7928388746803069,
+          "recall": 0.9422492401215805,
+          "tp": 310.0,
+          "fp": 81.0,
+          "fn": 19.0,
+          "found": 391.0,
+          "gold": 329.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 329.0,
+          "found": 0.0,
+          "gold": 329.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 329.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 329.0,
+          "gold": 329.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 329.0,
+          "found": 0.0,
+          "gold": 329.0
+        }
+      }
+    },
+    {
+      "id": "java-19",
+      "gold_size": 151.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 0.013245033112582781,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 149.0,
+          "found": 2.0,
+          "gold": 151.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 151.0,
+          "found": 0.0,
+          "gold": 151.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 151.0,
+          "found": 0.0,
+          "gold": 151.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 151.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 151.0,
+          "gold": 151.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 0.9867549668874173,
+          "tp": 149.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 149.0,
+          "gold": 151.0
+        }
+      }
+    },
+    {
+      "id": "java-20",
+      "gold_size": 12.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        }
+      }
+    },
+    {
+      "id": "java-21",
+      "gold_size": 12.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 12.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 12.0,
+          "gold": 12.0
+        }
+      }
+    },
+    {
+      "id": "java-22",
+      "gold_size": 23.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.7647058823529411,
+          "recall": 0.5652173913043478,
+          "tp": 13.0,
+          "fp": 4.0,
+          "fn": 10.0,
+          "found": 17.0,
+          "gold": 23.0
+        },
+        "knot_db": {
+          "precision": 0.7647058823529411,
+          "recall": 0.5652173913043478,
+          "tp": 13.0,
+          "fp": 4.0,
+          "fn": 10.0,
+          "found": 17.0,
+          "gold": 23.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.043478260869565216,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 22.0,
+          "found": 1.0,
+          "gold": 23.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 23.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 23.0,
+          "gold": 23.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 23.0,
+          "found": 0.0,
+          "gold": 23.0
+        }
+      }
+    },
+    {
+      "id": "java-23",
+      "gold_size": 198.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.9705882352941176,
+          "recall": 1.0,
+          "tp": 198.0,
+          "fp": 6.0,
+          "fn": 0.0,
+          "found": 204.0,
+          "gold": 198.0
+        },
+        "knot_db": {
+          "precision": 0.9705882352941176,
+          "recall": 1.0,
+          "tp": 198.0,
+          "fp": 6.0,
+          "fn": 0.0,
+          "found": 204.0,
+          "gold": 198.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 0.010101010101010102,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 196.0,
+          "found": 2.0,
+          "gold": 198.0
+        },
+        "lsp": {
+          "precision": 0.9705882352941176,
+          "recall": 1.0,
+          "tp": 198.0,
+          "fp": 6.0,
+          "fn": 0.0,
+          "found": 204.0,
+          "gold": 198.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 198.0,
+          "found": 0.0,
+          "gold": 198.0
+        }
+      }
+    },
+    {
+      "id": "java-24",
+      "gold_size": -0.0,
+      "per_system": {
+        "heuristic": {
+          "precision": null,
+          "recall": null,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 0.0,
+          "gold": -0.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": null,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 0.0,
+          "gold": -0.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": null,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 0.0,
+          "gold": -0.0
+        },
+        "lsp": {
+          "precision": 0.0,
+          "recall": null,
+          "tp": 0.0,
+          "fp": 470.0,
+          "fn": 0.0,
+          "found": 470.0,
+          "gold": -0.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": null,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 0.0,
+          "gold": -0.0
+        }
+      }
+    }
+  ],
+  "notable_disagreements": [
+    {
+      "target": "java-02",
+      "entity": {
+        "file": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java",
+        "line": 111,
+        "name": "prompt"
+      },
+      "found_by": [
+        "heuristic"
+      ],
+      "verdict": "fp",
+      "reason": "OVERLOAD RULE: `prompt(String)` delegates to `prompt(new Prompt(content))` — the `prompt(Prompt)` overload, not the no-arg target `prompt()`"
+    },
+    {
+      "target": "java-03",
+      "entity": {
+        "file": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java",
+        "line": 67,
+        "name": "create"
+      },
+      "found_by": [
+        "knot_db",
+        "heuristic",
+        "knot_db_calls"
+      ],
+      "verdict": "fp",
+      "reason": "OVERLOAD RULE: `create(ChatModel, ObservationRegistry)` calls the 4-arg `create(...)`, not the 1-arg target `create(ChatModel)`"
+    },
+    {
+      "target": "java-10",
+      "entity": {
+        "file": "spring-ai-model/src/main/java/org/springframework/ai/tool/StaticToolCallbackProvider.java",
+        "line": 1,
+        "name": "<module>"
+      },
+      "found_by": [
+        "lsp"
+      ],
+      "verdict": "fp",
+      "reason": "javadoc {@link ToolCallback} / @see ToolCallback mentions in comments — comment-only match, not a code reference"
+    },
+    {
+      "target": "java-11",
+      "entity": {
+        "file": "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java",
+        "line": 111,
+        "name": "call"
+      },
+      "found_by": [
+        "heuristic"
+      ],
+      "verdict": "fp",
+      "reason": "OVERLOAD RULE: `call(String, ToolContext)` delegates to the 2-arg `delegate.call(...)`, not the 1-arg target `call(String)`"
+    },
+    {
+      "target": "java-15",
+      "entity": {
+        "file": "spring-ai-model/src/main/java/org/springframework/ai/embedding/EmbeddingModel.java",
+        "line": 39,
+        "name": "EmbeddingModel"
+      },
+      "found_by": [
+        "lsp"
+      ],
+      "verdict": "fp",
+      "reason": "javadoc {@link Document#getText()} mention in the interface comment — comment-only match"
+    },
+    {
+      "target": "java-17",
+      "entity": {
+        "file": "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStoreUpsertTests.java",
+        "line": 1,
+        "name": "<module>"
+      },
+      "found_by": [
+        "lsp"
+      ],
+      "verdict": "fp",
+      "reason": "javadoc {@link AbstractObservationVectorStore} mention in a test comment — comment-only match"
+    },
+    {
+      "target": "java-17",
+      "entity": {
+        "file": "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStoreUpsertTests.java",
+        "line": 46,
+        "name": "AbstractObservationVectorStoreUpsertTests"
+      },
+      "found_by": [
+        "knot_db",
+        "heuristic"
+      ],
+      "verdict": "fp",
+      "reason": "the constructor declaration's own name is not a type reference to the class; knot linked the constructor to its class structurally"
+    }
+  ]
+}

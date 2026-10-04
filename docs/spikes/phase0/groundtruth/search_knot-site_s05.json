@@ -1,0 +1,197 @@
+[
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "result in src/webmcp/useWebMcp.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/webmcp/types.ts",
+    "fqn": "ModelContext.registerTool",
+    "kind": "method",
+    "name": "registerTool",
+    "repo_name": "knot-site",
+    "signature": "(tool: WebMcpTool, options?: RegisterToolOptions)",
+    "start_line": 55,
+    "uuid": "9355e1e6-6d49-50cb-80ea-ca3eca6255bc"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "App in src/App.tsx"
+    ],
+    "dependencies": [
+      "isWebMcpAvailable",
+      "tool",
+      "registerTool",
+      "warn",
+      "getModelContext"
+    ],
+    "docstring": "",
+    "file_path": "src/webmcp/useWebMcp.ts",
+    "fqn": "useWebMcp",
+    "kind": "function",
+    "name": "useWebMcp",
+    "repo_name": "knot-site",
+    "signature": "(tools: readonly WebMcpTool[])",
+    "start_line": 36,
+    "uuid": "984f8b93-9efb-59d8-9cd3-199b36b78c68"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "App in src/App.tsx"
+    ],
+    "dependencies": [
+      "registerTool",
+      "isWebMcpAvailable",
+      "warn",
+      "tool",
+      "getModelContext"
+    ],
+    "docstring": "",
+    "file_path": "src/webmcp/useWebMcp.ts",
+    "fqn": "useWebMcp",
+    "kind": "function",
+    "name": "useWebMcp",
+    "repo_name": "knot-site",
+    "signature": "(tools: readonly WebMcpTool[])",
+    "start_line": 35,
+    "uuid": "f6543757-a5e4-5746-b5c6-4308ccd25977"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/webmcp/types.ts",
+    "fqn": "ModelContext",
+    "kind": "interface",
+    "name": "ModelContext",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 54,
+    "type_usage_count": 2,
+    "type_usage_samples": [
+      "Navigator in src/webmcp/types.ts",
+      "Document in src/webmcp/types.ts"
+    ],
+    "uuid": "c5ff18ee-f16e-5ab6-b40a-20cb9ffb915b"
+  },
+  {
+    "dependencies": [
+      "registerTool",
+      "tool"
+    ],
+    "docstring": "",
+    "file_path": "src/webmcp/useWebMcp.ts",
+    "fqn": "result",
+    "kind": "constant",
+    "name": "result",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 51,
+    "uuid": "3535ed72-a868-5a46-8798-faba30068c2c"
+  },
+  {
+    "dependencies": [
+      "tool",
+      "registerTool"
+    ],
+    "docstring": "",
+    "file_path": "src/webmcp/useWebMcp.ts",
+    "fqn": "result",
+    "kind": "constant",
+    "name": "result",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 50,
+    "uuid": "67112437-726f-50a1-ad53-7e8158a1b6ce"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "App in src/App.tsx"
+    ],
+    "dependencies": [
+      "getInstallCommand",
+      "withLogging",
+      "copyInstallCommand",
+      "toWebMcpTool"
+    ],
+    "docstring": "",
+    "file_path": "src/webmcp/registry.ts",
+    "fqn": "knotTools",
+    "kind": "constant",
+    "name": "knotTools",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 13,
+    "uuid": "76cd94ca-1809-58ef-bd2b-c46049e5e61d"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/webmcp-budget.mjs",
+      "<module> in scripts/webmcp-budget.mjs"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "tools",
+    "kind": "constant",
+    "name": "tools",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 93,
+    "uuid": "3069e36d-d7ef-5bdf-97f6-4d5c98b13031"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/webmcp-budget.mjs",
+      "<module> in scripts/webmcp-budget.mjs"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "tools",
+    "kind": "constant",
+    "name": "tools",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 85,
+    "uuid": "69ff8077-920a-54ba-84aa-66ebba8d13e4"
+  },
+  {
+    "dependencies": [
+      "text",
+      "worstInput",
+      "ok",
+      "currentSnapshots",
+      "warn",
+      "tools",
+      "checkSchema",
+      "text",
+      "tools",
+      "GOLDEN_FILE",
+      "fail",
+      "currentSnapshots",
+      "warn",
+      "checkSchema",
+      "worstInput",
+      "message",
+      "execute",
+      "ok"
+    ],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "e8452612-5099-5ed2-a96d-1dde66c5c407"
+  }
+]

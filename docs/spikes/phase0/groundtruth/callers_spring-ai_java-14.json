@@ -1,0 +1,111 @@
+{
+  "calls": [
+    {
+      "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "kind": "method",
+      "name": "build",
+      "rel_type": "CALLS",
+      "repo_name": "spring-ai",
+      "signature": "()",
+      "start_line": 526,
+      "target_file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "target_fqn": "org.springframework.ai.document.Document.Document",
+      "target_name": "Document",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 120
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [
+    {
+      "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "kind": "method",
+      "name": "equals",
+      "rel_type": "REFERENCES",
+      "repo_name": "spring-ai",
+      "signature": "(@Nullable Object o)",
+      "start_line": 364,
+      "target_file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "target_fqn": "org.springframework.ai.document.Document.Document",
+      "target_name": "Document",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 120
+    },
+    {
+      "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "kind": "class",
+      "name": "Builder",
+      "rel_type": "REFERENCES",
+      "repo_name": "spring-ai",
+      "signature": "",
+      "start_line": 403,
+      "target_file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "target_fqn": "org.springframework.ai.document.Document.Document",
+      "target_name": "Document",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 120
+    },
+    {
+      "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "kind": "method",
+      "name": "build",
+      "rel_type": "REFERENCES",
+      "repo_name": "spring-ai",
+      "signature": "()",
+      "start_line": 526,
+      "target_file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+      "target_fqn": "org.springframework.ai.document.Document.Document",
+      "target_name": "Document",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 120
+    }
+  ],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "Document",
+    "targets": [
+      {
+        "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java",
+        "fqn": "org.springframework.ai.document.Document.Document",
+        "kind": "class",
+        "name": "Document",
+        "repo_name": "spring-ai",
+        "start_line": 120,
+        "uuid": "c429960b-9b5e-56e6-87f1-9594195352a2"
+      },
+      {
+        "file_path": "models/spring-ai-mistral-ai/src/main/java/org/springframework/ai/mistralai/ocr/MistralOcrApi.java",
+        "fqn": "org.springframework.ai.mistralai.ocr.MistralOcrApi.Document",
+        "kind": "interface",
+        "name": "Document",
+        "repo_name": "spring-ai",
+        "start_line": 160,
+        "uuid": "5c0020cd-85fc-5b73-a9fb-bcfc8d109b41"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 2,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

@@ -1,0 +1,247 @@
+# S1 comparison targets — repo `spring-ai` (java).
+# Lines are knot's start_line from the 2026-10-03 index (Appendix A.3);
+# `line = 0` means TBD and is resolved by `lsp_probe validate-targets --write`
+# from the hint carried in `notes`.
+repo = "spring-ai"
+lang = "java"
+root = "/tmp/knot-rag-spike/work/spring-ai"
+
+[[target]]
+id = "java-01"
+name = "ChatClient"
+file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java"
+line = 61
+knot_query = "ChatClient"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: refs 402, implements 1"
+
+[[target]]
+id = "java-02"
+name = "prompt"
+file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java"
+line = 128
+knot_query = "ChatClient.prompt"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "hint: `prompt()` at 128; 3 overloads; target the no-arg one"
+
+[[target]]
+id = "java-03"
+name = "create"
+file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java"
+line = 63
+knot_query = "ChatClient.create"
+category = "method"
+ops = ["incoming", "references"]
+notes = "hint: `create(ChatModel)` at 63; static; 3 overloads; target the 1-arg one"
+
+[[target]]
+id = "java-04"
+name = "ChatModel"
+file = "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java"
+line = 30
+knot_query = "ChatModel"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot resolves `ChatModel` to an inner entity of GoogleGenAiChatModel; expected LSP win"
+
+[[target]]
+id = "java-05"
+name = "call"
+file = "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java"
+line = 45
+knot_query = "ChatModel.call"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "hint: abstract `call(Prompt)` at 45; knot: calls 2 (suspiciously low)"
+
+[[target]]
+id = "java-06"
+name = "Prompt"
+file = "spring-ai-model/src/main/java/org/springframework/ai/chat/prompt/Prompt.java"
+line = 47
+knot_query = "Prompt"
+category = "type"
+ops = ["references"]
+notes = "knot rows: calls 661 + refs 1450 (scale case)"
+
+[[target]]
+id = "java-07"
+name = "VectorStore"
+file = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java"
+line = 40
+knot_query = "VectorStore"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: refs 557, implements 3"
+
+[[target]]
+id = "java-08"
+name = "add"
+file = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java"
+line = 51
+knot_query = "VectorStore.add"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "hint: abstract `add(List<Document>)` at 51; overridden_by 3"
+
+[[target]]
+id = "java-09"
+name = "similaritySearch"
+file = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStoreRetriever.java"
+line = 45
+knot_query = "similaritySearch"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "abstract `similaritySearch(SearchRequest)` at 45; plan put this in VectorStore.java (moved to VectorStoreRetriever.java) and measured 7 targets / calls 279 with a name query; knot never resolves to line 45 (default String overload at 54 + 6 implementations), expected LSP win"
+
+[[target]]
+id = "java-10"
+name = "ToolCallback"
+file = "spring-ai-model/src/main/java/org/springframework/ai/tool/ToolCallback.java"
+line = 33
+knot_query = "ToolCallback"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: refs 577, implements 13"
+
+[[target]]
+id = "java-11"
+name = "call"
+file = "spring-ai-model/src/main/java/org/springframework/ai/tool/ToolCallback.java"
+line = 53
+knot_query = "ToolCallback.call"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "hint: `call(String)` at 53; overridden_by 20"
+
+[[target]]
+id = "java-12"
+name = "Advisor"
+file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/api/Advisor.java"
+line = 31
+knot_query = "Advisor"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: extends 4, refs 95"
+
+[[target]]
+id = "java-13"
+name = "TokenTextSplitter"
+file = "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java"
+line = 38
+knot_query = "TokenTextSplitter"
+category = "type"
+ops = ["references"]
+notes = "knot rows: refs 9"
+
+[[target]]
+id = "java-14"
+name = "Document"
+file = "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java"
+line = 120
+knot_query = "Document"
+category = "type"
+ops = ["references"]
+notes = "knot: only 4 rows (suspicious)"
+
+[[target]]
+id = "java-15"
+name = "getText"
+file = "spring-ai-commons/src/main/java/org/springframework/ai/document/Document.java"
+line = 255
+knot_query = "Document.getText"
+category = "method"
+ops = ["incoming", "references"]
+notes = "hint: 255; calls 66"
+
+[[target]]
+id = "java-16"
+name = "ChatResponse"
+file = "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatResponse.java"
+line = 41
+knot_query = "ChatResponse"
+category = "type"
+ops = ["references"]
+notes = "knot rows: refs 1138"
+
+[[target]]
+id = "java-17"
+name = "AbstractObservationVectorStore"
+file = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java"
+line = 41
+knot_query = "AbstractObservationVectorStore"
+category = "abstract_class"
+ops = ["references", "implementation"]
+notes = "knot rows: extends 23"
+
+[[target]]
+id = "java-18"
+name = "ToolCallingManager"
+file = "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java"
+line = 31
+knot_query = "ToolCallingManager"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: implements 3"
+
+[[target]]
+id = "java-19"
+name = "executeToolCalls"
+file = "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java"
+line = 41
+knot_query = "ToolCallingManager.executeToolCalls"
+category = "interface_method"
+ops = ["incoming", "references", "implementation"]
+notes = "hint: 41; knot: overridden_by 2, no calls"
+
+[[target]]
+id = "java-20"
+name = "execute"
+file = "spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java"
+line = 170
+knot_query = "RetryUtils.execute"
+category = "method"
+ops = ["incoming", "references"]
+notes = "hint: 170; static generic; calls 13"
+
+[[target]]
+id = "java-21"
+name = "mergeOption"
+file = "spring-ai-model/src/main/java/org/springframework/ai/model/ModelOptionsUtils.java"
+line = 38
+knot_query = "ModelOptionsUtils.mergeOption"
+category = "method"
+ops = ["incoming", "references"]
+notes = "hint: 38; static generic with type annotations; calls 12"
+
+[[target]]
+id = "java-22"
+name = "MethodToolCallback"
+file = "spring-ai-model/src/main/java/org/springframework/ai/tool/method/MethodToolCallback.java"
+line = 50
+knot_query = "MethodToolCallback"
+category = "type"
+ops = ["references"]
+notes = "knot rows: refs 17"
+
+[[target]]
+id = "java-23"
+name = "DefaultChatClient"
+file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java"
+line = 90
+knot_query = "DefaultChatClient"
+category = "type"
+ops = ["references"]
+notes = "knot rows: refs 204"
+
+[[target]]
+id = "java-24"
+name = "EmbeddingModel"
+file = "spring-ai-model/src/main/java/org/springframework/ai/embedding/EmbeddingModel.java"
+line = 39
+knot_query = "EmbeddingModel"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot returned nothing; expected LSP win"

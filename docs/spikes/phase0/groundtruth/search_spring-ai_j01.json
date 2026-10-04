@@ -1,0 +1,194 @@
+[
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "UserMessage",
+      "Prompt",
+      "getOutput",
+      "call"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+    "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String message)",
+    "start_line": 32,
+    "uuid": "fa86553d-b54e-599b-bfb1-58916b188e04"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+    "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(Prompt prompt)",
+    "start_line": 45,
+    "uuid": "8e279a1d-1fc9-5c0b-9edd-cd695a0c4c12"
+  },
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [],
+    "docstring": "Builds with the model to use for the chat.\n@param model\n@return the builder",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/prompt/ChatOptions.java",
+    "fqn": "org.springframework.ai.chat.prompt.ChatOptions.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String model)",
+    "start_line": 108,
+    "uuid": "e32eb5be-89d9-5457-bb2c-7ba22be37dae"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "Prompt",
+      "call",
+      "getOutput"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+    "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(Message... messages)",
+    "start_line": 38,
+    "uuid": "b634d754-53de-5ac8-bb78-98eb165b0e70"
+  },
+  {
+    "caller_count": 315,
+    "caller_samples": [
+      "callDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "callDefaultAdvisorConfigurationWithExternalMemory in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "streamDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/observation/ChatModelObservationContext.java",
+    "fqn": "org.springframework.ai.chat.observation.ChatModelObservationContext.prompt",
+    "kind": "method",
+    "name": "prompt",
+    "repo_name": "spring-ai",
+    "signature": "(Prompt prompt)",
+    "start_line": 63,
+    "uuid": "db901f65-22fc-5939-8b0f-2596be4c6a6d"
+  },
+  {
+    "caller_count": 315,
+    "caller_samples": [
+      "callDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "callDefaultAdvisorConfigurationWithExternalMemory in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "streamDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java",
+    "fqn": "org.springframework.ai.chat.client.ChatClient.prompt",
+    "kind": "method",
+    "name": "prompt",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 128,
+    "uuid": "5b12e4ea-34d0-5880-aa65-9067d28cdb22"
+  },
+  {
+    "caller_count": 315,
+    "caller_samples": [
+      "callDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "callDefaultAdvisorConfigurationWithExternalMemory in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "streamDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java",
+    "fqn": "org.springframework.ai.chat.client.ChatClient.prompt",
+    "kind": "method",
+    "name": "prompt",
+    "repo_name": "spring-ai",
+    "signature": "(Prompt prompt)",
+    "start_line": 132,
+    "uuid": "4b9ffa23-cd1f-594b-b54d-615011d7667d"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "internalCall",
+      "buildRequestPrompt"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+    "fqn": "org.springframework.ai.anthropic.AnthropicChatModel.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(Prompt prompt)",
+    "start_line": 261,
+    "uuid": "0a54953a-2f34-5880-b803-1f355c816338"
+  },
+  {
+    "caller_count": 315,
+    "caller_samples": [
+      "callDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "callDefaultAdvisorConfigurationWithExternalMemory in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java",
+      "streamDefaultAdvisorConfiguration in advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java",
+    "fqn": "org.springframework.ai.chat.client.ChatClient.prompt",
+    "kind": "method",
+    "name": "prompt",
+    "repo_name": "spring-ai",
+    "signature": "(String content)",
+    "start_line": 130,
+    "uuid": "fde8f785-22bd-5dae-9425-4e8b18d4b87b"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java",
+    "fqn": "org.springframework.ai.chat.client.ChatClient.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 490,
+    "uuid": "80258b27-560f-5472-b3a2-1ce7a8b37b7a"
+  }
+]

@@ -1,0 +1,56 @@
+{
+  "calls": [
+    {
+      "file_path": "src/state/router.ts",
+      "kind": "function",
+      "name": "readFromLocation",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "()",
+      "start_line": 33,
+      "target_file_path": "src/state/router.ts",
+      "target_fqn": "pageFromHash",
+      "target_name": "pageFromHash",
+      "target_repo_name": "knot-site",
+      "target_signature": "(hash: string)",
+      "target_start_line": 23
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "pageFromHash",
+    "targets": [
+      {
+        "file_path": "src/state/router.ts",
+        "fqn": "pageFromHash",
+        "kind": "function",
+        "name": "pageFromHash",
+        "repo_name": "knot-site",
+        "start_line": 23,
+        "uuid": "5b7c49ef-70ad-5281-b4d0-95110fc9a2bd"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

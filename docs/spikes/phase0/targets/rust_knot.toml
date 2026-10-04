@@ -1,0 +1,206 @@
+# S1 comparison targets — repo `knot` (rust).
+# Lines are knot's start_line from the 2026-10-03 index (Appendix A.1);
+# `line = 0` means TBD and is resolved by `lsp_probe validate-targets --write`.
+repo = "knot"
+lang = "rust"
+root = "/tmp/knot-rag-spike/work/knot"
+
+[[target]]
+id = "rust-01"
+name = "parse_files"
+file = "src/pipeline/parser/mod.rs"
+line = 210
+knot_query = "parse_files"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 4"
+
+[[target]]
+id = "rust-02"
+name = "prepare_entities"
+file = "src/pipeline/prepare.rs"
+line = 66
+knot_query = "prepare_entities"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 6"
+
+[[target]]
+id = "rust-03"
+name = "embed_query"
+file = "src/pipeline/embed.rs"
+line = 176
+knot_query = "Embedder::embed_query"
+category = "method"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 3 (query corrected to '::' form: Rust FQNs are crate::mod::Type::member, the plan's 'Type.member' resolves 0 targets)"
+
+[[target]]
+id = "rust-04"
+name = "resolve_reference_intents"
+file = "src/pipeline/ingest/resolve/mod.rs"
+line = 462
+knot_query = "resolve_reference_intents"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 38"
+
+[[target]]
+id = "rust-05"
+name = "fastembed_cache_dir"
+file = "src/pipeline/state.rs"
+line = 63
+knot_query = "fastembed_cache_dir"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 3"
+
+[[target]]
+id = "rust-06"
+name = "format_output"
+file = "src/utils/mod.rs"
+line = 118
+knot_query = "format_output"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 5"
+
+[[target]]
+id = "rust-07"
+name = "verify_startup"
+file = "src/startup_guard.rs"
+line = 34
+knot_query = "verify_startup"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 2"
+
+[[target]]
+id = "rust-08"
+name = "run_find_callers"
+file = "src/cli_tools/find_callers.rs"
+line = 31
+knot_query = "run_find_callers"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 4"
+
+[[target]]
+id = "rust-09"
+name = "discover_files"
+file = "src/pipeline/input.rs"
+line = 115
+knot_query = "discover_files"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 8"
+
+[[target]]
+id = "rust-10"
+name = "to_repo_relative"
+file = "src/pipeline/files.rs"
+line = 140
+knot_query = "to_repo_relative"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 16"
+
+[[target]]
+id = "rust-11"
+name = "is_supported_file"
+file = "src/pipeline/files.rs"
+line = 22
+knot_query = "is_supported_file"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: calls 7"
+
+[[target]]
+id = "rust-12"
+name = "ParsedEntity"
+file = "src/models/entity.rs"
+line = 283
+knot_query = "ParsedEntity"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 243 (2 targets in index: 276 stale, 283 current)"
+
+[[target]]
+id = "rust-13"
+name = "EntityKind"
+file = "src/models/entity.rs"
+line = 16
+knot_query = "EntityKind"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 548 (scale case)"
+
+[[target]]
+id = "rust-14"
+name = "GraphDb"
+file = "src/db/graph/mod.rs"
+line = 29
+knot_query = "GraphDb"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 93"
+
+[[target]]
+id = "rust-15"
+name = "ConnectExt"
+file = "src/db/graph/connection.rs"
+line = 12
+knot_query = "ConnectExt"
+category = "trait"
+ops = ["references", "implementation"]
+notes = "knot rows: references 13"
+
+[[target]]
+id = "rust-16"
+name = "RepoScope"
+file = "src/models/repo_scope.rs"
+line = 9
+knot_query = "RepoScope"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 49"
+
+[[target]]
+id = "rust-17"
+name = "Embedder"
+file = "src/pipeline/embed.rs"
+line = 28
+knot_query = "Embedder"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 14"
+
+[[target]]
+id = "rust-18"
+name = "KnotMcpHandler"
+file = "src/mcp_handler.rs"
+line = 33
+knot_query = "KnotMcpHandler"
+category = "type"
+ops = ["references"]
+notes = "knot rows: references 24"
+
+[[target]]
+id = "rust-19"
+name = "connect"
+file = "src/db/graph/connection.rs"
+line = 49
+knot_query = "connect"
+category = "trait_method"
+ops = ["incoming", "references", "implementation"]
+notes = "trait-method dispatch case; the ConnectExt trait declaration at 13 has no entity in knot's parser (trait methods are not extracted — only impl methods), so the target is the impl GraphDb::connect at 49 (the plan's approx-49 hint); bare-name query because ConnectExt::connect resolves 0 targets"
+
+[[target]]
+id = "rust-20"
+name = "handle"
+file = "src/mcp_tools/find_callers.rs"
+line = 87
+knot_query = "FindCallersTool::handle"
+category = "method"
+ops = ["incoming", "references"]
+notes = "knot rows: 1 (query corrected to '::' form; homonym `handle` exists in 6 files)"

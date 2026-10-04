@@ -1,0 +1,194 @@
+[
+  {
+    "dependencies": [
+      "generate_entities",
+      "connect_and_cleanup",
+      "finish",
+      "upsert_entities",
+      "cleanup_benchmark_data"
+    ],
+    "docstring": "Benchmark the UNWIND-batched approach with increasing entity counts\nto validate linear scaling with entity count.",
+    "file_path": "benches/graph_upsert_bench.rs",
+    "fqn": "__fixture::benches::graph_upsert_bench::bench_entity_count_scaling",
+    "kind": "rust_function",
+    "name": "bench_entity_count_scaling",
+    "repo_name": "knot",
+    "signature": "(c: &mut Criterion)",
+    "start_line": 159,
+    "uuid": "d529efd1-7d8d-5d96-a055-4fe1faa629cf"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "main in scripts/token_savings_benchmark.py"
+    ],
+    "dependencies": [
+      "baseline_explore",
+      "run",
+      "TaskResult",
+      "count",
+      "baseline_callers",
+      "baseline_discovery"
+    ],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "run_task",
+    "kind": "python_function",
+    "name": "run_task",
+    "repo_name": "knot",
+    "signature": "(task: dict, knot_bin: str, knot_cwd: str, max_files: int, count)",
+    "start_line": 158,
+    "uuid": "3b4c115a-0394-59b3-955a-cb6cf0c3dd0e"
+  },
+  {
+    "dependencies": [
+      "cleanup_benchmark_data",
+      "generate_entities",
+      "finish",
+      "upsert_entities",
+      "connect_and_cleanup"
+    ],
+    "docstring": "Benchmark UNWIND-batched entity upserts at various batch sizes.\nValidates Phase 1: 10-50x speedup vs old N-query approach.",
+    "file_path": "benches/graph_upsert_bench.rs",
+    "fqn": "__fixture::benches::graph_upsert_bench::bench_entity_upsert_unwind",
+    "kind": "rust_function",
+    "name": "bench_entity_upsert_unwind",
+    "repo_name": "knot",
+    "signature": "(c: &mut Criterion)",
+    "start_line": 120,
+    "uuid": "bf1f8ada-0f3a-5a6c-bc18-e9e731ac02f5"
+  },
+  {
+    "dependencies": [
+      "parse_files_stream",
+      "finish",
+      "rust_fixtures"
+    ],
+    "docstring": "Benchmark parsing throughput with different concurrency levels.\nValidates Phase 5: optimal thread utilization for parse stage.",
+    "file_path": "benches/channel_backpressure_bench.rs",
+    "fqn": "__fixture::benches::channel_backpressure_bench::bench_concurrency_levels",
+    "kind": "rust_function",
+    "name": "bench_concurrency_levels",
+    "repo_name": "knot",
+    "signature": "(c: &mut Criterion)",
+    "start_line": 84,
+    "uuid": "67b38a7e-46ac-5118-be02-6a3342aa6191"
+  },
+  {
+    "dependencies": [
+      "finish",
+      "parse_benchmark",
+      "fixtures_for"
+    ],
+    "docstring": "Parsing throughput — measures raw entity extraction speed per-language.",
+    "file_path": "benches/pipeline_bench.rs",
+    "fqn": "__fixture::benches::pipeline_bench::bench_parse_throughput",
+    "kind": "rust_function",
+    "name": "bench_parse_throughput",
+    "repo_name": "knot",
+    "signature": "(c: &mut Criterion)",
+    "start_line": 71,
+    "uuid": "93bfc7ae-04d3-5557-b00b-4cd05949f17f"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "read_text",
+      "build_counter",
+      "run_task",
+      "json_payload",
+      "markdown_report",
+      "rg_available"
+    ],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "main",
+    "kind": "python_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 239,
+    "uuid": "df7e7d2b-4b62-56af-ba86-a1b08db6bcdf"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "TaskResult.ratio",
+    "kind": "python_method",
+    "name": "ratio",
+    "repo_name": "knot",
+    "signature": "(self)",
+    "start_line": 89,
+    "type_usage_count": 2,
+    "type_usage_samples": [
+      "markdown_report in scripts/token_savings_benchmark.py",
+      "json_payload in scripts/token_savings_benchmark.py"
+    ],
+    "uuid": "4f0b44b4-d553-5302-95ce-8c5b42b04275"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_pipeline_inner in src/pipeline/runner.rs"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/mod.rs",
+    "fqn": "knot::pipeline::ingest::resolve::print_run_summary",
+    "kind": "rust_function",
+    "name": "print_run_summary",
+    "repo_name": "knot",
+    "signature": "(metrics: &RunMetrics)",
+    "start_line": 70,
+    "uuid": "4df8b976-1324-5078-a8cf-ae2f5f07b8b6"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "run_indexing_pipeline in src/pipeline/runner.rs",
+      "setup_watch_mode_with_progress in src/pipeline/watch.rs",
+      "run_pipeline_with_progress in src/worker/mod.rs"
+    ],
+    "dependencies": [
+      "complete",
+      "run_pipeline_inner",
+      "begin_run",
+      "fail",
+      "snapshot"
+    ],
+    "docstring": "New entry point for callers that want to observe progress (knot-server).\nThe caller keeps a clone of `progress` and polls `snapshot()` from\nanother task/thread while this future runs.",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::run_indexing_pipeline_with_progress",
+    "kind": "rust_function",
+    "name": "run_indexing_pipeline_with_progress",
+    "repo_name": "knot",
+    "signature": "(\n    cfg: &Config,\n    vector_db: &Arc<VectorDb>,\n    graph_db: &Arc<GraphDb>,\n    index_state: &mut IndexState,\n    progress: Arc<ProgressTracker>,\n)",
+    "start_line": 55,
+    "uuid": "e36a2f8e-ccfb-5df0-9bb3-8e36def3bded"
+  },
+  {
+    "caller_count": 5,
+    "caller_samples": [
+      "run in scripts/token_savings_benchmark.py",
+      "baseline_discovery in scripts/token_savings_benchmark.py",
+      "baseline_callers in scripts/token_savings_benchmark.py"
+    ],
+    "dependencies": [
+      "run"
+    ],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "run",
+    "kind": "python_function",
+    "name": "run",
+    "repo_name": "knot",
+    "signature": "(cmd: list[str], cwd: str | None = None)",
+    "start_line": 95,
+    "uuid": "e489045d-c05a-51cd-af73-2e35fd623de6"
+  }
+]

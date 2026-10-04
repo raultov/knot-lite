@@ -1,0 +1,147 @@
+[
+  {
+    "dependencies": [
+      "needs_reset"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::reset_tests::test_needs_reset_multiples_of_interval",
+    "kind": "rust_function",
+    "name": "test_needs_reset_multiples_of_interval",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 316,
+    "uuid": "e449accb-9268-551f-8cb9-8bcfd1eb3e2a"
+  },
+  {
+    "dependencies": [
+      "snapshot",
+      "incr_parsed_files",
+      "begin_run",
+      "set_total_entities",
+      "set_total_files",
+      "fail",
+      "new",
+      "record_batch_ingested"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/progress.rs",
+    "fqn": "knot::pipeline::progress::tests::test_begin_run_resets",
+    "kind": "rust_function",
+    "name": "test_begin_run_resets",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 280,
+    "uuid": "1cc715e5-0cab-545a-b08b-97d04584dc36"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::tests::test_multiple_file_extensions_in_batch",
+    "kind": "rust_function",
+    "name": "test_multiple_file_extensions_in_batch",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1332,
+    "uuid": "7ab7a1b6-6f74-5848-97a4-14695c4fd511"
+  },
+  {
+    "dependencies": [
+      "needs_reset"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::reset_tests::test_needs_reset_false_between_intervals",
+    "kind": "rust_function",
+    "name": "test_needs_reset_false_between_intervals",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 311,
+    "uuid": "960a22c2-d992-5603-8952-385266bf72f2"
+  },
+  {
+    "dependencies": [
+      "needs_reset"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::reset_tests::test_needs_reset_false_before_interval",
+    "kind": "rust_function",
+    "name": "test_needs_reset_false_before_interval",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 306,
+    "uuid": "f008b8b6-a4d2-57d4-a325-090d499d9e83"
+  },
+  {
+    "dependencies": [
+      "needs_reset"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::reset_tests::test_needs_reset_true_exactly_at_interval",
+    "kind": "rust_function",
+    "name": "test_needs_reset_true_exactly_at_interval",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 300,
+    "uuid": "34ee0dda-6b26-5fab-a3fd-7e13fc22a156"
+  },
+  {
+    "dependencies": [
+      "needs_reset"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::reset_tests::test_needs_reset_batch_count_zero_never_resets",
+    "kind": "rust_function",
+    "name": "test_needs_reset_batch_count_zero_never_resets",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 322,
+    "uuid": "1812b791-b422-5cf3-910d-29de38a8b4a5"
+  },
+  {
+    "dependencies": [
+      "fail",
+      "incr_parsed_files",
+      "snapshot",
+      "new",
+      "set_total_files"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/progress.rs",
+    "fqn": "knot::pipeline::progress::tests::test_fail_records_error",
+    "kind": "rust_function",
+    "name": "test_fail_records_error",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 268,
+    "uuid": "8ea0a437-02bb-54bd-a672-9ab21f38feca"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::tests::test_joinset_error_propagation",
+    "kind": "rust_function",
+    "name": "test_joinset_error_propagation",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 759,
+    "uuid": "f397de44-3ba6-5a52-b04d-b9bf0c162bea"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::tests::test_path_batch_accumulation_logic",
+    "kind": "rust_function",
+    "name": "test_path_batch_accumulation_logic",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 305,
+    "uuid": "184a5088-d00d-524e-bbef-03916b758a82"
+  }
+]

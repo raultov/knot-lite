@@ -1,0 +1,185 @@
+[
+  {
+    "dependencies": [
+      "set_stage",
+      "set_total_files",
+      "set_total_entities",
+      "snapshot",
+      "new",
+      "record_batch_ingested",
+      "incr_parsed_files",
+      "begin_run",
+      "complete"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/progress.rs",
+    "fqn": "knot::pipeline::progress::tests::given_a_full_pipeline_sequence_when_progressing_then_percent_never_decreases",
+    "kind": "rust_function",
+    "name": "given_a_full_pipeline_sequence_when_progressing_then_percent_never_decreases",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 531,
+    "uuid": "a8e413e9-c508-54a0-a4dc-fe7bcda86e80"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Parameters for a kind-scoped cosine search with an optional exclusion —\nbundled in one struct to keep [`VectorSearchExt::search_excluding_kinds`]\nwithin clippy's arity threshold.",
+    "file_path": "src/db/vector/search.rs",
+    "fqn": "knot::db::vector::search::KindScopeSearch",
+    "kind": "rust_struct",
+    "name": "KindScopeSearch",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 102,
+    "type_usage_count": 7,
+    "type_usage_samples": [
+      "CHANNEL_FIELD in src/cli_tools/search_hybrid_context/recall.rs",
+      "collect in src/cli_tools/search_hybrid_context/recall.rs",
+      "VectorDb in src/db/vector/mod.rs"
+    ],
+    "uuid": "f8467faa-d822-5abc-9ce3-dcf52ae3d26a"
+  },
+  {
+    "dependencies": [
+      "default",
+      "parse_files_stream",
+      "new"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::tests::given_a_saturated_channel_when_parsing_completes_then_total_is_published_before_blocking",
+    "kind": "rust_function",
+    "name": "given_a_saturated_channel_when_parsing_completes_then_total_is_published_before_blocking",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1414,
+    "uuid": "bb8cbb95-44da-53e2-a3c8-2dc12c6470cf"
+  },
+  {
+    "dependencies": [],
+    "docstring": "User-supplied optional filters, bundled so the shared search entry\npoint stays within clippy's arity threshold.",
+    "file_path": "src/cli_tools/search_hybrid_context/mod.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::SearchFilters",
+    "kind": "rust_struct",
+    "name": "SearchFilters",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 57,
+    "type_usage_count": 5,
+    "type_usage_samples": [
+      "main in src/bin/knot.rs",
+      "subgraph in src/cli_tools/mod.rs",
+      "SearchFilters in src/cli_tools/search_hybrid_context/mod.rs"
+    ],
+    "uuid": "1e7e847a-f1c5-5597-aa62-d849ebf9cd55"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Parameters for the UUID-restricted scored search — bundled in one\nstruct to keep [`VectorSearchExt::search_by_uuids`] within clippy's\narity threshold.",
+    "file_path": "src/db/vector/search.rs",
+    "fqn": "knot::db::vector::search::UuidProbe",
+    "kind": "rust_struct",
+    "name": "UuidProbe",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 164,
+    "type_usage_count": 8,
+    "type_usage_samples": [
+      "TOP_ROOTS in src/cli_tools/search_hybrid_context/coverage.rs",
+      "fetch_callers in src/cli_tools/search_hybrid_context/coverage.rs",
+      "CHANNEL_FIELD in src/cli_tools/search_hybrid_context/recall.rs"
+    ],
+    "uuid": "ee1fded8-313a-5078-a9a5-183db484a486"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_task in scripts/token_savings_benchmark.py"
+    ],
+    "dependencies": [
+      "count",
+      "rg_type_flags",
+      "run",
+      "read_text"
+    ],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "baseline_callers",
+    "kind": "python_function",
+    "name": "baseline_callers",
+    "repo_name": "knot",
+    "signature": "(\n    root: Path, symbol: str, types: list[str], max_files: int, count\n)",
+    "start_line": 132,
+    "uuid": "a8738f06-64b5-5ca7-ac80-d84aebfd09a2"
+  },
+  {
+    "caller_count": 9,
+    "caller_samples": [
+      "rerank in src/cli_tools/search_hybrid_context/rank.rs",
+      "normalizer_maps_pool_to_unit_range in src/cli_tools/search_hybrid_context/rank.rs",
+      "normalizer_flat_pool_is_zero_without_nan in src/cli_tools/search_hybrid_context/rank.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Normalize a candidate pool's raw cosines into the `[0, 1]` semantic unit\n[`final_score`] scores in.\nMin–max over the pool: an affine transform, so two pools identical in\nordering *and relative gaps* normalize to identical values whatever band\nthe model emits. Relative gaps are kept (rather than replaced by rank\npositions) because the boost constants encode \"this evidence is worth X\ncosine\"; flattening the gaps would turn the ranker into \"boosts first,\nsimilarity as tie-break\".\nDegenerate inputs are defined, never NaN:\n- fewer than two candidates, or no usable cosine at all → all zero\n(nothing to order semantically; the boosts and the `(file_path,\nstart_line, uuid)` tie-break decide);\n- zero spread (`max - min <= SEM_EPSILON`) → all zero, boosts still\napplied, so a definition never ties with prose just because their\ncosines matched;\n- a missing or non-finite cosine → the pool minimum, so a row that\nentered through a non-cosine recall channel cannot be pushed below a\npool whose true minimum is well above zero.",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::normalize_pool_cosines",
+    "kind": "rust_function",
+    "name": "normalize_pool_cosines",
+    "repo_name": "knot",
+    "signature": "(cosines: &[Option<f32>])",
+    "start_line": 236,
+    "uuid": "32eda45f-342a-5592-8773-99ce956508ca"
+  },
+  {
+    "dependencies": [
+      "candidate_limit"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::candidate_limit_clamped_window",
+    "kind": "rust_function",
+    "name": "candidate_limit_clamped_window",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1461,
+    "uuid": "547d1c61-0ee4-59a0-94d6-953314932c78"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "snapshot in src/pipeline/progress.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Banded percentage formula (v1.6.2).\nResolution order — see `docs/specs/indexing_progress_accuracy_plan.md` §3.2:\n1. `Completed`                          → `100.0`\n2. `ResolvingReferences`                → `RESOLVING_PERCENT`\n3. `total_entities` known               → `PARSE_BAND_END + ratio * (INGEST_BAND_END - PARSE_BAND_END)`\n4. parse band available (files > 0)     → `(parsed_files / total_files) * PARSE_BAND_END`\n5. otherwise                            → `0.0`\n`Failed` deliberately falls through to steps 3-5 — the bar freezes at\nwhatever value the work-in-progress has produced, never resets to 0.",
+    "file_path": "src/pipeline/progress.rs",
+    "fqn": "knot::pipeline::progress::compute_percent",
+    "kind": "rust_function",
+    "name": "compute_percent",
+    "repo_name": "knot",
+    "signature": "(inputs: &PercentInputs)",
+    "start_line": 43,
+    "uuid": "cc9401a7-407d-5504-b67d-5666015bfcc6"
+  },
+  {
+    "caller_count": 14,
+    "caller_samples": [
+      "bench_channel_capacity in benches/channel_backpressure_bench.rs",
+      "bench_concurrency_levels in benches/channel_backpressure_bench.rs",
+      "parse_benchmark in benches/pipeline_bench.rs"
+    ],
+    "dependencies": [
+      "new",
+      "aggregate_varnish_builtin_subs",
+      "parse_single_file"
+    ],
+    "docstring": "Parse a collection of source files in parallel and send results through a channel.\nUses `std::thread::scope` with raw OS threads (NOT Rayon) so that\n`blocking_send` on the bounded channel only blocks the dedicated\nparsing thread rather than a shared thread pool. This prevents\ndeadlocks with `fastembed` which requires Rayon for tokenization.\nThis function blocks until all files have been processed. It is\nintended to be called from a `tokio::task::spawn_blocking` context.\n`callbacks` replaces the v1.6.1 single `FileParsedCallback` parameter;\npassing `None` is unchanged from previous versions.",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::parse_files_stream",
+    "kind": "rust_function",
+    "name": "parse_files_stream",
+    "repo_name": "knot",
+    "signature": "(\n    files: &[PathBuf],\n    parse_cfg: &ParseConfig,\n    sender: mpsc::Sender<ParsedEntity>,\n    max_concurrent: usize,\n    callbacks: Option<ParseCallbacks>,\n)",
+    "start_line": 124,
+    "uuid": "9648a6cd-a11d-508e-87a9-95465ed6c1ab"
+  }
+]

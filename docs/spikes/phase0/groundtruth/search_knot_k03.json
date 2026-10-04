@@ -1,0 +1,166 @@
+[
+  {
+    "dependencies": [
+      "embed_query",
+      "new",
+      "init"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::tests::test_embedder_init_and_embed_basic",
+    "kind": "rust_function",
+    "name": "test_embedder_init_and_embed_basic",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 203,
+    "uuid": "69be791d-97b6-58b5-ab26-f191d367c91d"
+  },
+  {
+    "dependencies": [
+      "embed_query",
+      "new",
+      "init_with_model",
+      "from_str"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::tests::bge_query_and_passage_vectors_differ_by_prefix",
+    "kind": "rust_function",
+    "name": "bge_query_and_passage_vectors_differ_by_prefix",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 250,
+    "uuid": "63d627cf-e82d-5fe8-9e6a-8a8d70147c80"
+  },
+  {
+    "dependencies": [
+      "prepare_entities",
+      "batch",
+      "new"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/prepare.rs",
+    "fqn": "knot::pipeline::prepare::tests::prepare_entities_leaves_markdown_embed_text_untouched",
+    "kind": "rust_function",
+    "name": "prepare_entities_leaves_markdown_embed_text_untouched",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 794,
+    "uuid": "8beb0a98-abc8-575f-bfc0-ac101b3acfea"
+  },
+  {
+    "dependencies": [
+      "init",
+      "embed_query"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::tests::test_embedder_embed_query",
+    "kind": "rust_function",
+    "name": "test_embedder_embed_query",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 233,
+    "uuid": "5d2974eb-9b85-586b-94a7-ec0bba2803de"
+  },
+  {
+    "dependencies": [
+      "prepare_entities",
+      "new"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/prepare.rs",
+    "fqn": "knot::pipeline::prepare::tests::embed_text_is_deterministic_and_bounded",
+    "kind": "rust_function",
+    "name": "embed_text_is_deterministic_and_bounded",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 745,
+    "uuid": "b2e0a522-231b-594b-b957-a6d28cd83dc5"
+  },
+  {
+    "dependencies": [
+      "prepare_entities",
+      "new"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/prepare.rs",
+    "fqn": "knot::pipeline::prepare::tests::test_prepare_entities_batch",
+    "kind": "rust_function",
+    "name": "test_prepare_entities_batch",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 354,
+    "uuid": "68656a13-2986-5d0c-b0ef-e334336971ed"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "test_embedder_init_and_embed_basic in src/pipeline/embed.rs",
+      "test_embedder_embed_query in src/pipeline/embed.rs",
+      "bge_query_and_passage_vectors_differ_by_prefix in src/pipeline/embed.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Embed a single text query and return the vector.\nThis is used by the MCP server for runtime query embedding.\nFor asymmetric models the query carries the model's query prefix\n(`query: `, `Represent this sentence…`, `search_query: `). fastembed\n6 has no `query_embed` API — `TextEmbedding::embed` passes texts\nthrough verbatim — so the prefix is applied here.",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::Embedder::embed_query",
+    "kind": "rust_method",
+    "name": "embed_query",
+    "repo_name": "knot",
+    "signature": "(&mut self, query: &str)",
+    "start_line": 176,
+    "uuid": "ca0076ee-f686-55c5-8235-61070465b1c5"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Embed a batch of [`ParsedEntity`] records and return [`EmbeddedEntity`] values.\n`batch_size` controls how many texts are passed to the ONNX runtime at once.\nTuning this trades memory usage against throughput.",
+    "file_path": "src/pipeline/embed.rs",
+    "fqn": "knot::pipeline::embed::Embedder::embed",
+    "kind": "rust_method",
+    "name": "embed",
+    "repo_name": "knot",
+    "signature": "(\n        &mut self,\n        entities: Vec<ParsedEntity>,\n        batch_size: usize,\n    )",
+    "start_line": 113,
+    "uuid": "bb26c10f-1d16-59f0-8661-fd943c1456fd"
+  },
+  {
+    "caller_count": 6,
+    "caller_samples": [
+      "parse_benchmark in benches/pipeline_bench.rs",
+      "bench_preparation_stage in benches/pipeline_bench.rs",
+      "test_prepare_entities_batch in src/pipeline/prepare.rs"
+    ],
+    "dependencies": [
+      "build_embed_text"
+    ],
+    "docstring": "Build the `embed_text` field for every entity in-place.\nThis function is intentionally synchronous and allocation-cheap; it is\ncalled after Rayon parsing and before the async embedding stage.",
+    "file_path": "src/pipeline/prepare.rs",
+    "fqn": "knot::pipeline::prepare::prepare_entities",
+    "kind": "rust_function",
+    "name": "prepare_entities",
+    "repo_name": "knot",
+    "signature": "(entities: &mut [ParsedEntity])",
+    "start_line": 66,
+    "uuid": "699c518f-d0f0-5ede-8754-039c5b3270ae"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "spawn_embed_task in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "prepare_entities",
+      "maybe_reset_session",
+      "batch"
+    ],
+    "docstring": "Embeds one parsed batch — resetting the ONNX session when the reset\ninterval is hit — and forwards the embedded batch to the ingest channel.",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::embed_and_forward",
+    "kind": "rust_function",
+    "name": "embed_and_forward",
+    "repo_name": "knot",
+    "signature": "(\n    env: &EmbedTaskEnv,\n    mut batch: Vec<ParsedEntity>,\n    batch_count: usize,\n    is_final: bool,\n)",
+    "start_line": 482,
+    "uuid": "67e6e000-a693-55a7-8a83-b43165a3c176"
+  }
+]

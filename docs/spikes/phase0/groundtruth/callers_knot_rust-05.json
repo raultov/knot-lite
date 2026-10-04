@@ -1,0 +1,86 @@
+{
+  "calls": [
+    {
+      "file_path": "src/bin/knot-mcp.rs",
+      "kind": "rust_function",
+      "name": "main",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 21,
+      "target_file_path": "src/pipeline/state.rs",
+      "target_fqn": "knot::pipeline::state::fastembed_cache_dir",
+      "target_name": "fastembed_cache_dir",
+      "target_repo_name": "knot",
+      "target_signature": "(repo_path: &str)",
+      "target_start_line": 63
+    },
+    {
+      "file_path": "src/bin/knot.rs",
+      "kind": "rust_function",
+      "name": "main",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 22,
+      "target_file_path": "src/pipeline/state.rs",
+      "target_fqn": "knot::pipeline::state::fastembed_cache_dir",
+      "target_name": "fastembed_cache_dir",
+      "target_repo_name": "knot",
+      "target_signature": "(repo_path: &str)",
+      "target_start_line": 63
+    },
+    {
+      "file_path": "src/pipeline/runner.rs",
+      "kind": "rust_function",
+      "name": "run_streaming_ingest",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "(\n    cfg: &Config,\n    vector_db: &Arc<VectorDb>,\n    graph_db: &Arc<GraphDb>,\n    progress: &Arc<ProgressTracker>,\n    files_to_parse: &[PathBuf],\n)",
+      "start_line": 305,
+      "target_file_path": "src/pipeline/state.rs",
+      "target_fqn": "knot::pipeline::state::fastembed_cache_dir",
+      "target_name": "fastembed_cache_dir",
+      "target_repo_name": "knot",
+      "target_signature": "(repo_path: &str)",
+      "target_start_line": 63
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "fastembed_cache_dir",
+    "targets": [
+      {
+        "file_path": "src/pipeline/state.rs",
+        "fqn": "knot::pipeline::state::fastembed_cache_dir",
+        "kind": "rust_function",
+        "name": "fastembed_cache_dir",
+        "repo_name": "knot",
+        "start_line": 63,
+        "uuid": "067dd0c0-7f87-5565-92d0-23ba5a43d45f"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

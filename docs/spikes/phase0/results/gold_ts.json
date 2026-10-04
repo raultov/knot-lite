@@ -1,0 +1,1473 @@
+{
+  "schema": "knot-rag-spike/gold/v1",
+  "lang": "ts",
+  "repo": "knot-site",
+  "estimated": false,
+  "systems": {
+    "heuristic": {
+      "micro": {
+        "precision": 0.927536231884058,
+        "recall": 0.9696969696969697,
+        "tp": 64.0,
+        "fp": 5.0,
+        "fn": 2.0,
+        "found": 69.0,
+        "gold": 66.0
+      },
+      "macro": {
+        "precision": 0.9083333333333334,
+        "recall": 0.9523809523809523,
+        "targets_with_gold": 21,
+        "targets_with_found": 20
+      },
+      "by_category": {
+        "free_fn": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 14.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 14.0,
+          "gold": 14.0
+        },
+        "homonym": {
+          "precision": 0.625,
+          "recall": 0.7142857142857143,
+          "tp": 5.0,
+          "fp": 3.0,
+          "fn": 2.0,
+          "found": 8.0,
+          "gold": 7.0
+        },
+        "interface": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 41.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 41.0,
+          "gold": 41.0
+        },
+        "method": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 4.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 1.0,
+          "recall": 0.96,
+          "tp": 48.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 48.0,
+          "gold": 50.0
+        },
+        "macro": {
+          "precision": 1.0,
+          "recall": 0.9523809523809523,
+          "targets_with_gold": 21,
+          "targets_with_found": 20
+        }
+      }
+    },
+    "knot_db": {
+      "micro": {
+        "precision": 0.9264705882352942,
+        "recall": 0.9545454545454546,
+        "tp": 63.0,
+        "fp": 5.0,
+        "fn": 3.0,
+        "found": 68.0,
+        "gold": 66.0
+      },
+      "macro": {
+        "precision": 0.9083333333333334,
+        "recall": 0.9470899470899471,
+        "targets_with_gold": 21,
+        "targets_with_found": 20
+      },
+      "by_category": {
+        "free_fn": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 14.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 14.0,
+          "gold": 14.0
+        },
+        "homonym": {
+          "precision": 0.625,
+          "recall": 0.7142857142857143,
+          "tp": 5.0,
+          "fp": 3.0,
+          "fn": 2.0,
+          "found": 8.0,
+          "gold": 7.0
+        },
+        "interface": {
+          "precision": 1.0,
+          "recall": 0.975609756097561,
+          "tp": 40.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 40.0,
+          "gold": 41.0
+        },
+        "method": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 4.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 1.0,
+          "recall": 0.96,
+          "tp": 48.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 48.0,
+          "gold": 50.0
+        },
+        "macro": {
+          "precision": 1.0,
+          "recall": 0.9523809523809523,
+          "targets_with_gold": 21,
+          "targets_with_found": 20
+        }
+      }
+    },
+    "knot_db_calls": {
+      "micro": {
+        "precision": 0.8214285714285714,
+        "recall": 0.3484848484848485,
+        "tp": 23.0,
+        "fp": 5.0,
+        "fn": 43.0,
+        "found": 28.0,
+        "gold": 66.0
+      },
+      "macro": {
+        "precision": 0.8690476190476192,
+        "recall": 0.6666666666666666,
+        "targets_with_gold": 21,
+        "targets_with_found": 14
+      },
+      "by_category": {
+        "free_fn": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 14.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 14.0,
+          "gold": 14.0
+        },
+        "homonym": {
+          "precision": 0.625,
+          "recall": 0.7142857142857143,
+          "tp": 5.0,
+          "fp": 3.0,
+          "fn": 2.0,
+          "found": 8.0,
+          "gold": 7.0
+        },
+        "interface": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 41.0,
+          "found": 0.0,
+          "gold": 41.0
+        },
+        "method": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 4.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 1.0,
+          "recall": 0.44,
+          "tp": 22.0,
+          "fp": 0.0,
+          "fn": 28.0,
+          "found": 22.0,
+          "gold": 50.0
+        },
+        "macro": {
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "targets_with_gold": 21,
+          "targets_with_found": 14
+        }
+      }
+    },
+    "lsp": {
+      "micro": {
+        "precision": 1.0,
+        "recall": 0.9696969696969697,
+        "tp": 64.0,
+        "fp": 0.0,
+        "fn": 2.0,
+        "found": 64.0,
+        "gold": 66.0
+      },
+      "macro": {
+        "precision": 1.0,
+        "recall": 0.9897186147186146,
+        "targets_with_gold": 21,
+        "targets_with_found": 21
+      },
+      "by_category": {
+        "free_fn": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 14.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 14.0,
+          "gold": 14.0
+        },
+        "homonym": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 7.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 7.0,
+          "gold": 7.0
+        },
+        "interface": {
+          "precision": 1.0,
+          "recall": 0.9512195121951219,
+          "tp": 39.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 39.0,
+          "gold": 41.0
+        },
+        "method": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 50.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 50.0,
+          "gold": 50.0
+        },
+        "macro": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "targets_with_gold": 21,
+          "targets_with_found": 21
+        }
+      }
+    },
+    "lsp_calls": {
+      "micro": {
+        "precision": 1.0,
+        "recall": 0.3787878787878788,
+        "tp": 25.0,
+        "fp": 0.0,
+        "fn": 41.0,
+        "found": 25.0,
+        "gold": 66.0
+      },
+      "macro": {
+        "precision": 1.0,
+        "recall": 0.7142857142857143,
+        "targets_with_gold": 21,
+        "targets_with_found": 15
+      },
+      "by_category": {
+        "free_fn": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 14.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 14.0,
+          "gold": 14.0
+        },
+        "homonym": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 7.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 7.0,
+          "gold": 7.0
+        },
+        "interface": {
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0.0,
+          "fp": 0.0,
+          "fn": 41.0,
+          "found": 0.0,
+          "gold": 41.0
+        },
+        "method": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        }
+      },
+      "file_level": {
+        "micro": {
+          "precision": 1.0,
+          "recall": 0.48,
+          "tp": 24.0,
+          "fp": 0.0,
+          "fn": 26.0,
+          "found": 24.0,
+          "gold": 50.0
+        },
+        "macro": {
+          "precision": 1.0,
+          "recall": 0.7142857142857143,
+          "targets_with_gold": 21,
+          "targets_with_found": 15
+        }
+      }
+    }
+  },
+  "targets": [
+    {
+      "id": "ts-01",
+      "gold_size": 3.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 3.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 3.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 3.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 3.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 3.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 3.0
+        }
+      }
+    },
+    {
+      "id": "ts-02",
+      "gold_size": 2.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        }
+      }
+    },
+    {
+      "id": "ts-03",
+      "gold_size": 2.0,
+      "per_system": {
+        "heuristic": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 0.0,
+          "gold": 2.0
+        },
+        "knot_db": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 0.0,
+          "gold": 2.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 2.0,
+          "found": 0.0,
+          "gold": 2.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        }
+      }
+    },
+    {
+      "id": "ts-04",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-05",
+      "gold_size": 2.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        }
+      }
+    },
+    {
+      "id": "ts-06",
+      "gold_size": 4.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 4.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 4.0
+        }
+      }
+    },
+    {
+      "id": "ts-07",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-08",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-09",
+      "gold_size": 2.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 2.0
+        },
+        "knot_db": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 2.0
+        },
+        "knot_db_calls": {
+          "precision": 0.6666666666666666,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 3.0,
+          "gold": 2.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        }
+      }
+    },
+    {
+      "id": "ts-10",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-11",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 1.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-12",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-13",
+      "gold_size": 9.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 9.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 9.0,
+          "gold": 9.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 0.8888888888888888,
+          "tp": 8.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 8.0,
+          "gold": 9.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 9.0,
+          "found": 0.0,
+          "gold": 9.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 9.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 9.0,
+          "gold": 9.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 9.0,
+          "found": 0.0,
+          "gold": 9.0
+        }
+      }
+    },
+    {
+      "id": "ts-14",
+      "gold_size": 8.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 8.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 8.0,
+          "gold": 8.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 8.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 8.0,
+          "gold": 8.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 8.0,
+          "found": 0.0,
+          "gold": 8.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "tp": 7.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 7.0,
+          "gold": 8.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 8.0,
+          "found": 0.0,
+          "gold": 8.0
+        }
+      }
+    },
+    {
+      "id": "ts-15",
+      "gold_size": 6.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 6.0,
+          "found": 0.0,
+          "gold": 6.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 6.0,
+          "found": 0.0,
+          "gold": 6.0
+        }
+      }
+    },
+    {
+      "id": "ts-16",
+      "gold_size": 11.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 11.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 11.0,
+          "gold": 11.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 11.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 11.0,
+          "gold": 11.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 11.0,
+          "found": 0.0,
+          "gold": 11.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 0.9090909090909091,
+          "tp": 10.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 10.0,
+          "gold": 11.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 11.0,
+          "found": 0.0,
+          "gold": 11.0
+        }
+      }
+    },
+    {
+      "id": "ts-17",
+      "gold_size": 6.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 6.0,
+          "found": 0.0,
+          "gold": 6.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 6.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 6.0,
+          "gold": 6.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 6.0,
+          "found": 0.0,
+          "gold": 6.0
+        }
+      }
+    },
+    {
+      "id": "ts-18",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 0.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": null,
+          "recall": -0.0,
+          "tp": -0.0,
+          "fp": 0.0,
+          "fn": 1.0,
+          "found": 0.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-19",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-20",
+      "gold_size": 1.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "knot_db_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 1.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 1.0,
+          "gold": 1.0
+        }
+      }
+    },
+    {
+      "id": "ts-21",
+      "gold_size": 2.0,
+      "per_system": {
+        "heuristic": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 2.0
+        },
+        "knot_db": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 2.0
+        },
+        "knot_db_calls": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 2.0,
+          "fn": 0.0,
+          "found": 4.0,
+          "gold": 2.0
+        },
+        "lsp": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        },
+        "lsp_calls": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 2.0,
+          "fp": 0.0,
+          "fn": 0.0,
+          "found": 2.0,
+          "gold": 2.0
+        }
+      }
+    }
+  ],
+  "notable_disagreements": [
+    {
+      "target": "ts-09",
+      "entity": {
+        "file": "src/state/consentStore.ts",
+        "line": 1,
+        "name": "<module>"
+      },
+      "found_by": [
+        "knot_db",
+        "heuristic",
+        "knot_db_calls"
+      ],
+      "verdict": "fp",
+      "reason": "emit() sites at lines 36/65 are owned by `settle` and `request`; knot added an edge from the `consentStore` object literal (line 41), which container_at climbs to <module> — no owned site"
+    },
+    {
+      "target": "ts-21",
+      "entity": {
+        "file": "src/components/Installation.tsx",
+        "line": 99,
+        "name": "handleTabKeyDown"
+      },
+      "found_by": [
+        "knot_db",
+        "heuristic",
+        "knot_db_calls"
+      ],
+      "verdict": "fp",
+      "reason": "handleTabKeyDown calls `handleTab(next)` at line 104, not setActiveTab; no setActiveTab site in its span"
+    }
+  ]
+}

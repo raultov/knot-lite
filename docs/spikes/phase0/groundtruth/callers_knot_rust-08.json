@@ -1,0 +1,101 @@
+{
+  "calls": [
+    {
+      "file_path": "src/bin/knot.rs",
+      "kind": "rust_function",
+      "name": "main",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 22,
+      "target_file_path": "src/cli_tools/find_callers.rs",
+      "target_fqn": "knot::cli_tools::find_callers::run_find_callers",
+      "target_name": "run_find_callers",
+      "target_repo_name": "knot",
+      "target_signature": "(\n    entity_name: &str,\n    repo: &RepoScope,\n    graph_db: &Arc<GraphDb>,\n    max_targets: Option<usize>,\n    kinds: Option<&str>,\n)",
+      "target_start_line": 31
+    },
+    {
+      "file_path": "src/handlers/search.rs",
+      "kind": "rust_function",
+      "name": "callers_handler",
+      "rel_type": "CALLS",
+      "repo_name": "knot-server",
+      "signature": "(\n    State(state): State<Arc<AppState>>,\n    Path(id): Path<String>,\n    Query(params): Query<CallersParams>,\n)",
+      "start_line": 206,
+      "target_file_path": "src/cli_tools/find_callers.rs",
+      "target_fqn": "knot::cli_tools::find_callers::run_find_callers",
+      "target_name": "run_find_callers",
+      "target_repo_name": "knot",
+      "target_signature": "(\n    entity_name: &str,\n    repo: &RepoScope,\n    graph_db: &Arc<GraphDb>,\n    max_targets: Option<usize>,\n    kinds: Option<&str>,\n)",
+      "target_start_line": 31
+    },
+    {
+      "file_path": "src/handlers/search.rs",
+      "kind": "rust_function",
+      "name": "callers_all_handler",
+      "rel_type": "CALLS",
+      "repo_name": "knot-server",
+      "signature": "(\n    State(state): State<Arc<AppState>>,\n    Query(params): Query<GlobalCallersParams>,\n)",
+      "start_line": 381,
+      "target_file_path": "src/cli_tools/find_callers.rs",
+      "target_fqn": "knot::cli_tools::find_callers::run_find_callers",
+      "target_name": "run_find_callers",
+      "target_repo_name": "knot",
+      "target_signature": "(\n    entity_name: &str,\n    repo: &RepoScope,\n    graph_db: &Arc<GraphDb>,\n    max_targets: Option<usize>,\n    kinds: Option<&str>,\n)",
+      "target_start_line": 31
+    },
+    {
+      "file_path": "src/mcp_tools/find_callers.rs",
+      "kind": "rust_method",
+      "name": "handle",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "(\n        params: CallToolRequestParams,\n        handler: &KnotMcpHandler,\n    )",
+      "start_line": 87,
+      "target_file_path": "src/cli_tools/find_callers.rs",
+      "target_fqn": "knot::cli_tools::find_callers::run_find_callers",
+      "target_name": "run_find_callers",
+      "target_repo_name": "knot",
+      "target_signature": "(\n    entity_name: &str,\n    repo: &RepoScope,\n    graph_db: &Arc<GraphDb>,\n    max_targets: Option<usize>,\n    kinds: Option<&str>,\n)",
+      "target_start_line": 31
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "run_find_callers",
+    "targets": [
+      {
+        "file_path": "src/cli_tools/find_callers.rs",
+        "fqn": "knot::cli_tools::find_callers::run_find_callers",
+        "kind": "rust_function",
+        "name": "run_find_callers",
+        "repo_name": "knot",
+        "start_line": 31,
+        "uuid": "e5c037f0-df74-5eb7-9bde-b809aa709dff"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

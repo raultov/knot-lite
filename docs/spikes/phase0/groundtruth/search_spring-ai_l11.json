@@ -1,0 +1,215 @@
+[
+  {
+    "caller_count": 11,
+    "caller_samples": [
+      "defaultConfigTextFormatter in spring-ai-commons/src/test/java/org/springframework/ai/document/ContentFormatterTests.java",
+      "testSplitText in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TextSplitterTests.java",
+      "testSplitTextWithNullMetadata in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TextSplitterTests.java"
+    ],
+    "dependencies": [
+      "builder",
+      "build"
+    ],
+    "docstring": "",
+    "file_path": "document-readers/spring-ai-jsoup-document-reader/src/main/java/org/springframework/ai/reader/jsoup/config/JsoupDocumentReaderConfig.java",
+    "fqn": "org.springframework.ai.reader.jsoup.config.JsoupDocumentReaderConfig.defaultConfig",
+    "kind": "method",
+    "name": "defaultConfig",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 69,
+    "uuid": "46dde8d5-2cda-571b-aefd-846b7d735071"
+  },
+  {
+    "dependencies": [
+      "getPathPrefix",
+      "getUris",
+      "createConnectionManager",
+      "createBasicCredentialsProvider",
+      "getPassword",
+      "map",
+      "createRequestConfig",
+      "getUsername",
+      "createHttpHost",
+      "setPathPrefix"
+    ],
+    "docstring": "",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-opensearch/src/main/java/org/springframework/ai/vectorstore/opensearch/autoconfigure/OpenSearchVectorStoreAutoConfiguration.java",
+    "fqn": "org.springframework.ai.vectorstore.opensearch.autoconfigure.OpenSearchVectorStoreAutoConfiguration.openSearchClient",
+    "kind": "method",
+    "name": "openSearchClient",
+    "repo_name": "spring-ai",
+    "signature": "(OpenSearchVectorStoreProperties properties,\n\t\t\t\tOpenSearchConnectionDetails connectionDetails, Optional<SslBundles> sslBundles)",
+    "start_line": 114,
+    "uuid": "2503f001-19f9-5c81-a98a-e2e9cfe5d47a"
+  },
+  {
+    "caller_count": 8,
+    "caller_samples": [
+      "filterDeleteListsVectorsWithMetadataAndDeletesMatchingKeys in vector-stores/spring-ai-s3-vector-store/src/test/java/S3VectorStoreTests.java",
+      "filterDeleteEvaluatesCompoundFilterExpressions in vector-stores/spring-ai-s3-vector-store/src/test/java/S3VectorStoreTests.java",
+      "filterDeleteScansAllListVectorsPages in vector-stores/spring-ai-s3-vector-store/src/test/java/S3VectorStoreTests.java"
+    ],
+    "dependencies": [
+      "isInitializeSchema",
+      "build",
+      "builder",
+      "getIndexName",
+      "jedisClient",
+      "batchingStrategy",
+      "hnswConfiguration",
+      "getPrefix"
+    ],
+    "docstring": "Creates a Redis vector store.\n@param embeddingModel the embedding model\n@param properties the Redis vector store properties\n@param jedisConnectionFactory the Jedis connection factory\n@param observationRegistry the observation registry\n@param convention the custom observation convention\n@param metadataFields the custom metadata fields\n@param batchingStrategy the batching strategy\n@return the configured Redis vector store",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-redis/src/main/java/org/springframework/ai/vectorstore/redis/autoconfigure/RedisVectorStoreAutoConfiguration.java",
+    "fqn": "org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration.vectorStore",
+    "kind": "method",
+    "name": "vectorStore",
+    "repo_name": "spring-ai",
+    "signature": "(final EmbeddingModel embeddingModel,\n\t\t\tfinal RedisVectorStoreProperties properties, final JedisConnectionFactory jedisConnectionFactory,\n\t\t\tfinal ObjectProvider<ObservationRegistry> observationRegistry,\n\t\t\tfinal ObjectProvider<VectorStoreObservationConvention> convention,\n\t\t\tfinal ObjectProvider<List<RedisVectorStore.MetadataField>> metadataFields,\n\t\t\tfinal BatchingStrategy batchingStrategy)",
+    "start_line": 81,
+    "uuid": "1ae63105-a385-569b-bc13-05cc8d765117"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "createRequest in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [
+      "build",
+      "title",
+      "builder",
+      "build",
+      "map",
+      "toList",
+      "context"
+    ],
+    "docstring": "Convert this citation document to an SDK {@link DocumentBlockParam}.\n@return configured DocumentBlockParam for the Anthropic API",
+    "file_path": "models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCitationDocument.java",
+    "fqn": "org.springframework.ai.anthropic.AnthropicCitationDocument.toDocumentBlockParam",
+    "kind": "method",
+    "name": "toDocumentBlockParam",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 131,
+    "uuid": "8941187c-cd9e-5263-a0af-36c5dabf7d50"
+  },
+  {
+    "caller_count": 143,
+    "caller_samples": [
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "internalStream in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+      "convertStreamEventToChatResponse in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [
+      "JsoupDocumentReaderConfig"
+    ],
+    "docstring": "",
+    "file_path": "document-readers/spring-ai-jsoup-document-reader/src/main/java/org/springframework/ai/reader/jsoup/config/JsoupDocumentReaderConfig.java",
+    "fqn": "org.springframework.ai.reader.jsoup.config.JsoupDocumentReaderConfig.build",
+    "kind": "method",
+    "name": "build",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 201,
+    "uuid": "54c8b853-6802-5384-8fe2-735bb5a6b589"
+  },
+  {
+    "caller_count": 143,
+    "caller_samples": [
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "internalStream in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+      "convertStreamEventToChatResponse in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [
+      "AnthropicWebSearchTool"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicWebSearchTool.java",
+    "fqn": "org.springframework.ai.anthropic.AnthropicWebSearchTool.build",
+    "kind": "method",
+    "name": "build",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 135,
+    "uuid": "2cf3c35d-1deb-5fca-81bc-e97cc28f5027"
+  },
+  {
+    "caller_count": 143,
+    "caller_samples": [
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "internalStream in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+      "convertStreamEventToChatResponse in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [],
+    "docstring": "Build the AnthropicCitationDocument.\n@return configured citation document",
+    "file_path": "models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCitationDocument.java",
+    "fqn": "org.springframework.ai.anthropic.AnthropicCitationDocument.build",
+    "kind": "method",
+    "name": "build",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 259,
+    "uuid": "595fb9c8-3e5d-5601-9fcb-d9be3b029d3b"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "build in memory-repositories/spring-ai-model-chat-memory-repository-redis/src/main/java/org/springframework/ai/chat/memory/repository/redis/RedisChatMemoryRepository.java",
+      "redisChatMemoryRepository in auto-configurations/models/chat/memory/repository/spring-ai-autoconfigure-model-chat-memory-repository-redis/src/main/java/org/springframework/ai/model/chat/memory/repository/redis/autoconfigure/RedisChatMemoryRepositoryAutoConfiguration.java",
+      "vectorStore in auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-redis/src/main/java/org/springframework/ai/vectorstore/redis/autoconfigure/RedisVectorStoreAutoConfiguration.java"
+    ],
+    "dependencies": [
+      "password"
+    ],
+    "docstring": "",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-redis/src/main/java/org/springframework/ai/vectorstore/redis/autoconfigure/RedisVectorStoreAutoConfiguration.java",
+    "fqn": "org.springframework.ai.vectorstore.redis.autoconfigure.RedisVectorStoreAutoConfiguration.jedisClient",
+    "kind": "method",
+    "name": "jedisClient",
+    "repo_name": "spring-ai",
+    "signature": "(final JedisConnectionFactory jedisConnectionFactory)",
+    "start_line": 116,
+    "uuid": "4bf19cc7-a59a-5dad-a45f-395bd0a96304"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "shouldApplyPartitionNameWhenAddingDocuments in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "shouldIgnoreBlankPartitionNameWhenAddingDocuments in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "add in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java"
+    ],
+    "dependencies": [
+      "embed",
+      "getIndexName",
+      "getEmbeddingFieldName",
+      "getDocument",
+      "builder",
+      "build",
+      "bulkRequest",
+      "index",
+      "getId"
+    ],
+    "docstring": "",
+    "file_path": "vector-stores/spring-ai-elasticsearch-store/src/main/java/org/springframework/ai/vectorstore/elasticsearch/ElasticsearchVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.elasticsearch.ElasticsearchVectorStore.doAdd",
+    "kind": "method",
+    "name": "doAdd",
+    "repo_name": "spring-ai",
+    "signature": "(List<Document> documents)",
+    "start_line": 190,
+    "uuid": "ab8a9f3a-413c-560b-985d-fd387c0f5b2f"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/mcp/spring-ai-autoconfigure-mcp-server-webmvc/src/main/java/org/springframework/ai/mcp/server/webmvc/autoconfigure/McpServerStreamableHttpWebMvcAutoConfiguration.java",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "8957bba9-8e36-5a80-8856-35e4f8e4169c"
+  }
+]

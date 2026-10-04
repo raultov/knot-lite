@@ -1,0 +1,166 @@
+[
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "load_knot_cli in src/config.rs",
+      "load_env_and_parse in src/config.rs"
+    ],
+    "dependencies": [
+      "knot_env_path"
+    ],
+    "docstring": "Load environment variables from knot's `.env` file.\nOnly loads from knot's XDG-style config directory (see [`knot_env_path`]).\nNever loads from the current working directory, preventing `.env` files in\ntarget repositories from hijacking knot's configuration.",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::load_knot_env",
+    "kind": "rust_function",
+    "name": "load_knot_env",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 342,
+    "uuid": "17957074-fa47-5c20-819a-a4d1bc028cc7"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "main in src/bin/knot.rs"
+    ],
+    "dependencies": [
+      "repo_name",
+      "resolve_repo_name",
+      "neo4j_password",
+      "resolve_embed_and_collection",
+      "resolve_repo_path",
+      "repo_path",
+      "repo_name",
+      "collection_was_supplied",
+      "load_knot_env"
+    ],
+    "docstring": "Load configuration for the CLI binary (knot).\nUses McpCli parser but ignores CLI subcommand arguments to avoid conflicts.\nThis allows the CLI to accept search/callers/explore subcommands without\nclap trying to parse them as configuration arguments.",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::Config::load_knot_cli",
+    "kind": "rust_method",
+    "name": "load_knot_cli",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 491,
+    "uuid": "513a9b80-f7cc-5300-aede-c6757493ba0f"
+  },
+  {
+    "dependencies": [
+      "repo_name",
+      "resolve_repo_path",
+      "repo_path",
+      "collection_was_supplied",
+      "resolve_repo_name",
+      "qdrant_collection",
+      "load_knot_env",
+      "repo_name",
+      "neo4j_password"
+    ],
+    "docstring": "Common shared logic for loading environment and resolving repo_path/repo_name.\nParses the CLI generically via the two-step matches round-trip so the\n`qdrant_collection` `ValueSource` can be inspected (an explicitly\nsupplied collection must win over the model-derived default).\nReturns `(cli, collection_supplied, repo_path, repo_name, neo4j_password)`.",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::Config::load_env_and_parse",
+    "kind": "rust_method",
+    "name": "load_env_and_parse",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 552,
+    "uuid": "787bec70-c77a-5698-be56-b99ed4b20b16"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "load_knot_env in src/config.rs",
+      "test_knot_env_path_never_resolves_to_cwd in src/config.rs"
+    ],
+    "dependencies": [
+      "knot_env_path_from"
+    ],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::knot_env_path",
+    "kind": "rust_function",
+    "name": "knot_env_path",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 333,
+    "uuid": "43ace868-f04f-53df-8baf-d999ef618c99"
+  },
+  {
+    "dependencies": [
+      "knot_env_path"
+    ],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::tests::test_knot_env_path_never_resolves_to_cwd",
+    "kind": "rust_function",
+    "name": "test_knot_env_path_never_resolves_to_cwd",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1426,
+    "uuid": "0db8228d-b7d3-5f42-a869-7953672b473b"
+  },
+  {
+    "dependencies": [
+      "knot_env_path_from"
+    ],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::tests::test_knot_env_path_falls_back_to_home",
+    "kind": "rust_function",
+    "name": "test_knot_env_path_falls_back_to_home",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1416,
+    "uuid": "b321616e-9e93-5b65-ae1f-c7ac3e9eaa4a"
+  },
+  {
+    "dependencies": [
+      "knot_env_path_from"
+    ],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::tests::test_knot_env_path_prefers_knot_config_dir",
+    "kind": "rust_function",
+    "name": "test_knot_env_path_prefers_knot_config_dir",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1403,
+    "uuid": "0bd59ed0-ccd7-503e-99ca-4f7259288c86"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::tests::test_knot_cli_env_var_precedence",
+    "kind": "rust_function",
+    "name": "test_knot_cli_env_var_precedence",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1091,
+    "uuid": "dae5a562-c8ed-5b51-92d8-03523cd84bd1"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::tests::test_load_knot_env_reads_from_explicit_path",
+    "kind": "rust_function",
+    "name": "test_load_knot_env_reads_from_explicit_path",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1442,
+    "uuid": "99b5453a-318a-5087-bef0-83b3412b9f1c"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "tests/testing_files/sample_full.groovy",
+    "fqn": "com.example.service.BaseService.environment",
+    "kind": "groovy_property",
+    "name": "environment",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 44,
+    "uuid": "c46f7274-87f9-53f6-9116-f49ab3071aaa"
+  }
+]

@@ -1,0 +1,86 @@
+{
+  "calls": [
+    {
+      "file_path": "src/toolcore/definitions/getLatestReleases.ts",
+      "kind": "constant",
+      "name": "getLatestReleases",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 35,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonTextFitting",
+      "target_name": "jsonTextFitting",
+      "target_repo_name": "knot-site",
+      "target_signature": "(\n  items: readonly T[],\n  build: (slice: readonly T[], truncated: boolean) => unknown,\n)",
+      "target_start_line": 37
+    },
+    {
+      "file_path": "src/toolcore/definitions/getLatestReleases.ts",
+      "kind": "constant",
+      "name": "getLatestReleases",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 39,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonTextFitting",
+      "target_name": "jsonTextFitting",
+      "target_repo_name": "knot-site",
+      "target_signature": "(\n  items: readonly T[],\n  build: (slice: readonly T[], truncated: boolean) => unknown,\n)",
+      "target_start_line": 37
+    },
+    {
+      "file_path": "src/toolcore/definitions/searchKnotCapabilities.ts",
+      "kind": "constant",
+      "name": "searchKnotCapabilities",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 25,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonTextFitting",
+      "target_name": "jsonTextFitting",
+      "target_repo_name": "knot-site",
+      "target_signature": "(\n  items: readonly T[],\n  build: (slice: readonly T[], truncated: boolean) => unknown,\n)",
+      "target_start_line": 37
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "jsonTextFitting",
+    "targets": [
+      {
+        "file_path": "src/toolcore/format.ts",
+        "fqn": "jsonTextFitting",
+        "kind": "function",
+        "name": "jsonTextFitting",
+        "repo_name": "knot-site",
+        "start_line": 37,
+        "uuid": "e5876c60-6993-5835-badb-c154cce12b51"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

@@ -1,0 +1,740 @@
+# knot-rag gold adjudication (T7.3) — Java / spring-ai
+#
+# GOLD RULE (applied to every verdict): `tp` iff the reported container is the
+# OWNER of a genuine reference site to the target symbol (owner =
+# container_at(file, site_line); same symbol — not a homonym, not a string or
+# comment, not another overload). `fp` when the container owns no such site:
+# javadoc {@link} mentions (comment-only), constructor-declaration names,
+# enclosing/sibling attributions, or calls to a different overload
+# (OVERLOAD RULE per T7.3 rule 3). Rationale: "who calls this symbol" means
+# direct reference owners — also LSP's granularity (gates G1-G4).
+#
+# spot_check items are the seed-42 sample of auto-tp agreements (T7.3 rule 2),
+# verified by reading the code — all 10 confirmed tp.
+#
+[[item]]
+target = "java-20"
+entity = { file = "models/spring-ai-mistral-ai/src/main/java/org/springframework/ai/mistralai/MistralAiChatModel.java", line = 175, name = "internalCall" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `RetryUtils.execute(...)` call inside RetryTemplate at MistralAiChatModel.java:189"
+evidence = "models/spring-ai-mistral-ai/src/main/java/org/springframework/ai/mistralai/MistralAiChatModel.java:189"
+#   188 | 
+#   189 | 				ResponseEntity<ChatCompletion> completionEntity = RetryUtils.execute(this.retryTemplate,
+#   190 | 						() -> this.mistralAiApi.chatCompletionEntity(request));
+#   191 | 
+
+[[item]]
+target = "java-07"
+entity = { file = "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-redis/src/test/java/org/springframework/ai/vectorstore/redis/autoconfigure/RedisVectorStoreAutoConfigurationIT.java", line = 79, name = "addAndSearch" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `context.getBean(VectorStore.class)` type reference at RedisVectorStoreAutoConfiguration.java:81"
+evidence = "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-redis/src/test/java/org/springframework/ai/vectorstore/redis/autoconfigure/RedisVectorStoreAutoConfigurationIT.java:81"
+#    80 | 		this.contextRunner.run(context -> {
+#    81 | 			VectorStore vectorStore = context.getBean(VectorStore.class);
+#    82 | 			TestObservationRegistry observationRegistry = context.getBean(TestObservationRegistry.class);
+#    83 | 
+
+[[item]]
+target = "java-16"
+entity = { file = "auto-configurations/models/spring-ai-autoconfigure-model-mistral-ai/src/test/java/org/springframework/ai/model/mistralai/autoconfigure/MistralAiAutoConfigurationIT.java", line = 67, name = "generateStreaming" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `Flux<ChatResponse>` type reference at MistralAiAutoConfigurationIT.java:74"
+evidence = "auto-configurations/models/spring-ai-autoconfigure-model-mistral-ai/src/test/java/org/springframework/ai/model/mistralai/autoconfigure/MistralAiAutoConfigurationIT.java:74"
+#    73 | 				MistralAiChatModel chatModel = context.getBean(MistralAiChatModel.class);
+#    74 | 				Flux<ChatResponse> responseFlux = chatModel.stream(new Prompt(new UserMessage("Hello")));
+#    75 | 				String response = responseFlux.collectList()
+#    76 | 					.block()
+
+[[item]]
+target = "java-06"
+entity = { file = "models/spring-ai-google-genai/src/test/java/org/springframework/ai/google/genai/CreateGeminiRequestTests.java", line = 723, name = "createRequestWithToolChoiceAnyAndAllowedFunctionNames" }
+found_by = ["lsp", "knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `new Prompt(...)` construction inside createGeminiRequest at CreateGeminiRequestTests.java:729"
+evidence = "models/spring-ai-google-genai/src/test/java/org/springframework/ai/google/genai/CreateGeminiRequestTests.java:729"
+#   728 | 
+#   729 | 		GeminiRequest request = client.createGeminiRequest(new Prompt("Test message content",
+#   730 | 				GoogleGenAiChatOptions.builder()
+#   731 | 					.toolChoice(GoogleGenAiChatOptions.ToolChoice.builder()
+
+[[item]]
+target = "java-16"
+entity = { file = "spring-ai-client-chat/src/test/java/org/springframework/ai/chat/client/advisor/UsageAccumulatorTests.java", line = 47, name = "addRoundResponseFoldsUsageAcrossRounds" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `ChatResponse total = accumulator.addRoundResponse(...)` at UsageAccumulatorTests.java:51"
+evidence = "spring-ai-client-chat/src/test/java/org/springframework/ai/chat/client/advisor/UsageAccumulatorTests.java:51"
+#    50 | 		accumulator.addRoundResponse(responseWith(new DefaultUsage(10, 20, 30)));
+#    51 | 		ChatResponse total = accumulator.addRoundResponse(responseWith(new DefaultUsage(1, 2, 3)));
+#    52 | 
+#    53 | 		assertThat(total).isNotNull();
+
+[[item]]
+target = "java-06"
+entity = { file = "models/spring-ai-mistral-ai/src/test/java/org/springframework/ai/mistralai/MistralAiChatModelIT.java", line = 524, name = "structuredOutputWithJsonSchema" }
+found_by = ["lsp", "knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `this.chatModel.call(new Prompt(` at MistralAiChatModelIT.java:535"
+evidence = "models/spring-ai-mistral-ai/src/test/java/org/springframework/ai/mistralai/MistralAiChatModelIT.java:535"
+#   534 | 
+#   535 | 		ChatResponse response = this.chatModel.call(new Prompt(List.of(userMessage), promptOptions));
+#   536 | 
+#   537 | 		String content = response.getResult().getOutput().getText();
+
+[[item]]
+target = "java-16"
+entity = { file = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/DeepSeekWithOpenAiChatModelIT.java", line = 184, name = "validateCallResponseMetadata" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `ChatResponse response = ChatClient.create(this.chatModel)` at DeepSeekWithOpenAiChatModelIT.java:185"
+evidence = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/DeepSeekWithOpenAiChatModelIT.java:185"
+#   184 | 	void validateCallResponseMetadata() {
+#   185 | 		ChatResponse response = ChatClient.create(this.chatModel)
+#   186 | 			.prompt()
+#   187 | 			.options(OpenAiChatOptions.builder().model(DEEPSEEK_DEFAULT_MODEL))
+
+[[item]]
+target = "java-16"
+entity = { file = "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java", line = 400, name = "call" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `public ChatResponse call(Prompt prompt)` return type at GoogleGenAiChatModel.java:400"
+evidence = "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java:400"
+#   399 | 	@Override
+#   400 | 	public ChatResponse call(Prompt prompt) {
+#   401 | 		var requestPrompt = this.buildRequestPrompt(prompt);
+#   402 | 		return this.internalCall(requestPrompt, null);
+
+[[item]]
+target = "java-06"
+entity = { file = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/DeepSeekWithOpenAiChatModelIT.java", line = 258, name = "reasoningContentStreamTest" }
+found_by = ["lsp", "knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `new Prompt(\"What is 2+2?...\")` at DeepSeekWithOpenAiChatModelIT.java:264"
+evidence = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/DeepSeekWithOpenAiChatModelIT.java:264"
+#   263 | 
+#   264 | 		var prompt = new Prompt("What is 2+2? Think step by step.", promptOptions);
+#   265 | 
+#   266 | 		AtomicReference<ChatResponse> aggregatedRef = new AtomicReference<>();
+
+[[item]]
+target = "java-06"
+entity = { file = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/DeepSeekChatCompletionRequestTests.java", line = 88, name = "createRequestWithNullReasoningContent" }
+found_by = ["lsp", "knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `new Prompt(List.of(assistantMessage),` at DeepSeekChatCompletionRequestTests.java:95"
+evidence = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/DeepSeekChatCompletionRequestTests.java:95"
+#    94 | 
+#    95 | 		var prompt = new Prompt(List.of(assistantMessage),
+#    96 | 				DeepSeekChatOptions.builder().model("deepseek-reasoner").build());
+#    97 | 
+
+[[item]]
+target = "java-01"
+entity = { file = "spring-ai-rag/src/test/java/org/springframework/ai/rag/preretrieval/query/transformation/TranslationQueryTransformerTests.java", line = 32, name = "TranslationQueryTransformerTests" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "spring-ai-rag/src/test/java/org/springframework/ai/rag/preretrieval/query/transformation/TranslationQueryTransformerTests.java:32"
+#    34 | 	@Test
+#    35 | 	void whenChatClientBuilderIsNullThenThrow() {
+#    36 | 		assertThatThrownBy(() -> TranslationQueryTransformer.builder().chatClientBuilder(null).build())
+#    37 | 			.isInstanceOf(IllegalStateException.class)
+
+[[item]]
+target = "java-01"
+entity = { file = "spring-ai-client-chat/src/test/java/org/springframework/ai/chat/client/ChatClientTests.java", line = 417, name = "mutatePrompt" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (var chatClient = ChatClient.builder(this.chatModel))"
+evidence = "spring-ai-client-chat/src/test/java/org/springframework/ai/chat/client/ChatClientTests.java:432"
+#   431 | 		// @formatter:off
+#   432 | 		var chatClient = ChatClient.builder(this.chatModel)
+#   433 | 				.defaultSystem(s -> s.text("Default system text {param1}, {param2}")
+#   434 | 						.param("param1", "value1")
+
+[[item]]
+target = "java-02"
+entity = { file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java", line = 111, name = "prompt" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "OVERLOAD RULE: `prompt(String)` delegates to `prompt(new Prompt(content))` — the `prompt(Prompt)` overload, not the no-arg target `prompt()`"
+evidence = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java:113"
+notable = true
+#   110 | 	@Override
+#   111 | 	public ChatClientRequestSpec prompt(String content) {
+#   112 | 		Assert.hasText(content, "content cannot be null or empty");
+#   113 | 		return prompt(new Prompt(content));
+
+[[item]]
+target = "java-02"
+entity = { file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java", line = 106, name = "prompt" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public ChatClientRequestSpec prompt() {)"
+evidence = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java:106"
+#   105 | 	@Override
+#   106 | 	public ChatClientRequestSpec prompt() {
+#   107 | 		return new DefaultChatClientRequestSpec(this.defaultChatClientRequest);
+#   108 | 	}
+
+[[item]]
+target = "java-02"
+entity = { file = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java", line = 234, name = "defaultFunctionCallTest" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (.prompt())"
+evidence = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java:243"
+#   242 | 				.build()
+#   243 | 			.prompt()
+#   244 | 			.call()
+#   245 | 			.content();
+
+[[item]]
+target = "java-03"
+entity = { file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java", line = 67, name = "create" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "OVERLOAD RULE: `create(ChatModel, ObservationRegistry)` calls the 4-arg `create(...)`, not the 1-arg target `create(ChatModel)`"
+evidence = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java:68"
+notable = true
+#    66 | 
+#    67 | 	static ChatClient create(ChatModel chatModel, ObservationRegistry observationRegistry) {
+#    68 | 		return create(chatModel, observationRegistry, null, null);
+#    69 | 	}
+
+[[item]]
+target = "java-03"
+entity = { file = "spring-ai-test/src/main/java/org/springframework/ai/test/chat/client/advisor/AbstractToolCallingAdvisorAutoRegistrationIT.java", line = 192, name = "advisorChainLoopsWhenAutoRegistered" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (ChatClient.create(getChatModel()))"
+evidence = "spring-ai-test/src/main/java/org/springframework/ai/test/chat/client/advisor/AbstractToolCallingAdvisorAutoRegistrationIT.java:195"
+#   194 | 
+#   195 | 			ChatClient.create(getChatModel())
+#   196 | 				.prompt()
+#   197 | 				.advisors(counter)
+
+[[item]]
+target = "java-04"
+entity = { file = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelIT.java", line = 62, name = "DeepSeekChatModelIT" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (protected ChatModel chatModel;)"
+evidence = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelIT.java:65"
+#    61 | @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
+#    62 | class DeepSeekChatModelIT {
+#    63 | 
+#    64 | 	@Autowired
+
+[[item]]
+target = "java-05"
+entity = { file = "models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatModel.java", line = 131, name = "call" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public ChatResponse call(Prompt prompt) {)"
+evidence = "models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatModel.java:131"
+#   130 | 	@Override
+#   131 | 	public ChatResponse call(Prompt prompt) {
+#   132 | 		Prompt requestPrompt = buildRequestPrompt(prompt);
+#   133 | 		return this.internalCall(requestPrompt, null);
+
+[[item]]
+target = "java-05"
+entity = { file = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelIT.java", line = 302, name = "reasoningEffortHighTest" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (ChatResponse response = this.chatModel.call(prompt);)"
+evidence = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelIT.java:305"
+#   304 | 		Prompt prompt = new Prompt("9.11 and 9.8, which is greater?", promptOptions);
+#   305 | 		ChatResponse response = this.chatModel.call(prompt);
+#   306 | 
+#   307 | 		DeepSeekAssistantMessage deepSeekAssistantMessage = (DeepSeekAssistantMessage) response.getResult().getOutput();
+
+[[item]]
+target = "java-06"
+entity = { file = "mcp/mcp-annotations/src/test/java/org/springframework/ai/mcp/annotation/method/changed/prompt/AsyncMcpPromptListChangedMethodCallbackTests.java", line = 213, name = "ThrowingVoidMethod" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "no Prompt reference in the method span"
+evidence = "mcp/mcp-annotations/src/main/java/org/springframework/ai/mcp/annotation/method/AsyncMcpPromptListChangedMethodCallback.java:213"
+#   214 | 
+#   215 | 			@McpPromptListChanged(clients = "my-client-id")
+#   216 | 			public void handlePromptListChanged(List<McpSchema.Prompt> updatedPrompts) {
+#   217 | 				throw new RuntimeException("Test exception");
+
+[[item]]
+target = "java-06"
+entity = { file = "auto-configurations/models/spring-ai-autoconfigure-model-ollama/src/test/kotlin/org/springframework/ai/model/ollama/autoconfigure/tool/ToolCallbackKotlinIT.kt", line = 62, name = "toolCallTest" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "auto-configurations/models/spring-ai-autoconfigure-model-ollama/src/test/kotlin/org/springframework/ai/model/ollama/autoconfigure/tool/ToolCallbackKotlinIT.kt:62"
+#    78 | 
+#    79 | 			var prompt = Prompt(listOf(userMessage), options)
+#    80 | 			var response = chatModel.call(prompt)
+#    81 | 
+
+[[item]]
+target = "java-06"
+entity = { file = "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-chroma/src/test/java/org/springframework/ai/vectorstore/chroma/autoconfigure/ChromaVectorStoreAutoConfigurationIT.java", line = 81, name = "verifyThatChromaCanHandleComplexMetadataValues" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (.prompt(Prompt.builder().content(\"UserPrompt\").build()))"
+evidence = "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-chroma/src/test/java/org/springframework/ai/vectorstore/chroma/autoconfigure/ChromaVectorStoreAutoConfigurationIT.java:93"
+#    92 | 			var req = ChatClientRequest.builder()
+#    93 | 				.prompt(Prompt.builder().content("UserPrompt").build())
+#    94 | 				.context(ChatMemory.CONVERSATION_ID, "test-conversation")
+#    95 | 				.build();
+
+[[item]]
+target = "java-07"
+entity = { file = "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-opensearch/src/test/java/org/springframework/ai/vectorstore/opensearch/autoconfigure/AwsOpenSearchVectorStoreAutoConfigurationIT.java", line = 55, name = "AwsOpenSearchVectorStoreAutoConfigurationIT" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "no VectorStore reference in the class span"
+evidence = "spring-ai-autoconfigure/src/main/java/org/springframework/ai/autoconfigure/vectorstore/opensearch/AwsOpenSearchVectorStoreAutoConfiguration.java:55"
+#    54 | @Testcontainers
+#    55 | class AwsOpenSearchVectorStoreAutoConfigurationIT {
+#    56 | 
+#    57 | 	@Container
+
+[[item]]
+target = "java-07"
+entity = { file = "vector-stores/spring-ai-typesense-store/src/main/java/org/springframework/ai/vectorstore/typesense/TypesenseVectorStore.java", line = 79, name = "TypesenseVectorStore" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public class TypesenseVectorStore extends AbstractObservatio)"
+evidence = "vector-stores/spring-ai-typesense-store/src/main/java/org/springframework/ai/vectorstore/typesense/TypesenseVectorStore.java:79"
+#    78 |  */
+#    79 | public class TypesenseVectorStore extends AbstractObservationVectorStore implements InitializingBean {
+#    80 | 
+#    81 | 	/**
+
+[[item]]
+target = "java-08"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/VectorStoreUpsertDefaultTests.java", line = 55, name = "add" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public void add(List<Document> documents) {)"
+evidence = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/VectorStoreUpsertDefaultTests.java:55"
+#    54 | 		@Override
+#    55 | 		public void add(List<Document> documents) {
+#    56 | 		}
+#    57 | 
+
+[[item]]
+target = "java-08"
+entity = { file = "vector-stores/spring-ai-bedrock-knowledgebase-store/src/main/java/org/springframework/ai/vectorstore/bedrockknowledgebase/BedrockKnowledgeBaseVectorStore.java", line = 102, name = "add" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public void add(final List<Document> documents) {)"
+evidence = "vector-stores/spring-ai-bedrock-knowledgebase-store/src/main/java/org/springframework/ai/vectorstore/bedrockknowledgebase/BedrockKnowledgeBaseVectorStore.java:102"
+#   101 | 	@Override
+#   102 | 	public void add(final List<Document> documents) {
+#   103 | 		throw new UnsupportedOperationException("Documents are ingested via data source sync, not direct add.");
+#   104 | 	}
+
+[[item]]
+target = "java-08"
+entity = { file = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java", line = 54, name = "accept" }
+found_by = ["lsp", "heuristic", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (add(documents);)"
+evidence = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java:55"
+#    54 | 	default void accept(List<Document> documents) {
+#    55 | 		add(documents);
+#    56 | 	}
+#    57 | 
+
+[[item]]
+target = "java-08"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/SimpleVectorStoreTests.java", line = 331, name = "shouldHandleSearchWithEmptyQuery" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (this.vectorStore.add(List.of(doc));)"
+evidence = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/SimpleVectorStoreTests.java:333"
+#   332 | 		Document doc = Document.builder().id("1").text("content").build();
+#   333 | 		this.vectorStore.add(List.of(doc));
+#   334 | 
+#   335 | 		List<Document> results = this.vectorStore.similaritySearch("");
+
+[[item]]
+target = "java-09"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/VectorStoreUpsertDefaultTests.java", line = 67, name = "similaritySearch" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public List<Document> similaritySearch(SearchRequest request)"
+evidence = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/VectorStoreUpsertDefaultTests.java:67"
+#    66 | 		@Override
+#    67 | 		public List<Document> similaritySearch(SearchRequest request) {
+#    68 | 			return List.of();
+#    69 | 		}
+
+[[item]]
+target = "java-09"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/SimpleVectorStoreWithFilterTests.java", line = 301, name = "shouldReturnEmptyResultsWhenNoDocumentsMatchFilter" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (.similaritySearch(SearchRequest.builder().query(\"test\").filt)"
+evidence = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/SimpleVectorStoreWithFilterTests.java:307"
+#   306 | 		List<Document> results = this.vectorStore
+#   307 | 			.similaritySearch(SearchRequest.builder().query("test").filterExpression("type == 'image'").build());
+#   308 | 
+#   309 | 		assertThat(results).isEmpty();
+
+[[item]]
+target = "java-10"
+entity = { file = "spring-ai-model/src/test/java/org/springframework/ai/aot/SpringAiCoreRuntimeHintsTests.java", line = 50, name = "SpringAiCoreRuntimeHintsTests" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "spring-ai-model/src/test/java/org/springframework/ai/aot/SpringAiCoreRuntimeHintsTests.java:50"
+#    87 | 		assertThat(runtimeHints.reflection().typeHints())
+#    88 | 			.anySatisfy(typeHint -> assertThat(typeHint.getType()).isEqualTo(TypeReference.of(ToolCallback.class)));
+#    89 | 		assertThat(runtimeHints.reflection().typeHints())
+#    90 | 			.anySatisfy(typeHint -> assertThat(typeHint.getType()).isEqualTo(TypeReference.of(ToolDefinition.class)));
+
+[[item]]
+target = "java-10"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/tool/StaticToolCallbackProvider.java", line = 1, name = "<module>" }
+found_by = ["lsp"]
+verdict = "fp"
+reason = "javadoc {@link ToolCallback} / @see ToolCallback mentions in comments — comment-only match, not a code reference"
+evidence = "spring-ai-tool-calling/src/main/java/org/springframework/ai/tool/method/StaticToolCallbackProvider.java:25"
+notable = true
+#    23 | /**
+#    24 |  * A simple implementation of {@link ToolCallbackProvider} that maintains a static array
+#    25 |  * of {@link ToolCallback} objects. This provider is immutable after construction and
+#    26 |  * provides a straightforward way to supply a fixed set of tool callbacks to AI models.
+
+[[item]]
+target = "java-11"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java", line = 111, name = "call" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "OVERLOAD RULE: `call(String, ToolContext)` delegates to the 2-arg `delegate.call(...)`, not the 1-arg target `call(String)`"
+evidence = "spring-ai-tool-calling/src/main/java/org/springframework/ai/tool/method/AugmentedToolCallback.java:112"
+notable = true
+#   110 | 	@Override
+#   111 | 	public String call(String toolInput, @Nullable ToolContext tooContext) {
+#   112 | 		return this.delegate.call(this.handleAugmentedArguments(toolInput), tooContext);
+#   113 | 	}
+
+[[item]]
+target = "java-11"
+entity = { file = "models/spring-ai-google-genai/src/test/java/org/springframework/ai/google/genai/schema/GoogleGenAiToolCallingManagerTests.java", line = 131, name = "call" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public String call(String toolInput) {)"
+evidence = "models/spring-ai-google-genai/src/test/java/org/springframework/ai/google/genai/schema/GoogleGenAiToolCallingManagerTests.java:131"
+#   130 | 		@Override
+#   131 | 		public String call(String toolInput) {
+#   132 | 			return "Mission accomplished!";
+#   133 | 		}
+
+[[item]]
+target = "java-11"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/tool/function/FunctionToolCallback.java", line = 96, name = "call" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public String call(String toolInput) {)"
+evidence = "spring-ai-model/src/main/java/org/springframework/ai/tool/function/FunctionToolCallback.java:96"
+#    95 | 	@Override
+#    96 | 	public String call(String toolInput) {
+#    97 | 		return call(toolInput, null);
+#    98 | 	}
+
+[[item]]
+target = "java-11"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java", line = 106, name = "call" }
+found_by = ["lsp", "heuristic", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public String call(String toolInput) {)"
+evidence = "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java:106"
+#   105 | 	@Override
+#   106 | 	public String call(String toolInput) {
+#   107 | 		return this.delegate.call(this.handleAugmentedArguments(toolInput));
+#   108 | 	}
+
+[[item]]
+target = "java-11"
+entity = { file = "mcp/common/src/test/java/org/springframework/ai/mcp/SyncMcpToolCallbackTests.java", line = 187, name = "callShouldPropagateMcpErrorAsHardFailure" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (assertThatThrownBy(() -> callback.call(\"{\\\"param\\\":\\\"value\\\")"
+evidence = "mcp/common/src/test/java/org/springframework/ai/mcp/SyncMcpToolCallbackTests.java:202"
+#   186 | 	@Test
+#   187 | 	void callShouldPropagateMcpErrorAsHardFailure() {
+#   188 | 		when(this.tool.name()).thenReturn("testTool");
+#   189 | 		var clientInfo = Implementation.builder("testClient", "1.0.0").title("server1").build();
+
+[[item]]
+target = "java-12"
+entity = { file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java", line = 186, name = "AdvisorSpec" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/ChatClient.java:186"
+#   185 | 
+#   186 | 	interface AdvisorSpec {
+#   187 | 
+#   188 | 		AdvisorSpec param(String k, Object v);
+
+[[item]]
+target = "java-12"
+entity = { file = "spring-ai-rag/src/main/java/org/springframework/ai/rag/advisor/RetrievalAugmentationAdvisor.java", line = 62, name = "RetrievalAugmentationAdvisor" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public final class RetrievalAugmentationAdvisor implements B)"
+evidence = "spring-ai-rag/src/main/java/org/springframework/ai/rag/advisor/RetrievalAugmentationAdvisor.java:62"
+#    61 |  */
+#    62 | public final class RetrievalAugmentationAdvisor implements BaseAdvisor {
+#    63 | 
+#    64 | 	public static final String DOCUMENT_CONTEXT = "rag_document_context";
+
+[[item]]
+target = "java-13"
+entity = { file = "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java", line = 234, name = "Builder" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "the `new TokenTextSplitter(...)` sites at 288/289 are owned by the nested `build()` method, not by the Builder class"
+evidence = "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java:288"
+#   287 | 
+#   288 | 		public TokenTextSplitter build() {
+#   289 | 			return new TokenTextSplitter(this.encodingType, this.chunkSize, this.minChunkSizeChars,
+#   290 | 					this.minChunkLengthToEmbed, this.maxNumChunks, this.keepSeparator, this.punctuationMarks);
+
+[[item]]
+target = "java-13"
+entity = { file = "spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java", line = 233, name = "testTokenTextSplitterWithNonPositiveMaxNumChunksThrows" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (assertThatIllegalArgumentException().isThrownBy(() -> TokenT)"
+evidence = "spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java:234"
+#   232 | 	@Test
+#   233 | 	public void testTokenTextSplitterWithNonPositiveMaxNumChunksThrows() {
+#   234 | 		assertThatIllegalArgumentException().isThrownBy(() -> TokenTextSplitter.builder().withMaxNumChunks(0).build())
+#   235 | 			.withMessage("maxNumChunks must be greater than zero");
+
+[[item]]
+target = "java-14"
+entity = { file = "vector-stores/spring-ai-azure-store/src/test/java/org/springframework/ai/vectorstore/azure/AzureVectorStoreIT.java", line = 124, name = "searchWithFilters" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (var bgDocument = new Document(\"1\", \"The World is Big and Sal)"
+evidence = "vector-stores/spring-ai-azure-store/src/test/java/org/springframework/ai/vectorstore/azure/AzureVectorStoreIT.java:129"
+#   128 | 
+#   129 | 			var bgDocument = new Document("1", "The World is Big and Salvation Lurks Around the Corner",
+#   130 | 					Map.of("country", "BG", "year", 2020, "activationDate", new Date(1000)));
+#   131 | 			var nlDocument = new Document("2", "The World is Big and Salvation Lurks Around the Corner",
+
+[[item]]
+target = "java-15"
+entity = { file = "vector-stores/spring-ai-oracle-store/src/main/java/org/springframework/ai/vectorstore/oracle/OracleVectorStore.java", line = 171, name = "doAdd" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "vector-stores/spring-ai-oracle-store/src/main/java/org/springframework/ai/vectorstore/oracle/OracleVectorStore.java:171"
+#   178 | 				final Document document = documents.get(i);
+#   179 | 				final String content = document.getText();
+#   180 | 				final byte[] json = toJson(document.getMetadata());
+#   181 | 				final VECTOR embeddingVector = toVECTOR(embeddings.get(i));
+
+[[item]]
+target = "java-15"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/embedding/EmbeddingModel.java", line = 39, name = "EmbeddingModel" }
+found_by = ["lsp"]
+verdict = "fp"
+reason = "javadoc {@link Document#getText()} mention in the interface comment — comment-only match"
+evidence = "spring-ai-model/src/main/java/org/springframework/ai/embedding/EmbeddingModel.java:64"
+notable = true
+#    63 | 	 * Extracts the text content from a {@link Document} to be used for embedding. By
+#    64 | 	 * default, returns {@link Document#getText()}. Implementations that support
+#    65 | 	 * {@link org.springframework.ai.document.MetadataMode} should override this method to
+#    66 | 	 * return
+
+[[item]]
+target = "java-15"
+entity = { file = "advisors/spring-ai-vector-store-advisor/src/main/java/org/springframework/ai/chat/client/advisor/vectorstore/QuestionAnswerAdvisor.java", line = 109, name = "before" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (.map(Document::getText))"
+evidence = "advisors/spring-ai-vector-store-advisor/src/main/java/org/springframework/ai/chat/client/advisor/vectorstore/QuestionAnswerAdvisor.java:128"
+#   111 | 		var searchRequestBuilder = SearchRequest.from(this.searchRequest)
+#   112 | 			.query(Objects.requireNonNullElse(chatClientRequest.prompt().getUserMessage().getText(), ""));
+#   113 | 
+#   114 | 		var filterExpr = doGetFilterExpression(chatClientRequest.context());
+
+[[item]]
+target = "java-16"
+entity = { file = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/NvidiaWithOpenAiChatModelIT.java", line = 70, name = "NvidiaWithOpenAiChatModelIT" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "models/spring-ai-openai/src/test/java/org/springframework/ai/openai/chat/proxy/NvidiaWithOpenAiChatModelIT.java:70"
+#    88 | 		Prompt prompt = new Prompt(List.of(userMessage, systemMessage));
+#    89 | 		ChatResponse response = this.chatModel.call(prompt);
+#    90 | 		assertThat(response.getResults()).hasSize(1);
+#    91 | 		assertThat(response.getResults().get(0).getOutput().getText()).contains("Blackbeard");
+
+[[item]]
+target = "java-16"
+entity = { file = "models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/api/OllamaApiHelper.java", line = 69, name = "merge" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "tp"
+reason = "genuine reference owned by the container"
+evidence = "models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/api/OllamaApiHelper.java:69"
+#    68 | 
+#    69 | 	public static ChatResponse merge(ChatResponse previous, ChatResponse current) {
+#    70 | 
+#    71 | 		String model = merge(previous.model(), current.model());
+
+[[item]]
+target = "java-16"
+entity = { file = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatModelIT.java", line = 392, name = "beanStreamOutputConverterRecords" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (.map(ChatResponse::getResults))"
+evidence = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatModelIT.java:410"
+#   409 | 			.stream()
+#   410 | 			.map(ChatResponse::getResults)
+#   411 | 			.flatMap(List::stream)
+#   412 | 			.map(Generation::getOutput)
+
+[[item]]
+target = "java-17"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStoreUpsertTests.java", line = 46, name = "AbstractObservationVectorStoreUpsertTests" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "the constructor declaration's own name is not a type reference to the class; knot linked the constructor to its class structurally"
+evidence = "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java:46"
+notable = true
+#    45 |  */
+#    46 | class AbstractObservationVectorStoreUpsertTests {
+#    47 | 
+#    48 | 	private static final EmbeddingModel EMBEDDING_MODEL = mock(EmbeddingModel.class);
+
+[[item]]
+target = "java-17"
+entity = { file = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStoreUpsertTests.java", line = 1, name = "<module>" }
+found_by = ["lsp"]
+verdict = "fp"
+reason = "javadoc {@link AbstractObservationVectorStore} mention in a test comment — comment-only match"
+evidence = "spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStoreUpsertTests.java:41"
+notable = true
+#    40 | /**
+#    41 |  * Tests the {@code upsert} wiring on {@link AbstractObservationVectorStore}: routing
+#    42 |  * through {@code doUpsert}, the throwing default, and observation emission.
+#    43 |  *
+
+[[item]]
+target = "java-18"
+entity = { file = "auto-configurations/models/spring-ai-autoconfigure-model-deepseek/src/test/java/org/springframework/ai/model/deepseek/autoconfigure/tool/FunctionCallbackWithPlainFunctionBeanIT.java", line = 55, name = "FunctionCallbackWithPlainFunctionBeanIT" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "no ToolCallingManager reference in the class span"
+evidence = "spring-ai-model/src/test/java/org/springframework/ai/model/tool/FunctionCallbackWithPlainFunction.java:55"
+#    68 | 			DeepSeekChatModel chatModel = context.getBean(DeepSeekChatModel.class);
+#    69 | 			ToolCallingManager toolCallingManager = context.getBean(ToolCallingManager.class);
+#    70 | 
+#    71 | 			// Test weatherFunction
+
+[[item]]
+target = "java-18"
+entity = { file = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/AnthropicChatModelTests.java", line = 352, name = "streamingThinkingBlockIsReplayedBeforeToolUseBlock" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (ToolExecutionResult toolExecutionResult = ToolCallingManager)"
+evidence = "models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/AnthropicChatModelTests.java:380"
+#   379 | 		new MessageAggregator().aggregate(this.chatModel.stream(prompt), aggregatedResponse::set).collectList().block();
+#   380 | 		ToolExecutionResult toolExecutionResult = ToolCallingManager.builder()
+#   381 | 			.build()
+#   382 | 			.executeToolCalls(prompt, aggregatedResponse.get());
+
+[[item]]
+target = "java-19"
+entity = { file = "auto-configurations/models/tool/spring-ai-autoconfigure-model-tool/src/test/java/org/springframework/ai/model/tool/autoconfigure/ToolCallingAutoConfigurationTests.java", line = 638, name = "executeToolCalls" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public ToolExecutionResult executeToolCalls(Prompt prompt, C)"
+evidence = "auto-configurations/models/tool/spring-ai-autoconfigure-model-tool/src/test/java/org/springframework/ai/model/tool/autoconfigure/ToolCallingAutoConfigurationTests.java:638"
+#   637 | 		@Override
+#   638 | 		public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
+#   639 | 			return null;
+#   640 | 		}
+
+[[item]]
+target = "java-19"
+entity = { file = "spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java", line = 178, name = "executeToolCalls" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public ToolExecutionResult executeToolCalls(Prompt prompt, C)"
+evidence = "spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java:178"
+#   177 | 	@Override
+#   178 | 	public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
+#   179 | 		Assert.notNull(prompt, "prompt cannot be null");
+#   180 | 		Assert.notNull(chatResponse, "chatResponse cannot be null");
+
+[[item]]
+target = "java-19"
+entity = { file = "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/schema/GoogleGenAiToolCallingManager.java", line = 95, name = "executeToolCalls" }
+found_by = ["lsp", "heuristic", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (public ToolExecutionResult executeToolCalls(Prompt prompt, C)"
+evidence = "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/schema/GoogleGenAiToolCallingManager.java:95"
+#    94 | 	@Override
+#    95 | 	public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
+#    96 | 		return this.delegateToolCallingManager.executeToolCalls(prompt, chatResponse);
+#    97 | 	}
+
+[[item]]
+target = "java-19"
+entity = { file = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelFunctionCallingIT.java", line = 151, name = "toolFunctionCallWithUsage" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (ToolExecutionResult toolExecutionResult = toolCallingManager)"
+evidence = "models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/chat/DeepSeekChatModelFunctionCallingIT.java:168"
+#   167 | 		while (chatResponse.hasToolCalls()) {
+#   168 | 			ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, chatResponse);
+#   169 | 			prompt = new Prompt(toolExecutionResult.conversationHistory(), promptOptions);
+#   170 | 			chatResponse = this.chatModel.call(prompt);
+
+[[item]]
+target = "java-22"
+entity = { file = "spring-ai-model/src/test/java/org/springframework/ai/tool/method/MethodToolCallbackGenericTypesTest.java", line = 34, name = "MethodToolCallbackGenericTypesTest" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "the MethodToolCallback usages at 50/84 are owned by the nested test methods; class-level attribution is enclosing-only"
+evidence = "model/spring-ai-model/src/test/java/org/springframework/ai/model/tool/method/MethodToolCallbackGenericTypesTest.java:50"
+#    33 |  */
+#    34 | class MethodToolCallbackGenericTypesTest {
+#    35 | 
+#    36 | 	@Test
+
+[[item]]
+target = "java-22"
+entity = { file = "advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java", line = 107, name = "createWeatherToolCallback" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (return MethodToolCallback.builder())"
+evidence = "advisors/spring-ai-tool-search-advisor/src/test/java/org/springframework/ai/chat/client/advisor/toolsearch/AbstractToolSearchToolCallingAdvisorIT.java:110"
+#   109 | 		Method method = ReflectionUtils.findMethod(WeatherTool.class, "currentWeather", String.class);
+#   110 | 		return MethodToolCallback.builder()
+#   111 | 			.toolDefinition(ToolDefinitions.builder(method).description("Get the weather in location").build())
+#   112 | 			.toolMethod(method)
+
+[[item]]
+target = "java-23"
+entity = { file = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClientBuilder.java", line = 59, name = "DefaultChatClientBuilder" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "the `new DefaultChatClient(...)` site at 115 is owned by the nested `build()` method, not by the builder class"
+evidence = "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClientBuilder.java:115"
+#    58 |  */
+#    59 | public class DefaultChatClientBuilder implements Builder {
+#    60 | 
+#    61 | 	protected final DefaultChatClientRequestSpec defaultRequest;

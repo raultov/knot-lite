@@ -1,0 +1,86 @@
+{
+  "calls": [
+    {
+      "file_path": "src/pipeline/embed.rs",
+      "kind": "rust_function",
+      "name": "test_embedder_init_and_embed_basic",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 203,
+      "target_file_path": "src/pipeline/embed.rs",
+      "target_fqn": "knot::pipeline::embed::Embedder::embed_query",
+      "target_name": "embed_query",
+      "target_repo_name": "knot",
+      "target_signature": "(&mut self, query: &str)",
+      "target_start_line": 176
+    },
+    {
+      "file_path": "src/pipeline/embed.rs",
+      "kind": "rust_function",
+      "name": "test_embedder_embed_query",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 233,
+      "target_file_path": "src/pipeline/embed.rs",
+      "target_fqn": "knot::pipeline::embed::Embedder::embed_query",
+      "target_name": "embed_query",
+      "target_repo_name": "knot",
+      "target_signature": "(&mut self, query: &str)",
+      "target_start_line": 176
+    },
+    {
+      "file_path": "src/pipeline/embed.rs",
+      "kind": "rust_function",
+      "name": "bge_query_and_passage_vectors_differ_by_prefix",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 250,
+      "target_file_path": "src/pipeline/embed.rs",
+      "target_fqn": "knot::pipeline::embed::Embedder::embed_query",
+      "target_name": "embed_query",
+      "target_repo_name": "knot",
+      "target_signature": "(&mut self, query: &str)",
+      "target_start_line": 176
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "Embedder::embed_query",
+    "targets": [
+      {
+        "file_path": "src/pipeline/embed.rs",
+        "fqn": "knot::pipeline::embed::Embedder::embed_query",
+        "kind": "rust_method",
+        "name": "embed_query",
+        "repo_name": "knot",
+        "start_line": 176,
+        "uuid": "ca0076ee-f686-55c5-8235-61070465b1c5"
+      }
+    ],
+    "tier": "fqn_suffix",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

@@ -1,0 +1,216 @@
+# S1 comparison targets — repo `knot-site` (typescript/javascript).
+# Lines are knot's start_line from the 2026-10-03 index (Appendix A.2);
+# `line = 0` means TBD and is resolved by `lsp_probe validate-targets --write`.
+repo = "knot-site"
+lang = "ts"
+root = "/tmp/knot-rag-spike/work/knot-site"
+
+[[target]]
+id = "ts-01"
+name = "jsonText"
+file = "src/toolcore/format.ts"
+line = 18
+knot_query = "jsonText"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 4"
+
+[[target]]
+id = "ts-02"
+name = "jsonTextFitting"
+file = "src/toolcore/format.ts"
+line = 37
+knot_query = "jsonTextFitting"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 3"
+
+[[target]]
+id = "ts-03"
+name = "truncateWords"
+file = "src/toolcore/format.ts"
+line = 23
+knot_query = "truncateWords"
+category = "homonym"
+ops = ["incoming", "references"]
+notes = "knot resolved the query to the other homonym only"
+
+[[target]]
+id = "ts-04"
+name = "truncateWords"
+file = "scripts/fetch-updates.mjs"
+line = 109
+knot_query = "truncateWords"
+category = "homonym"
+ops = ["incoming", "references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-05"
+name = "plainText"
+file = "src/toolcore/format.ts"
+line = 55
+knot_query = "plainText"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 3"
+
+[[target]]
+id = "ts-06"
+name = "errorText"
+file = "src/toolcore/format.ts"
+line = 60
+knot_query = "errorText"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 6"
+
+[[target]]
+id = "ts-07"
+name = "pageFromHash"
+file = "src/state/router.ts"
+line = 23
+knot_query = "pageFromHash"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-08"
+name = "sectionFromHash"
+file = "src/state/router.ts"
+line = 28
+knot_query = "sectionFromHash"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-09"
+name = "emit"
+file = "src/state/consentStore.ts"
+line = 26
+knot_query = "emit"
+category = "homonym"
+ops = ["incoming", "references"]
+notes = "knot rows: 7 across 3 homonyms"
+
+[[target]]
+id = "ts-10"
+name = "emit"
+file = "src/state/installationStore.ts"
+line = 18
+knot_query = "emit"
+category = "homonym"
+ops = ["incoming", "references"]
+notes = "same query as ts-09"
+
+[[target]]
+id = "ts-11"
+name = "emit"
+file = "src/webmcp/invocationLog.ts"
+line = 27
+knot_query = "emit"
+category = "homonym"
+ops = ["incoming", "references"]
+notes = "same query as ts-09"
+
+[[target]]
+id = "ts-12"
+name = "withLogging"
+file = "src/webmcp/invocationLog.ts"
+line = 52
+knot_query = "withLogging"
+category = "free_fn"
+ops = ["incoming", "references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-13"
+name = "ToolDefinition"
+file = "src/toolcore/types.ts"
+line = 61
+knot_query = "ToolDefinition"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: 14"
+
+[[target]]
+id = "ts-14"
+name = "ToolResult"
+file = "src/toolcore/types.ts"
+line = 40
+knot_query = "ToolResult"
+category = "interface"
+ops = ["references"]
+notes = "knot rows: 8"
+
+[[target]]
+id = "ts-15"
+name = "JSONSchema"
+file = "src/toolcore/types.ts"
+line = 5
+knot_query = "JSONSchema"
+category = "interface"
+ops = ["references"]
+notes = "knot rows: 12"
+
+[[target]]
+id = "ts-16"
+name = "WebMcpTool"
+file = "src/webmcp/types.ts"
+line = 40
+knot_query = "WebMcpTool"
+category = "interface"
+ops = ["references", "implementation"]
+notes = "knot rows: 16"
+
+[[target]]
+id = "ts-17"
+name = "Feature"
+file = "src/data/types.ts"
+line = 8
+knot_query = "Feature"
+category = "interface"
+ops = ["references"]
+notes = "knot rows: 8"
+
+[[target]]
+id = "ts-18"
+name = "InstallOption"
+file = "src/data/types.ts"
+line = 26
+knot_query = "InstallOption"
+category = "interface"
+ops = ["references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-19"
+name = "request"
+file = "src/state/consentStore.ts"
+line = 51
+knot_query = "request"
+category = "method"
+ops = ["incoming", "references"]
+notes = "knot rows: 2 (object-literal method of consentStore)"
+
+[[target]]
+id = "ts-20"
+name = "record"
+file = "src/webmcp/invocationLog.ts"
+line = 42
+knot_query = "record"
+category = "method"
+ops = ["incoming", "references"]
+notes = "knot rows: 1"
+
+[[target]]
+id = "ts-21"
+name = "setActiveTab"
+file = "src/state/installationStore.ts"
+line = 33
+knot_query = "setActiveTab"
+category = "method"
+ops = ["incoming", "references"]
+notes = "knot rows: 5"

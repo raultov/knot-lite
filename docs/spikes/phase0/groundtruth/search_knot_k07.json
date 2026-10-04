@@ -1,0 +1,190 @@
+[
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "main in src/bin/knot-indexer.rs"
+    ],
+    "dependencies": [
+      "new",
+      "setup_watch_mode_with_progress"
+    ],
+    "docstring": "Setup and run the watch mode event loop.\nThis function:\n1. Creates a debounced filesystem watcher\n2. Groups filesystem events into batches of supported source files\n3. Drains accumulated events before indexing to avoid redundant pipeline executions\n4. Deduplicates paths within a batch\n5. Triggers incremental re-indexing once per batch\n6. Applies a post-indexation cooldown to capture stray filesystem events from IDEs/linters\n7. Drains residual events after cooldown to prevent ghost re-indexations",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::setup_watch_mode",
+    "kind": "rust_function",
+    "name": "setup_watch_mode",
+    "repo_name": "knot",
+    "signature": "(\n    cfg: &Config,\n    vector_db: &Arc<VectorDb>,\n    graph_db: &Arc<GraphDb>,\n    index_state: &mut IndexState,\n)",
+    "start_line": 31,
+    "uuid": "5e68d3d1-414d-59a0-9bdb-8932df3807e6"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/mod.rs",
+    "fqn": "knot::pipeline::watch",
+    "kind": "rust_module",
+    "name": "watch",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 24,
+    "uuid": "be4df514-4273-55c8-be07-68500d5810c9"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "inject_custom_ca_certs",
+      "setup_watch_mode",
+      "load_for_indexer",
+      "init_databases",
+      "init_logging",
+      "load_indexer",
+      "run_indexing_pipeline",
+      "configure_rayon",
+      "print_startup_banner",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot-indexer.rs",
+    "fqn": "knot::bin::knot-indexer::main",
+    "kind": "rust_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 17,
+    "uuid": "64fd7e6c-a7f2-50c2-b3f1-da76b6a3579e"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_pipeline_inner in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "calculate_files_to_delete"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::clean_stale_data",
+    "kind": "rust_function",
+    "name": "clean_stale_data",
+    "repo_name": "knot",
+    "signature": "(\n    vector_db: &VectorDb,\n    graph_db: &GraphDb,\n    cfg: &Config,\n    deleted_files: &[String],\n    modified_files: &[PathBuf],\n    is_full_index: bool,\n)",
+    "start_line": 613,
+    "uuid": "de00b851-5a62-5a54-b66d-6fa366070297"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "setup_watch_mode in src/pipeline/watch.rs"
+    ],
+    "dependencies": [
+      "is_supported_file",
+      "Err",
+      "run_indexing_pipeline_with_progress"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::setup_watch_mode_with_progress",
+    "kind": "rust_function",
+    "name": "setup_watch_mode_with_progress",
+    "repo_name": "knot",
+    "signature": "(\n    cfg: &Config,\n    vector_db: &Arc<VectorDb>,\n    graph_db: &Arc<GraphDb>,\n    index_state: &mut IndexState,\n    progress: Arc<ProgressTracker>,\n)",
+    "start_line": 47,
+    "uuid": "a74fa27d-56e6-5579-b343-5b061d9d2bb0"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_indexing_pipeline_with_progress in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "link_cross_repo_dependencies",
+      "update_index_state",
+      "classify_pipeline_inputs",
+      "print_run_summary",
+      "resolve_and_save_relationships",
+      "calculate_files_to_parse",
+      "set_stage",
+      "ensure_embed_marker_allows_run",
+      "clean_stale_data",
+      "run_streaming_ingest",
+      "set_total_files",
+      "new",
+      "upsert_repo_embed_marker"
+    ],
+    "docstring": "Core indexing pipeline orchestrator.\nThis function coordinates all stages of the indexing process:\n1. Discover and classify files (unchanged, modified, added, deleted)\n2. Clean stale data from databases\n3. Parse files in parallel (Rayon)\n4. Batch and embed entities (fastembed)\n5. Ingest into Qdrant and Neo4j (dual-write)\n6. Resolve cross-repository relationships",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::run_pipeline_inner",
+    "kind": "rust_function",
+    "name": "run_pipeline_inner",
+    "repo_name": "knot",
+    "signature": "(\n    cfg: &Config,\n    vector_db: &Arc<VectorDb>,\n    graph_db: &Arc<GraphDb>,\n    index_state: &mut IndexState,\n    progress: &Arc<ProgressTracker>,\n)",
+    "start_line": 95,
+    "uuid": "2108000e-4d4f-5aa5-af09-96195d0855cd"
+  },
+  {
+    "dependencies": [
+      "compute_file_hash"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::tests::test_compute_file_hash",
+    "kind": "rust_function",
+    "name": "test_compute_file_hash",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 350,
+    "uuid": "443c3858-2461-526c-bcd4-ce69abc1855a"
+  },
+  {
+    "dependencies": [
+      "update_index_state",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/files.rs",
+    "fqn": "knot::pipeline::files::tests::test_update_index_state_logic",
+    "kind": "rust_function",
+    "name": "test_update_index_state_logic",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 238,
+    "uuid": "d6a45f22-bbc7-5776-bad0-8a61b1edec65"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "test_calculate_files_to_delete in src/pipeline/files.rs",
+      "test_calculate_files_to_delete_edge_cases in src/pipeline/files.rs",
+      "clean_stale_data in src/pipeline/runner.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Calculate which files should be deleted from the databases before re-indexing.\nOnly files that already exist in the database need to be removed: deleted and\nmodified files. Added files have never been indexed, so including them here\nwould trigger pointless sequential delete operations.",
+    "file_path": "src/pipeline/files.rs",
+    "fqn": "knot::pipeline::files::calculate_files_to_delete",
+    "kind": "rust_function",
+    "name": "calculate_files_to_delete",
+    "repo_name": "knot",
+    "signature": "(deleted: &[String], modified: &[PathBuf])",
+    "start_line": 72,
+    "uuid": "2ea757f8-1ea4-53d7-8a77-029a3e974797"
+  },
+  {
+    "dependencies": [
+      "calculate_files_to_delete"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/files.rs",
+    "fqn": "knot::pipeline::files::tests::test_calculate_files_to_delete",
+    "kind": "rust_function",
+    "name": "test_calculate_files_to_delete",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 175,
+    "uuid": "6bee6e05-e898-5df5-ad64-e6b480f4a922"
+  }
+]

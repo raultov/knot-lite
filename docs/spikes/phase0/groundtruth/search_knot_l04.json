@@ -1,0 +1,126 @@
+[
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/cli_tools/kinds.rs",
+    "fqn": "knot::cli_tools::kinds::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 296,
+    "uuid": "3baf7b7b-fd74-57da-b15a-0ddb22f1e557"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 166,
+    "uuid": "70ab28cd-112c-5ab3-a6b6-63bb26370b41"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/overrides.rs",
+    "fqn": "knot::pipeline::ingest::resolve::overrides::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 273,
+    "uuid": "a043cd71-0805-5d43-b898-f9fcf536cf19"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/groovy/mod.rs",
+    "fqn": "knot::pipeline::parser::languages::groovy::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 32,
+    "uuid": "9557b427-1b63-5c3a-a997-6072e4416c25"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/kotlin.rs",
+    "fqn": "knot::pipeline::parser::languages::kotlin::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 702,
+    "uuid": "94a810d5-fc50-5954-86f8-05ea9b1c50c4"
+  },
+  {
+    "dependencies": [
+      "extract_entities_groovy"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/groovy/tests.rs",
+    "fqn": "knot::pipeline::parser::languages::groovy::tests::test_all_typed_methods_no_duplication",
+    "kind": "rust_function",
+    "name": "test_all_typed_methods_no_duplication",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1467,
+    "uuid": "e9aae964-cba1-50de-a04c-e39fd6148c3f"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/bin/knot-indexer.rs",
+    "fqn": "knot::bin::knot-indexer::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 72,
+    "uuid": "0a4e0f52-dba7-5087-8cc9-dd6b2b8a252d"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/non_calls.rs",
+    "fqn": "knot::pipeline::ingest::resolve::non_calls::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 307,
+    "uuid": "8dc546d4-cf0b-549d-8ac2-4d73a9b4d7fa"
+  },
+  {
+    "dependencies": [
+      "format_file_entities"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/explore_file.rs",
+    "fqn": "knot::cli_tools::explore_file::tests::test_format_file_entities_declarative_css_and_html_elements_kept_in_code",
+    "kind": "rust_function",
+    "name": "test_format_file_entities_declarative_css_and_html_elements_kept_in_code",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1042,
+    "uuid": "eb96b54e-b6a9-5963-8331-947f5153fd96"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/mcp_tools/search_hybrid_context/format.rs",
+    "fqn": "knot::mcp_tools::search_hybrid_context::format::tests",
+    "kind": "rust_module",
+    "name": "tests",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 167,
+    "uuid": "aaa8c701-c1f6-54c5-931d-8bdd8b8482e7"
+  }
+]

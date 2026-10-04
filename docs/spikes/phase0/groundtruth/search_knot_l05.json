@@ -1,0 +1,195 @@
+[
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_pipeline_inner in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "select_primary_identity",
+      "parse_artifact_identity",
+      "sweep_existing_consumers",
+      "find_repository_identity",
+      "parse_build_system_from_fqn",
+      "find_build_dependency_names",
+      "parse_version_from_signature",
+      "upsert_repository",
+      "match_dependency_to_repository",
+      "upsert_repo_dependency",
+      "upsert_repository_node"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/cross_repo.rs",
+    "fqn": "knot::pipeline::ingest::resolve::cross_repo::link_cross_repo_dependencies",
+    "kind": "rust_function",
+    "name": "link_cross_repo_dependencies",
+    "repo_name": "knot",
+    "signature": "(\n    entities: &[ResolutionEntity],\n    graph_db: &GraphDb,\n    cfg: &Config,\n)",
+    "start_line": 10,
+    "uuid": "0f8188ca-cfd9-51c6-8d1b-5239a7600cd9"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "print_embed_model",
+      "run_deps_command",
+      "build_repo_scope",
+      "report_search_clamp",
+      "format_output",
+      "build_repo_scope",
+      "verify_startup",
+      "connect",
+      "run_find_callers",
+      "run_search_hybrid_context",
+      "inject_custom_ca_certs",
+      "print_embed_model",
+      "report_search_clamp",
+      "format_files_output",
+      "format_explore_output",
+      "init_logging_for_cli",
+      "connect",
+      "run_explore_file",
+      "run_list_files",
+      "format_callers_output",
+      "init",
+      "load_knot_cli",
+      "format_repos_output",
+      "fastembed_cache_dir",
+      "run_deps_command",
+      "print_with_pager",
+      "run_list_repos"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::main",
+    "kind": "rust_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 22,
+    "uuid": "91ed521f-aa89-5718-a2cf-2cd7bbea3fa9"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_builds_scope_list",
+    "kind": "rust_function",
+    "name": "repo_flag_builds_scope_list",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 244,
+    "uuid": "e0bdeb68-cab3-59e7-81bc-b49225794bfd"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_builds_scope_list",
+    "kind": "rust_function",
+    "name": "repo_flag_builds_scope_list",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 243,
+    "uuid": "2e8f1067-66aa-5ecd-917d-13d897e84ebf"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_builds_scope_all",
+    "kind": "rust_function",
+    "name": "repo_flag_builds_scope_all",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 253,
+    "uuid": "574a935d-e7bc-5952-b27e-38a37ecafbd2"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_builds_scope_all",
+    "kind": "rust_function",
+    "name": "repo_flag_builds_scope_all",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 252,
+    "uuid": "ef1dc015-2db4-5e37-b4ef-7f3108f10b60"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_absent_uses_config_default",
+    "kind": "rust_function",
+    "name": "repo_flag_absent_uses_config_default",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 259,
+    "uuid": "a6172534-d0d2-5205-b579-cc43c04568c9"
+  },
+  {
+    "dependencies": [
+      "build_repo_scope"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::tests::repo_flag_absent_uses_config_default",
+    "kind": "rust_function",
+    "name": "repo_flag_absent_uses_config_default",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 258,
+    "uuid": "e8d924e8-1ced-5761-a8ed-6d0b2c16ae6d"
+  },
+  {
+    "caller_count": 8,
+    "caller_samples": [
+      "main in src/bin/knot.rs",
+      "main in src/bin/knot.rs",
+      "repo_flag_builds_scope_list in src/bin/knot.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Build a [`RepoScope`] from the parsed `--repo` flag and the configured default.\nWhen the flag is present, [`RepoScope::parse`] owns splitting on `,` and the\n`all`/`*` sentinel (single spelling for \"every indexed repository\"). When the\nflag is absent, the working-directory default from `cfg.repo_name` is used so\nexisting CLI invocations keep their current behavior.",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::build_repo_scope",
+    "kind": "rust_function",
+    "name": "build_repo_scope",
+    "repo_name": "knot",
+    "signature": "(repo: Option<&str>, default: &str)",
+    "start_line": 212,
+    "uuid": "a1095693-be39-5fc7-9b45-cc2a6f66a459"
+  },
+  {
+    "caller_count": 8,
+    "caller_samples": [
+      "main in src/bin/knot.rs",
+      "main in src/bin/knot.rs",
+      "repo_flag_builds_scope_list in src/bin/knot.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Build a [`RepoScope`] from the parsed `--repo` flag and the configured default.\nWhen the flag is present, [`RepoScope::parse`] owns splitting on `,` and the\n`all`/`*` sentinel (single spelling for \"every indexed repository\"). When the\nflag is absent, the working-directory default from `cfg.repo_name` is used so\nexisting CLI invocations keep their current behavior.",
+    "file_path": "src/bin/knot.rs",
+    "fqn": "knot::bin::knot::build_repo_scope",
+    "kind": "rust_function",
+    "name": "build_repo_scope",
+    "repo_name": "knot",
+    "signature": "(repo: Option<&str>, default: &str)",
+    "start_line": 211,
+    "uuid": "a95379a4-7de0-5ffd-ac4b-016ede3b2ea9"
+  }
+]

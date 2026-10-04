@@ -1,0 +1,65 @@
+{
+  "calls": [
+    {
+      "file_path": "scripts/fetch-updates.mjs",
+      "kind": "function",
+      "name": "extractSummary",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "(body)",
+      "start_line": 121,
+      "target_file_path": "scripts/fetch-updates.mjs",
+      "target_fqn": "truncateWords",
+      "target_name": "truncateWords",
+      "target_repo_name": "knot-site",
+      "target_signature": "(text, max)",
+      "target_start_line": 109
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "truncateWords",
+    "targets": [
+      {
+        "file_path": "scripts/fetch-updates.mjs",
+        "fqn": "truncateWords",
+        "kind": "function",
+        "name": "truncateWords",
+        "repo_name": "knot-site",
+        "start_line": 109,
+        "uuid": "e7ca1aa2-cd53-508e-8ac7-5ee03e37c3fb"
+      },
+      {
+        "file_path": "src/toolcore/format.ts",
+        "fqn": "truncateWords",
+        "kind": "function",
+        "name": "truncateWords",
+        "repo_name": "knot-site",
+        "start_line": 23,
+        "uuid": "e14023d2-5779-5eff-b0ff-6b5e2b4c25b7"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 2,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

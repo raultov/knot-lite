@@ -1,0 +1,56 @@
+{
+  "calls": [],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [
+    {
+      "file_path": "src/data/types.ts",
+      "kind": "interface",
+      "name": "InstallSection",
+      "rel_type": "REFERENCES",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 32,
+      "target_file_path": "src/data/types.ts",
+      "target_fqn": "InstallOption",
+      "target_name": "InstallOption",
+      "target_repo_name": "knot-site",
+      "target_signature": "",
+      "target_start_line": 26
+    }
+  ],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "InstallOption",
+    "targets": [
+      {
+        "file_path": "src/data/types.ts",
+        "fqn": "InstallOption",
+        "kind": "interface",
+        "name": "InstallOption",
+        "repo_name": "knot-site",
+        "start_line": 26,
+        "uuid": "05d19c27-bb17-5446-8cc2-4ac1d48999e4"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

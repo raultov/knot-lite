@@ -1,0 +1,99 @@
+{
+  "calls": [],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [
+    {
+      "file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java",
+      "kind": "class",
+      "name": "GoogleGenAiChatModel",
+      "rel_type": "IMPLEMENTS",
+      "repo_name": "spring-ai",
+      "signature": "",
+      "start_line": 153,
+      "target_file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java",
+      "target_fqn": "org.springframework.ai.google.genai.GoogleGenAiChatModel.ChatModel",
+      "target_name": "ChatModel",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 1094
+    }
+  ],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [
+    {
+      "file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java",
+      "kind": "function",
+      "name": "<module>",
+      "rel_type": "REFERENCES",
+      "repo_name": "spring-ai",
+      "signature": "",
+      "start_line": 1,
+      "target_file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java",
+      "target_fqn": "org.springframework.ai.google.genai.GoogleGenAiChatModel.ChatModel",
+      "target_name": "ChatModel",
+      "target_repo_name": "spring-ai",
+      "target_signature": "",
+      "target_start_line": 1094
+    }
+  ],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "ChatModel",
+    "targets": [
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+        "fqn": "org.springframework.ai.chat.model.ChatModel",
+        "kind": "interface",
+        "name": "ChatModel",
+        "repo_name": "spring-ai",
+        "start_line": 30,
+        "uuid": "7720b241-94ec-590b-bbc8-7d9f91d3f8cc"
+      },
+      {
+        "file_path": "models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekApi.java",
+        "fqn": "org.springframework.ai.deepseek.api.DeepSeekApi.ChatModel",
+        "kind": "enum",
+        "name": "ChatModel",
+        "repo_name": "spring-ai",
+        "start_line": 233,
+        "uuid": "b34218ab-4045-5a25-ac72-c9f21074705d"
+      },
+      {
+        "file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/GoogleGenAiChatModel.java",
+        "fqn": "org.springframework.ai.google.genai.GoogleGenAiChatModel.ChatModel",
+        "kind": "enum",
+        "name": "ChatModel",
+        "repo_name": "spring-ai",
+        "start_line": 1094,
+        "uuid": "ebb82685-c8fc-584f-a149-9d6844919efd"
+      },
+      {
+        "file_path": "models/spring-ai-mistral-ai/src/main/java/org/springframework/ai/mistralai/api/MistralAiApi.java",
+        "fqn": "org.springframework.ai.mistralai.api.MistralAiApi.ChatModel",
+        "kind": "enum",
+        "name": "ChatModel",
+        "repo_name": "spring-ai",
+        "start_line": 281,
+        "uuid": "17f8208c-2427-5a26-9376-ae39b8a3c9e0"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 4,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

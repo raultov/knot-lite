@@ -1,0 +1,193 @@
+[
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "test_parsed_entity_file_path_is_relative in src/pipeline/parser/mod.rs",
+      "test_parsed_entity_file_path_verbatim_without_repo_root in src/pipeline/parser/mod.rs",
+      "test_parse_config_repo_name_assignment in src/pipeline/parser/mod.rs"
+    ],
+    "dependencies": [
+      "parse_files_stream",
+      "aggregate_varnish_builtin_subs"
+    ],
+    "docstring": "Parse a collection of source files in parallel and return all extracted entities.\nUses `parse_files_stream` internally. This is a convenience wrapper for\ncallers that want the full Vec instead of streaming through a channel.",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::parse_files",
+    "kind": "rust_function",
+    "name": "parse_files",
+    "repo_name": "knot",
+    "signature": "(files: &[PathBuf], parse_cfg: &ParseConfig)",
+    "start_line": 210,
+    "uuid": "a83a3ce1-6085-5dfc-b48a-3ce96049385e"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "bench_parse_throughput in benches/pipeline_bench.rs",
+      "bench_full_parse_prepare in benches/pipeline_bench.rs"
+    ],
+    "dependencies": [
+      "parse_files_stream",
+      "prepare_entities"
+    ],
+    "docstring": "",
+    "file_path": "benches/pipeline_bench.rs",
+    "fqn": "__fixture::benches::pipeline_bench::parse_benchmark",
+    "kind": "rust_function",
+    "name": "parse_benchmark",
+    "repo_name": "knot",
+    "signature": "(files: &[PathBuf], label: &str)",
+    "start_line": 41,
+    "uuid": "03a29cbc-b958-5a9a-93a4-c749a3fa1fa4"
+  },
+  {
+    "caller_count": 93,
+    "caller_samples": [
+      "test_extract_entities_empty_source_java in src/pipeline/parser/extractor/tests.rs",
+      "test_extract_entities_empty_source_typescript in src/pipeline/parser/extractor/tests.rs",
+      "test_extract_entities_simple_java_class in src/pipeline/parser/extractor/tests.rs"
+    ],
+    "dependencies": [
+      "captures",
+      "entity_richness",
+      "extract_file_scoped_namespace",
+      "extract_class_contexts",
+      "extract_package_name",
+      "node_text",
+      "run_post_passes",
+      "process_capture",
+      "enrich_and_create_entity",
+      "parse_import"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/extractor/mod.rs",
+    "fqn": "knot::pipeline::parser::extractor::extract_entities",
+    "kind": "rust_function",
+    "name": "extract_entities",
+    "repo_name": "knot",
+    "signature": "(\n    source: &str,\n    language: Language,\n    query_src: &str,\n    lang_name: &str,\n    file_path: &str,\n    repo_name: &str,\n)",
+    "start_line": 33,
+    "uuid": "af640b1f-546c-5249-a3ce-29980a787af8"
+  },
+  {
+    "dependencies": [
+      "new",
+      "default",
+      "parse_files_stream"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::tests::given_files_to_parse_when_stream_completes_then_entities_extracted_receives_the_total",
+    "kind": "rust_function",
+    "name": "given_files_to_parse_when_stream_completes_then_entities_extracted_receives_the_total",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1355,
+    "uuid": "8b719e4d-9988-5476-a6aa-eed7086f1952"
+  },
+  {
+    "dependencies": [
+      "extract_entities"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/extractor/tests.rs",
+    "fqn": "knot::pipeline::parser::extractor::tests::test_extract_entities_deduplication_respects_file_path",
+    "kind": "rust_function",
+    "name": "test_extract_entities_deduplication_respects_file_path",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 539,
+    "uuid": "a47c4759-11f4-5ae6-83c2-96ddf7cb5812"
+  },
+  {
+    "caller_count": 14,
+    "caller_samples": [
+      "bench_channel_capacity in benches/channel_backpressure_bench.rs",
+      "bench_concurrency_levels in benches/channel_backpressure_bench.rs",
+      "parse_benchmark in benches/pipeline_bench.rs"
+    ],
+    "dependencies": [
+      "new",
+      "aggregate_varnish_builtin_subs",
+      "parse_single_file"
+    ],
+    "docstring": "Parse a collection of source files in parallel and send results through a channel.\nUses `std::thread::scope` with raw OS threads (NOT Rayon) so that\n`blocking_send` on the bounded channel only blocks the dedicated\nparsing thread rather than a shared thread pool. This prevents\ndeadlocks with `fastembed` which requires Rayon for tokenization.\nThis function blocks until all files have been processed. It is\nintended to be called from a `tokio::task::spawn_blocking` context.\n`callbacks` replaces the v1.6.1 single `FileParsedCallback` parameter;\npassing `None` is unchanged from previous versions.",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::parse_files_stream",
+    "kind": "rust_function",
+    "name": "parse_files_stream",
+    "repo_name": "knot",
+    "signature": "(\n    files: &[PathBuf],\n    parse_cfg: &ParseConfig,\n    sender: mpsc::Sender<ParsedEntity>,\n    max_concurrent: usize,\n    callbacks: Option<ParseCallbacks>,\n)",
+    "start_line": 124,
+    "uuid": "9648a6cd-a11d-508e-87a9-95465ed6c1ab"
+  },
+  {
+    "caller_count": 32,
+    "caller_samples": [
+      "test_extract_class_interface_struct_enum in src/pipeline/parser/languages/csharp/tests.rs",
+      "test_extract_record_class_and_record_struct_are_records in src/pipeline/parser/languages/csharp/tests.rs",
+      "test_extract_method_property_constructor in src/pipeline/parser/languages/csharp/tests.rs"
+    ],
+    "dependencies": [
+      "extract_entities"
+    ],
+    "docstring": "---------------------------------------------------------------------------\nHelpers\n---------------------------------------------------------------------------\nRun the full query-driven extraction on a snippet, as `parse_single_file`\nwould for a `.cs` file.",
+    "file_path": "src/pipeline/parser/languages/csharp/tests.rs",
+    "fqn": "knot::pipeline::parser::languages::csharp::tests::extract",
+    "kind": "rust_function",
+    "name": "extract",
+    "repo_name": "knot",
+    "signature": "(code: &str)",
+    "start_line": 32,
+    "uuid": "29b7cde4-5498-5326-bf37-7751f6398597"
+  },
+  {
+    "dependencies": [
+      "extract_entities"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/extractor/tests.rs",
+    "fqn": "knot::pipeline::parser::extractor::tests::test_extract_entities_multiple_entities_java",
+    "kind": "rust_function",
+    "name": "test_extract_entities_multiple_entities_java",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 366,
+    "uuid": "ad571865-723b-57cf-858d-beaaa7088d78"
+  },
+  {
+    "dependencies": [
+      "parse_files"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::tests::test_parsed_entity_file_path_is_relative",
+    "kind": "rust_function",
+    "name": "test_parsed_entity_file_path_is_relative",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1020,
+    "uuid": "df3b7754-6f8f-59b6-9625-747947742916"
+  },
+  {
+    "caller_count": 7,
+    "caller_samples": [
+      "test_parse_simple_pairs in src/pipeline/parser/languages/properties.rs",
+      "test_parse_colon_delimiter in src/pipeline/parser/languages/properties.rs",
+      "test_parse_comments in src/pipeline/parser/languages/properties.rs"
+    ],
+    "dependencies": [
+      "clear",
+      "process_property_line"
+    ],
+    "docstring": "Line-by-line parser for Java .properties files.\nSupports: key=value, key: value, key value formats.\nComments: lines starting with # or ! are skipped.\nLine continuation: trailing \\ joins with the next line.",
+    "file_path": "src/pipeline/parser/languages/properties.rs",
+    "fqn": "knot::pipeline::parser::languages::properties::extract_entities_properties",
+    "kind": "rust_function",
+    "name": "extract_entities_properties",
+    "repo_name": "knot",
+    "signature": "(\n    source: &str,\n    file_path: &str,\n    repo_name: &str,\n)",
+    "start_line": 8,
+    "uuid": "9c10b7eb-c91f-5fc3-bcd7-44f1fb3fc634"
+  }
+]

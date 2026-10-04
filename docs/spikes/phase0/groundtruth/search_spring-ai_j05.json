@@ -1,0 +1,205 @@
+[
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "getContext",
+      "call",
+      "getToolDefinition"
+    ],
+    "docstring": "Execute tool with the given input and context, and return the result to send back\nto the AI model.",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/ToolCallback.java",
+    "fqn": "org.springframework.ai.tool.ToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput, @Nullable ToolContext toolContext)",
+    "start_line": 59,
+    "uuid": "5ce34b70-b71d-50de-aa53-b1b8b3b5a88d"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "call"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/method/MethodToolCallback.java",
+    "fqn": "org.springframework.ai.tool.method.MethodToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput)",
+    "start_line": 95,
+    "uuid": "404d1cdb-46fe-5b52-82db-84f3e0b8b9cc"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "Execute tool with the given input and return the result to send back to the AI\nmodel.",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/ToolCallback.java",
+    "fqn": "org.springframework.ai.tool.ToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput)",
+    "start_line": 53,
+    "uuid": "0c9d8b2f-454a-5275-bea8-30da92a0f414"
+  },
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/api/OllamaEmbeddingOptions.java",
+    "fqn": "org.springframework.ai.ollama.api.OllamaEmbeddingOptions.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String model)",
+    "start_line": 382,
+    "uuid": "166c9618-9b18-52a3-b7cc-a8c4de0e2072"
+  },
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/moderation/Moderation.java",
+    "fqn": "org.springframework.ai.moderation.Moderation.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(String model)",
+    "start_line": 105,
+    "uuid": "1accefe1-3c3c-56ba-83ad-c5828b07d204"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "call",
+      "handleAugmentedArguments"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java",
+    "fqn": "org.springframework.ai.tool.augment.AugmentedToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput)",
+    "start_line": 106,
+    "uuid": "29b2a89c-5655-5c36-874f-14f74c65184b"
+  },
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [
+      "self"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-openai/src/main/java/org/springframework/ai/openai/AbstractOpenAiOptions.java",
+    "fqn": "org.springframework.ai.openai.AbstractOpenAiOptions.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String model)",
+    "start_line": 253,
+    "uuid": "b3ee144f-8667-5c9c-bef5-ae49222089a1"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "call",
+      "handleAugmentedArguments"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/augment/AugmentedToolCallback.java",
+    "fqn": "org.springframework.ai.tool.augment.AugmentedToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput, @Nullable ToolContext tooContext)",
+    "start_line": 111,
+    "uuid": "7896ed80-de11-583e-aa54-28698dc6d8cb"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "convert",
+      "buildMethodArguments",
+      "callMethod",
+      "name",
+      "extractToolArguments",
+      "validateToolContextSupport"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/method/MethodToolCallback.java",
+    "fqn": "org.springframework.ai.tool.method.MethodToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolInput, @Nullable ToolContext toolContext)",
+    "start_line": 100,
+    "uuid": "cd5b0787-e308-5dff-9e21-8acb44c95b2a"
+  },
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [
+      "setModel"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/moderation/ModerationOptionsBuilder.java",
+    "fqn": "org.springframework.ai.moderation.ModerationOptionsBuilder.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(String model)",
+    "start_line": 42,
+    "uuid": "13ac1b09-838d-545b-a9a7-7f7cfff258cb"
+  }
+]

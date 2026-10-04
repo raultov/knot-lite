@@ -1,0 +1,71 @@
+{
+  "calls": [
+    {
+      "file_path": "src/webmcp/tools/copyInstallCommand.ts",
+      "kind": "constant",
+      "name": "copyInstallCommand",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 21,
+      "target_file_path": "src/state/consentStore.ts",
+      "target_fqn": "request",
+      "target_name": "request",
+      "target_repo_name": "knot-site",
+      "target_signature": "(reason: string, signal?: AbortSignal)",
+      "target_start_line": 51
+    },
+    {
+      "file_path": "src/webmcp/tools/copyInstallCommand.ts",
+      "kind": "constant",
+      "name": "approved",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 34,
+      "target_file_path": "src/state/consentStore.ts",
+      "target_fqn": "request",
+      "target_name": "request",
+      "target_repo_name": "knot-site",
+      "target_signature": "(reason: string, signal?: AbortSignal)",
+      "target_start_line": 51
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "request",
+    "targets": [
+      {
+        "file_path": "src/state/consentStore.ts",
+        "fqn": "request",
+        "kind": "method",
+        "name": "request",
+        "repo_name": "knot-site",
+        "start_line": 51,
+        "uuid": "44059fc5-1fa8-5302-b84e-bd5c7a803071"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

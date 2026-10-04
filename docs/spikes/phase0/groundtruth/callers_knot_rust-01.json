@@ -1,0 +1,101 @@
+{
+  "calls": [
+    {
+      "file_path": "src/pipeline/parser/mod.rs",
+      "kind": "rust_function",
+      "name": "test_parsed_entity_file_path_is_relative",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 1020,
+      "target_file_path": "src/pipeline/parser/mod.rs",
+      "target_fqn": "knot::pipeline::parser::parse_files",
+      "target_name": "parse_files",
+      "target_repo_name": "knot",
+      "target_signature": "(files: &[PathBuf], parse_cfg: &ParseConfig)",
+      "target_start_line": 210
+    },
+    {
+      "file_path": "src/pipeline/parser/mod.rs",
+      "kind": "rust_function",
+      "name": "test_parsed_entity_file_path_verbatim_without_repo_root",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 1062,
+      "target_file_path": "src/pipeline/parser/mod.rs",
+      "target_fqn": "knot::pipeline::parser::parse_files",
+      "target_name": "parse_files",
+      "target_repo_name": "knot",
+      "target_signature": "(files: &[PathBuf], parse_cfg: &ParseConfig)",
+      "target_start_line": 210
+    },
+    {
+      "file_path": "src/pipeline/parser/mod.rs",
+      "kind": "rust_function",
+      "name": "test_parse_config_repo_name_assignment",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 1094,
+      "target_file_path": "src/pipeline/parser/mod.rs",
+      "target_fqn": "knot::pipeline::parser::parse_files",
+      "target_name": "parse_files",
+      "target_repo_name": "knot",
+      "target_signature": "(files: &[PathBuf], parse_cfg: &ParseConfig)",
+      "target_start_line": 210
+    },
+    {
+      "file_path": "src/pipeline/parser/mod.rs",
+      "kind": "rust_function",
+      "name": "test_parse_files_with_empty_input",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 1112,
+      "target_file_path": "src/pipeline/parser/mod.rs",
+      "target_fqn": "knot::pipeline::parser::parse_files",
+      "target_name": "parse_files",
+      "target_repo_name": "knot",
+      "target_signature": "(files: &[PathBuf], parse_cfg: &ParseConfig)",
+      "target_start_line": 210
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "parse_files",
+    "targets": [
+      {
+        "file_path": "src/pipeline/parser/mod.rs",
+        "fqn": "knot::pipeline::parser::parse_files",
+        "kind": "rust_function",
+        "name": "parse_files",
+        "repo_name": "knot",
+        "start_line": 210,
+        "uuid": "a83a3ce1-6085-5dfc-b48a-3ce96049385e"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

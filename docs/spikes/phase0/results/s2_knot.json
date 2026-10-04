@@ -1,0 +1,499 @@
+{
+  "counts": {
+    "chunks": 347,
+    "col_null_rate": 0.09627781243501768,
+    "entities": 4809,
+    "file_vectors": 60,
+    "files_scanned": 360,
+    "files_with_entities": 269,
+    "skipped_no_embed_text": 0,
+    "tier1_files": 60
+  },
+  "determinism": {
+    "batching_differing_records": {
+      "f32_b64": 0,
+      "f32_dec": 0,
+      "i8fx_b64": 0,
+      "i8pv_b64": 0,
+      "nov": 0
+    },
+    "batching_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "batching_max_abs_diff": 0.0,
+    "id_mismatches": {
+      "f32_b64": 133,
+      "f32_dec": 133,
+      "i8fx_b64": 133,
+      "i8pv_b64": 133,
+      "nov": 133
+    },
+    "rerun_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "threads_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    }
+  },
+  "git": {
+    "churn": {
+      "append": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 3
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        }
+      },
+      "prepend": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 39
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 40
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 47
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 49
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 11
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 12
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 12
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 24,
+          "pack_delta_kib": 13
+        }
+      }
+    },
+    "pack_kib": {
+      "f32_b64": 8333,
+      "f32_b64-monolith": 8370,
+      "f32_dec": 10237,
+      "f32_dec-monolith": 10124,
+      "i8fx_b64": 2321,
+      "i8fx_b64-monolith": 2300,
+      "i8pv_b64": 2472,
+      "i8pv_b64-monolith": 2453,
+      "source": 1056
+    },
+    "ratio_vs_source": {
+      "f32_b64": 7.8911,
+      "f32_b64-monolith": 7.9261,
+      "f32_dec": 9.6941,
+      "f32_dec-monolith": 9.5871,
+      "i8fx_b64": 2.1979,
+      "i8fx_b64-monolith": 2.178,
+      "i8pv_b64": 2.3409,
+      "i8pv_b64-monolith": 2.3229
+    }
+  },
+  "load_ms": {
+    "binary_cache": 58.783682,
+    "f32_b64": 201.069713,
+    "f32_dec": 720.126351,
+    "i8fx_b64": 84.259661,
+    "i8pv_b64": 86.566873,
+    "nov": 27.727187
+  },
+  "model": {
+    "dim": 384,
+    "name": "AllMiniLML6V2",
+    "symmetric": true
+  },
+  "norms": {
+    "max": 1.0000005174066486,
+    "mean": 1.0000000026648013,
+    "min": 0.9999995385529776,
+    "normalized": false
+  },
+  "parity_with_qdrant": {
+    "ambiguous_ids": 0,
+    "compared": 180,
+    "found": 180,
+    "max_abs_diff": 0.0,
+    "mean_cosine": 1.0
+  },
+  "quality": {
+    "queries": [
+      {
+        "expected": [
+          "src/cli_tools/search_hybrid_context/",
+          "src/mcp_tools/search_hybrid_context/"
+        ],
+        "hit10": {
+          "knot_search": false,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "hit5": {
+          "knot_search": false,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "id": "k01",
+        "overlap10_vs_knot": 0.0,
+        "query": "find relevant code by meaning across the repository"
+      },
+      {
+        "expected": [
+          "src/pipeline/parser/mod.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k02",
+        "overlap10_vs_knot": 0.7,
+        "query": "parse source files into entities in parallel"
+      },
+      {
+        "expected": [
+          "src/pipeline/embed.rs",
+          "src/pipeline/embed/model.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k03",
+        "overlap10_vs_knot": 0.5,
+        "query": "compute embeddings for entities with fastembed"
+      },
+      {
+        "expected": [
+          "src/cli_tools/find_callers.rs",
+          "src/mcp_tools/find_callers.rs"
+        ],
+        "hit10": {
+          "knot_search": false,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "hit5": {
+          "knot_search": false,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "id": "k04",
+        "overlap10_vs_knot": 0.4,
+        "query": "find who calls a symbol"
+      },
+      {
+        "expected": [
+          "src/mcp_handler.rs",
+          "src/mcp_tools/mod.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k05",
+        "overlap10_vs_knot": 0.3,
+        "query": "list the MCP tools exposed by the server"
+      },
+      {
+        "expected": [
+          "src/pipeline/state.rs",
+          "src/pipeline/files.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k06",
+        "overlap10_vs_knot": 0.2,
+        "query": "track file hashes for incremental indexing"
+      },
+      {
+        "expected": [
+          "src/pipeline/watch.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k07",
+        "overlap10_vs_knot": 0.5,
+        "query": "watch the filesystem and re-index on change"
+      },
+      {
+        "expected": [
+          "src/config.rs"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "k08",
+        "overlap10_vs_knot": 0.3,
+        "query": "load configuration from environment and env file"
+      }
+    ],
+    "summary": {
+      "knot_search": 0.75,
+      "spike_f32": 0.75,
+      "spike_i8fx": 0.75,
+      "spike_i8pv": 0.75
+    }
+  },
+  "quantization": {
+    "i8fx": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 0.9875,
+      "same_top1": 0.875
+    },
+    "i8pv": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 1.0,
+      "same_top1": 1.0
+    }
+  },
+  "query": {
+    "embed_ms": {
+      "max": 6.452213,
+      "n": 8,
+      "p50": 3.477485,
+      "p95": 6.452213
+    },
+    "scan_ms": {
+      "max": 28.101545,
+      "n": 160,
+      "p50": 23.350676,
+      "p95": 25.099245999999997
+    }
+  },
+  "repo": "knot",
+  "root": "/tmp/knot-rag-spike/work/knot",
+  "schema": "knot-rag-spike/s2/v1",
+  "sizes": {
+    "source": {
+      "gzip": 1081581,
+      "raw": 3908716
+    },
+    "variants": {
+      "f32_b64": {
+        "bytes_per_entity": 2311.315759202454,
+        "gzip": 8526790,
+        "raw": 12055823,
+        "shards": 329
+      },
+      "f32_dec": {
+        "bytes_per_entity": 4961.707246932516,
+        "gzip": 10472832,
+        "raw": 25880265,
+        "shards": 329
+      },
+      "i8fx_b64": {
+        "bytes_per_entity": 775.3157592024539,
+        "gzip": 2358259,
+        "raw": 4044047,
+        "shards": 329
+      },
+      "i8pv_b64": {
+        "bytes_per_entity": 791.204754601227,
+        "gzip": 2508190,
+        "raw": 4126924,
+        "shards": 329
+      },
+      "nov": {
+        "bytes_per_entity": 256.315759202454,
+        "gzip": 376610,
+        "raw": 1336943,
+        "shards": 329
+      }
+    }
+  },
+  "snapshot_fingerprint": "8b6c9173113ed668e111ce407e95b947594c9849b023a4dd618e3b49808399a0",
+  "tier1": {
+    "queries": [
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": false,
+        "id": "l01"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": false,
+        "id": "l02"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l03"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": false,
+        "id": "l04"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l05"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l06"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l07"
+      },
+      {
+        "hit1": false,
+        "hit5": true,
+        "hit5_mixed": false,
+        "id": "l08"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l09"
+      }
+    ],
+    "size_increase_pct": 662.1167923174771,
+    "summary": {
+      "hit1": 0.8888888888888888,
+      "hit5": 1.0,
+      "hit5_mixed": 0.5555555555555556
+    }
+  },
+  "timings_ms": {
+    "embed_chunks": 24248,
+    "embed_entities": 202861,
+    "entities_per_s": 23.70588728242491,
+    "parse": 2146,
+    "prepare": 154
+  }
+}

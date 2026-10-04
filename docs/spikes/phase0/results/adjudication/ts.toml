@@ -1,0 +1,177 @@
+# knot-rag gold adjudication (T7.3) — TypeScript / knot-site
+#
+# GOLD RULE (applied to every verdict): an item is `tp` iff the reported
+# container is the OWNER of at least one genuine reference site to the target
+# symbol, i.e. `container_at(file, site_line)` equals the item's container.
+# Same symbol required (not a homonym, not a string/comment, not another
+# overload). `fp` when the container owns no such site: knot often attributes a
+# call to an enclosing/sibling entity (parser intent duplication) or to the
+# object literal that `container_at` climbs to `<module>`.
+# Rationale: "who calls this symbol" means direct reference owners, which is
+# also LSP's callHierarchy/references granularity (the gates G1-G4 measure LSP
+# against this gold).
+#
+# spot_check items are the seed-42 sample of auto-tp agreements (T7.3 rule 2),
+# verified by reading the code — all 10 confirmed tp here.
+
+[[item]]
+target = "ts-19"
+entity = { file = "src/webmcp/tools/copyInstallCommand.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: genuine `consentStore.request(...)` call at line 34; module-level code owns the site (the tool object literal is a constant, so container_at climbs to <module>)"
+evidence = "src/webmcp/tools/copyInstallCommand.ts:34"
+
+[[item]]
+target = "ts-14"
+entity = { file = "src/toolcore/format.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: module-level `import type { ToolResult } from './types'` at line 1"
+evidence = "src/toolcore/format.ts:1"
+
+[[item]]
+target = "ts-13"
+entity = { file = "src/toolcore/index.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: module-level `import type { ToolDefinition } from './types'` at line 1"
+evidence = "src/toolcore/index.ts:1"
+
+[[item]]
+target = "ts-14"
+entity = { file = "src/toolcore/format.ts", line = 55, name = "plainText" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: return type `ToolResult` in plainText's signature at line 55"
+evidence = "src/toolcore/format.ts:55"
+
+[[item]]
+target = "ts-06"
+entity = { file = "src/toolcore/definitions/searchKnotCapabilities.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: module-level import of `errorText` at line 5"
+evidence = "src/toolcore/definitions/searchKnotCapabilities.ts:5"
+
+[[item]]
+target = "ts-15"
+entity = { file = "src/toolcore/types.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: module-level JSONSchema usages at lines 16/25/29 (types nested under other exported interfaces own those sites)"
+evidence = "src/toolcore/types.ts:16"
+
+[[item]]
+target = "ts-15"
+entity = { file = "src/webmcp/schemas.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `import type { JSONSchema } from './types'` at line 1 plus module-level usages at 9/27/43/49"
+evidence = "src/webmcp/schemas.ts:1"
+
+[[item]]
+target = "ts-14"
+entity = { file = "src/webmcp/types.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `import type { JSONSchema, ToolResult } from '@/toolcore/types'` at line 1"
+evidence = "src/webmcp/types.ts:1"
+
+[[item]]
+target = "ts-01"
+entity = { file = "src/toolcore/format.ts", line = 37, name = "jsonTextFitting" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `jsonText(build([], true))` call at line 51, owned by jsonTextFitting"
+evidence = "src/toolcore/format.ts:51"
+
+[[item]]
+target = "ts-13"
+entity = { file = "functions/mcp.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `import { portableTools, type ToolDefinition } from '../src/toolcore'` at line 3"
+evidence = "functions/mcp.ts:3"
+
+[[item]]
+target = "ts-03"
+entity = { file = "src/toolcore/definitions/getLatestReleases.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "module-level import of truncateWords at line 4 and use at line 83; no extracted inner container owns those sites"
+evidence = "src/toolcore/definitions/getLatestReleases.ts:4"
+
+[[item]]
+target = "ts-03"
+entity = { file = "src/toolcore/definitions/searchKnotCapabilities.ts", line = 1, name = "<module>" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "module-level import of truncateWords at line 5 and use at line 56; no extracted inner container owns those sites"
+evidence = "src/toolcore/definitions/searchKnotCapabilities.ts:5"
+
+[[item]]
+target = "ts-09"
+entity = { file = "src/state/consentStore.ts", line = 1, name = "<module>" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "emit() sites at lines 36/65 are owned by `settle` and `request`; knot added an edge from the `consentStore` object literal (line 41), which container_at climbs to <module> — no owned site"
+evidence = "src/state/consentStore.ts:36"
+notable = true
+
+[[item]]
+target = "ts-10"
+entity = { file = "src/state/installationStore.ts", line = 1, name = "<module>" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "emit() site at line 36 is owned by `setActiveTab` (line 33); the <module> item comes from the object-literal climb, not from an owned site"
+evidence = "src/state/installationStore.ts:36"
+
+[[item]]
+target = "ts-11"
+entity = { file = "src/webmcp/invocationLog.ts", line = 1, name = "<module>" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "emit() site at line 44 is owned by `record` (line 42); object-literal climb to <module> owns no site"
+evidence = "src/webmcp/invocationLog.ts:44"
+
+[[item]]
+target = "ts-13"
+entity = { file = "functions/mcp.ts", line = 54, name = "toMcpTool" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "parameter type `def: ToolDefinition` in toMcpTool's signature at line 54"
+evidence = "functions/mcp.ts:54"
+
+[[item]]
+target = "ts-14"
+entity = { file = "src/toolcore/types.ts", line = 61, name = "ToolDefinition" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "return type `Promise<ToolResult>` of `execute` at line 68, owned by the ToolDefinition interface"
+evidence = "src/toolcore/types.ts:68"
+
+[[item]]
+target = "ts-16"
+entity = { file = "src/webmcp/types.ts", line = 54, name = "ModelContext" }
+found_by = ["knot_db", "heuristic"]
+verdict = "tp"
+reason = "parameter type `tool: WebMcpTool` of registerTool at line 55, owned by the ModelContext interface"
+evidence = "src/webmcp/types.ts:55"
+
+[[item]]
+target = "ts-21"
+entity = { file = "src/components/Installation.tsx", line = 88, name = "Installation" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "the setActiveTab call at line 96 is owned by `handleTab` (line 95); Installation is the enclosing component — enclosing-only attribution"
+evidence = "src/components/Installation.tsx:96"
+
+[[item]]
+target = "ts-21"
+entity = { file = "src/components/Installation.tsx", line = 99, name = "handleTabKeyDown" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "handleTabKeyDown calls `handleTab(next)` at line 104, not setActiveTab; no setActiveTab site in its span"
+evidence = "src/components/Installation.tsx:104"
+notable = true

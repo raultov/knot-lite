@@ -1,0 +1,49 @@
+{
+  "calls": [],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "EmbeddingModel",
+    "targets": [
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/embedding/EmbeddingModel.java",
+        "fqn": "org.springframework.ai.embedding.EmbeddingModel",
+        "kind": "interface",
+        "name": "EmbeddingModel",
+        "repo_name": "spring-ai",
+        "start_line": 39,
+        "uuid": "a160dd11-c0b3-5ccf-b925-cf7c82317fda"
+      },
+      {
+        "file_path": "models/spring-ai-mistral-ai/src/main/java/org/springframework/ai/mistralai/api/MistralAiApi.java",
+        "fqn": "org.springframework.ai.mistralai.api.MistralAiApi.EmbeddingModel",
+        "kind": "enum",
+        "name": "EmbeddingModel",
+        "repo_name": "spring-ai",
+        "start_line": 319,
+        "uuid": "b4acef53-bdb5-5794-91dc-7ca29245d35f"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 2,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

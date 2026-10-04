@@ -1,0 +1,200 @@
+[
+  {
+    "caller_count": 5,
+    "caller_samples": [
+      "testSmallTextWithPunctuationShouldNotSplit in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testLargeTextStillSplitsAtPunctuation in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "splitCamelCase in spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java"
+    ],
+    "dependencies": [
+      "apply"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TextSplitter.split",
+    "kind": "method",
+    "name": "split",
+    "repo_name": "spring-ai",
+    "signature": "(List<Document> documents)",
+    "start_line": 48,
+    "uuid": "4870b2e4-d087-5ea7-adbc-2eb7e3969e45"
+  },
+  {
+    "caller_count": 5,
+    "caller_samples": [
+      "testSmallTextWithPunctuationShouldNotSplit in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testLargeTextStillSplitsAtPunctuation in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "splitCamelCase in spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java"
+    ],
+    "dependencies": [
+      "apply"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TextSplitter.split",
+    "kind": "method",
+    "name": "split",
+    "repo_name": "spring-ai",
+    "signature": "(Document document)",
+    "start_line": 52,
+    "uuid": "43935943-3741-52a6-bbcb-ef230514e2db"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "splitText in spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java"
+    ],
+    "dependencies": [
+      "getLastPunctuationIndex",
+      "replace",
+      "getEncodedTokens",
+      "decodeTokens"
+    ],
+    "docstring": "Splits text into chunks based on token count.\n<p>\nPunctuation-based splitting only applies when the token count exceeds the chunk\nsize ({@code tokens.size() > chunkSize}). Text that exactly matches or is smaller\nthan the chunk size is returned as a single chunk without punctuation-based\ntruncation.\n@param text the text to split\n@param chunkSize the target chunk size in tokens\n@return list of text chunks",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter.doSplit",
+    "kind": "method",
+    "name": "doSplit",
+    "repo_name": "spring-ai",
+    "signature": "(String text, int chunkSize)",
+    "start_line": 158,
+    "uuid": "f749148a-39d4-5dc2-ad45-9d3af3eb251e"
+  },
+  {
+    "caller_count": 5,
+    "caller_samples": [
+      "testSmallTextWithPunctuationShouldNotSplit in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testLargeTextStillSplitsAtPunctuation in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "splitCamelCase in spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java"
+    ],
+    "dependencies": [
+      "addMeta",
+      "split"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java",
+    "fqn": "org.springframework.ai.util.ParsingUtils.split",
+    "kind": "method",
+    "name": "split",
+    "repo_name": "spring-ai",
+    "signature": "(String source, boolean toLower)",
+    "start_line": 82,
+    "uuid": "35cc3f49-c720-5908-b9f7-ff0dd59a0ced"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "apply in spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TextSplitter.java"
+    ],
+    "dependencies": [
+      "createDocuments",
+      "getContentFormatter"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TextSplitter.doSplitDocuments",
+    "kind": "method",
+    "name": "doSplitDocuments",
+    "repo_name": "spring-ai",
+    "signature": "(List<Document> documents)",
+    "start_line": 64,
+    "uuid": "1116651e-4183-5992-a41b-961a34c21d92"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "createDocuments in spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TextSplitter.java"
+    ],
+    "dependencies": [
+      "doSplit"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter.splitText",
+    "kind": "method",
+    "name": "splitText",
+    "repo_name": "spring-ai",
+    "signature": "(String text)",
+    "start_line": 143,
+    "uuid": "ca88841d-1320-5050-8b3b-ed1f27164dd6"
+  },
+  {
+    "caller_count": 8,
+    "caller_samples": [
+      "testTokenTextSplitterBuilderWithAllFields in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testSmallTextWithPunctuationShouldNotSplit in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testLargeTextStillSplitsAtPunctuation in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter.withChunkSize",
+    "kind": "method",
+    "name": "withChunkSize",
+    "repo_name": "spring-ai",
+    "signature": "(int chunkSize)",
+    "start_line": 258,
+    "uuid": "77e52a0a-1485-547a-9120-3e4c5f681b14"
+  },
+  {
+    "caller_count": 143,
+    "caller_samples": [
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "internalStream in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+      "convertStreamEventToChatResponse in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [
+      "TokenTextSplitter"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter.build",
+    "kind": "method",
+    "name": "build",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 288,
+    "uuid": "47bb26fa-37bf-5dee-ba9f-babb4bbb8205"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "testTokenTextSplitterBuilderWithAllFields in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testTokenTextSplitterWithCustomPunctuationMarks in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java",
+      "testTokenTextSplitterWithNonPositiveMaxNumChunksThrows in spring-ai-commons/src/test/java/org/springframework/ai/transformer/splitter/TokenTextSplitterTest.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter.withMaxNumChunks",
+    "kind": "method",
+    "name": "withMaxNumChunks",
+    "repo_name": "spring-ai",
+    "signature": "(int maxNumChunks)",
+    "start_line": 273,
+    "uuid": "a0e4b838-407f-5818-ba1a-9027f1c6dcf6"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "acmeChain in models/spring-ai-openai/src/test/java/org/springframework/ai/openai/acme/AcmeIT.java",
+      "build in spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java"
+    ],
+    "dependencies": [],
+    "docstring": "A {@link TextSplitter} that splits text into chunks of a target size in tokens.\n@author Raphael Yu\n@author Christian Tzolov\n@author Ricken Bazolo\n@author Jemin Huh",
+    "file_path": "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java",
+    "fqn": "org.springframework.ai.transformer.splitter.TokenTextSplitter",
+    "kind": "class",
+    "name": "TokenTextSplitter",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 38,
+    "type_usage_count": 9,
+    "type_usage_samples": [
+      "<module> in models/spring-ai-openai/src/test/java/org/springframework/ai/openai/acme/AcmeIT.java",
+      "AcmeIT in models/spring-ai-openai/src/test/java/org/springframework/ai/openai/acme/AcmeIT.java",
+      "acmeChain in models/spring-ai-openai/src/test/java/org/springframework/ai/openai/acme/AcmeIT.java"
+    ],
+    "uuid": "273731ca-452e-5644-b065-00fbb5b6b2b9"
+  }
+]

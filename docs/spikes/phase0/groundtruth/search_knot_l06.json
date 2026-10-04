@@ -1,0 +1,154 @@
+[
+  {
+    "dependencies": [
+      "generate_nested_macro_code",
+      "run_token_tree_extraction",
+      "finish"
+    ],
+    "docstring": "",
+    "file_path": "benches/token_tree_bench.rs",
+    "fqn": "__fixture::benches::token_tree_bench::criterion_benchmark",
+    "kind": "rust_function",
+    "name": "criterion_benchmark",
+    "repo_name": "knot",
+    "signature": "(c: &mut Criterion)",
+    "start_line": 41,
+    "uuid": "755f67ef-fede-5eee-8308-49374a442c09"
+  },
+  {
+    "dependencies": [
+      "parse_import",
+      "collect_type_nodes"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/rust/tests.rs",
+    "fqn": "knot::pipeline::parser::languages::rust::tests::test_token_tree_deeply_nested_optimization",
+    "kind": "rust_function",
+    "name": "test_token_tree_deeply_nested_optimization",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 929,
+    "uuid": "b1d36e17-e517-5994-82c2-4c8087eea141"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "criterion_benchmark in benches/token_tree_bench.rs"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "benches/token_tree_bench.rs",
+    "fqn": "__fixture::benches::token_tree_bench::generate_nested_macro_code",
+    "kind": "rust_function",
+    "name": "generate_nested_macro_code",
+    "repo_name": "knot",
+    "signature": "(depth: usize)",
+    "start_line": 13,
+    "uuid": "9e42a8ad-e9c5-554e-9d18-03a6ff3f5bf2"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::tests::test_path_deduplication_all_duplicates",
+    "kind": "rust_function",
+    "name": "test_path_deduplication_all_duplicates",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 234,
+    "uuid": "7fd32a34-72b5-586a-a969-93e269fccacb"
+  },
+  {
+    "dependencies": [
+      "dedup_by_identity"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::dedup_keeps_first_of_duplicate_identity",
+    "kind": "rust_function",
+    "name": "dedup_keeps_first_of_duplicate_identity",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 2477,
+    "uuid": "112a262f-e5ff-5994-82ac-4bbace002e34"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/pipeline/watch.rs",
+    "fqn": "knot::pipeline::watch::tests::test_path_batch_accumulation_logic",
+    "kind": "rust_function",
+    "name": "test_path_batch_accumulation_logic",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 305,
+    "uuid": "184a5088-d00d-524e-bbef-03916b758a82"
+  },
+  {
+    "dependencies": [
+      "lexical_boost"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::lexical_partial_overlap_ratio",
+    "kind": "rust_function",
+    "name": "lexical_partial_overlap_ratio",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1303,
+    "uuid": "21bf4a3a-0c90-58fe-8fdf-d6cb9460f3f3"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "format_references_result in src/cli_tools/find_callers.rs",
+      "format_callers_table in src/cli_tools/formatters/table.rs",
+      "resolution_view_defaults_hidden_fields_when_absent in src/cli_tools/resolution.rs"
+    ],
+    "dependencies": [],
+    "docstring": "How many matched entities the kind filter removed (`0` when the\nresolution block predates the disclosure or nothing was hidden).",
+    "file_path": "src/cli_tools/resolution.rs",
+    "fqn": "knot::cli_tools::resolution::ResolutionView::hidden_non_code",
+    "kind": "rust_method",
+    "name": "hidden_non_code",
+    "repo_name": "knot",
+    "signature": "(&self)",
+    "start_line": 98,
+    "uuid": "51e91cf1-6af0-5943-a4a0-9e249374871c"
+  },
+  {
+    "dependencies": [
+      "candidate_limit"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::candidate_limit_scales_to_result_ceiling",
+    "kind": "rust_function",
+    "name": "candidate_limit_scales_to_result_ceiling",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1482,
+    "uuid": "e880884d-5219-5eb9-81c9-f4bb57942c58"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_task in scripts/token_savings_benchmark.py"
+    ],
+    "dependencies": [
+      "count",
+      "rg_type_flags",
+      "run",
+      "read_text"
+    ],
+    "docstring": "",
+    "file_path": "scripts/token_savings_benchmark.py",
+    "fqn": "baseline_callers",
+    "kind": "python_function",
+    "name": "baseline_callers",
+    "repo_name": "knot",
+    "signature": "(\n    root: Path, symbol: str, types: list[str], max_files: int, count\n)",
+    "start_line": 132,
+    "uuid": "a8738f06-64b5-5ca7-ac80-d84aebfd09a2"
+  }
+]

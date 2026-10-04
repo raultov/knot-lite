@@ -1,0 +1,56 @@
+{
+  "calls": [
+    {
+      "file_path": "src/mcp_handler.rs",
+      "kind": "rust_method",
+      "name": "dispatch",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "(\n        &self,\n        params: CallToolRequestParams,\n    )",
+      "start_line": 106,
+      "target_file_path": "src/mcp_tools/find_callers.rs",
+      "target_fqn": "knot::mcp_tools::find_callers::FindCallersTool::handle",
+      "target_name": "handle",
+      "target_repo_name": "knot",
+      "target_signature": "(\n        params: CallToolRequestParams,\n        handler: &KnotMcpHandler,\n    )",
+      "target_start_line": 87
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "FindCallersTool::handle",
+    "targets": [
+      {
+        "file_path": "src/mcp_tools/find_callers.rs",
+        "fqn": "knot::mcp_tools::find_callers::FindCallersTool::handle",
+        "kind": "rust_method",
+        "name": "handle",
+        "repo_name": "knot",
+        "start_line": 87,
+        "uuid": "c3410ecb-3d1b-5aa4-b9e9-17c670b7686f"
+      }
+    ],
+    "tier": "fqn_suffix",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

@@ -1,0 +1,56 @@
+{
+  "calls": [
+    {
+      "file_path": "src/webmcp/invocationLog.ts",
+      "kind": "function",
+      "name": "withLogging",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "(tool: WebMcpTool<TInput>)",
+      "start_line": 52,
+      "target_file_path": "src/webmcp/invocationLog.ts",
+      "target_fqn": "record",
+      "target_name": "record",
+      "target_repo_name": "knot-site",
+      "target_signature": "(entry: Omit<InvocationEntry, 'id' | 'ts'>)",
+      "target_start_line": 42
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "record",
+    "targets": [
+      {
+        "file_path": "src/webmcp/invocationLog.ts",
+        "fqn": "record",
+        "kind": "method",
+        "name": "record",
+        "repo_name": "knot-site",
+        "start_line": 42,
+        "uuid": "a9f61afb-7d4f-5edd-b39a-1305f03c997d"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

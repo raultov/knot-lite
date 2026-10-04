@@ -1,0 +1,61 @@
+[package]
+name = "knot-rag-spike-phase0"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Throw-away Phase 0 feasibility spikes for knot-rag (LSP graph + file-based vectors)"
+
+# Standalone: must never be absorbed by a future knot-rag root workspace.
+[workspace]
+
+# --- Lint tables copied VERBATIM from knot's Cargo.toml (decision D11) ---
+[lints.rust]
+# Enforces the no-unsafe policy stated in AGENTS.md. `deny` rather than
+# `forbid`; `deny` still blocks new unsafe while allowing documented,
+# audited exceptions via `#[expect(unsafe_code, reason = "...")]`.
+unsafe_code = "deny"
+
+[lints.clippy]
+# Readability gates. Thresholds live in clippy.toml; these lints are
+# allow-by-default (pedantic/nursery), so they are inert without this.
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+
+# Ban bare `#[allow]` in favour of `#[expect(..., reason = "...")]`, which
+# warns once the suppression is no longer needed. This keeps the refactor
+# backlog self-cleaning instead of accumulating stale opt-outs.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+
+[dependencies]
+# Parsers, entity model, embedder, heuristic resolver (decision D3).
+knot = { path = "../../../../knot" }
+
+# LSP client. lsp-types comes ONLY through async_lsp::lsp_types (0.95).
+async-lsp = { version = "0.2.4", default-features = false, features = ["omni-trait", "tokio", "tracing"] }
+tower = { version = "0.5", features = ["util"] }
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+
+# Data, CLI, utils.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+url = "2"
+uuid = { version = "1", features = ["v5", "serde"] }
+base64 = "0.22"
+sha2 = "0.11"          # same major as knot to avoid a duplicate build
+ignore = "0.4"
+sysinfo = "0.39"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+flate2 = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+debug = 1

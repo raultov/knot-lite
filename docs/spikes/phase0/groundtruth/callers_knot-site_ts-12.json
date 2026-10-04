@@ -1,0 +1,56 @@
+{
+  "calls": [
+    {
+      "file_path": "src/webmcp/registry.ts",
+      "kind": "constant",
+      "name": "knotTools",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 13,
+      "target_file_path": "src/webmcp/invocationLog.ts",
+      "target_fqn": "withLogging",
+      "target_name": "withLogging",
+      "target_repo_name": "knot-site",
+      "target_signature": "(tool: WebMcpTool<TInput>)",
+      "target_start_line": 52
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "withLogging",
+    "targets": [
+      {
+        "file_path": "src/webmcp/invocationLog.ts",
+        "fqn": "withLogging",
+        "kind": "function",
+        "name": "withLogging",
+        "repo_name": "knot-site",
+        "start_line": 52,
+        "uuid": "fe7c184f-7078-52c9-8eab-6a9c28099fd7"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

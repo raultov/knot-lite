@@ -1,0 +1,101 @@
+{
+  "calls": [
+    {
+      "file_path": "src/toolcore/definitions/compareKnotEditions.ts",
+      "kind": "constant",
+      "name": "compareKnotEditions",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 12,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonText",
+      "target_name": "jsonText",
+      "target_repo_name": "knot-site",
+      "target_signature": "(value: unknown)",
+      "target_start_line": 18
+    },
+    {
+      "file_path": "src/toolcore/definitions/listSupportedLanguages.ts",
+      "kind": "constant",
+      "name": "listSupportedLanguages",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 11,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonText",
+      "target_name": "jsonText",
+      "target_repo_name": "knot-site",
+      "target_signature": "(value: unknown)",
+      "target_start_line": 18
+    },
+    {
+      "file_path": "src/toolcore/definitions/listSupportedLanguages.ts",
+      "kind": "constant",
+      "name": "listSupportedLanguages",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "",
+      "start_line": 14,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonText",
+      "target_name": "jsonText",
+      "target_repo_name": "knot-site",
+      "target_signature": "(value: unknown)",
+      "target_start_line": 18
+    },
+    {
+      "file_path": "src/toolcore/format.ts",
+      "kind": "function",
+      "name": "jsonTextFitting",
+      "rel_type": "CALLS",
+      "repo_name": "knot-site",
+      "signature": "(\n  items: readonly T[],\n  build: (slice: readonly T[], truncated: boolean) => unknown,\n)",
+      "start_line": 37,
+      "target_file_path": "src/toolcore/format.ts",
+      "target_fqn": "jsonText",
+      "target_name": "jsonText",
+      "target_repo_name": "knot-site",
+      "target_signature": "(value: unknown)",
+      "target_start_line": 18
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "jsonText",
+    "targets": [
+      {
+        "file_path": "src/toolcore/format.ts",
+        "fqn": "jsonText",
+        "kind": "function",
+        "name": "jsonText",
+        "repo_name": "knot-site",
+        "start_line": 18,
+        "uuid": "22612261-56a7-593b-bce2-d6562b787ff7"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

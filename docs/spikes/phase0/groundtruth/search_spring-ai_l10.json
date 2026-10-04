@@ -1,0 +1,165 @@
+[
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-milvus/src/main/java/org/springframework/ai/vectorstore/milvus/autoconfigure/MilvusServiceClientProperties.java",
+    "fqn": "org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusServiceClientProperties.setClientPemPath",
+    "kind": "method",
+    "name": "setClientPemPath",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String clientPemPath)",
+    "start_line": 220,
+    "uuid": "18024df4-4919-5c7a-aa95-a5094138c025"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-milvus/src/main/java/org/springframework/ai/vectorstore/milvus/autoconfigure/MilvusServiceClientProperties.java",
+    "fqn": "org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusServiceClientProperties.setCaPemPath",
+    "kind": "method",
+    "name": "setCaPemPath",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String caPemPath)",
+    "start_line": 228,
+    "uuid": "05e889df-324d-55a5-ba21-00cec6faf808"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "shouldApplyPartitionNameWhenAddingDocuments in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "shouldIgnoreBlankPartitionNameWhenAddingDocuments in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "add in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java"
+    ],
+    "dependencies": [
+      "bulkRequest",
+      "index",
+      "getMetadata",
+      "getIndex",
+      "builder",
+      "embed",
+      "build",
+      "getId",
+      "getText"
+    ],
+    "docstring": "",
+    "file_path": "vector-stores/spring-ai-opensearch-store/src/main/java/org/springframework/ai/vectorstore/opensearch/OpenSearchVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.opensearch.OpenSearchVectorStore.doAdd",
+    "kind": "method",
+    "name": "doAdd",
+    "repo_name": "spring-ai",
+    "signature": "(List<Document> documents)",
+    "start_line": 228,
+    "uuid": "c4edf94f-7be3-5407-8348-980b0df1b529"
+  },
+  {
+    "caller_count": 143,
+    "caller_samples": [
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "internalStream in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java",
+      "convertStreamEventToChatResponse in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatModel.java"
+    ],
+    "dependencies": [
+      "reConcatenateCamelCase"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/tool/definition/DefaultToolDefinition.java",
+    "fqn": "org.springframework.ai.tool.definition.DefaultToolDefinition.build",
+    "kind": "method",
+    "name": "build",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 69,
+    "uuid": "8150b79d-3c32-5262-8ad5-f88a4bddddf7"
+  },
+  {
+    "caller_count": 513,
+    "caller_samples": [
+      "call in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterString in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java",
+      "listOutputConverterBean in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/chat/AnthropicChatClientIT.java"
+    ],
+    "dependencies": [
+      "getContext",
+      "ToolExecutionException",
+      "toJson",
+      "getToolDefinition",
+      "convert",
+      "build",
+      "builder",
+      "fromJsonToMap"
+    ],
+    "docstring": "",
+    "file_path": "mcp/common/src/main/java/org/springframework/ai/mcp/AsyncMcpToolCallback.java",
+    "fqn": "org.springframework.ai.mcp.AsyncMcpToolCallback.call",
+    "kind": "method",
+    "name": "call",
+    "repo_name": "spring-ai",
+    "signature": "(String toolCallInput, @Nullable ToolContext toolContext)",
+    "start_line": 111,
+    "uuid": "f2a70d4f-5cda-58f6-a23d-de9b76933c54"
+  },
+  {
+    "caller_count": 7,
+    "caller_samples": [
+      "call in mcp/common/src/main/java/org/springframework/ai/mcp/AsyncMcpToolCallback.java",
+      "call in mcp/common/src/main/java/org/springframework/ai/mcp/SyncMcpToolCallback.java",
+      "whenMergeRuntimeAndDefaultToolCallbacks in spring-ai-model/src/test/java/org/springframework/ai/model/tool/ToolCallingChatOptionsTests.java"
+    ],
+    "dependencies": [
+      "createToolDefinition"
+    ],
+    "docstring": "",
+    "file_path": "mcp/common/src/main/java/org/springframework/ai/mcp/AsyncMcpToolCallback.java",
+    "fqn": "org.springframework.ai.mcp.AsyncMcpToolCallback.getToolDefinition",
+    "kind": "method",
+    "name": "getToolDefinition",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 97,
+    "uuid": "a627bb12-c132-58b8-b801-750e2db33718"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-milvus/src/main/java/org/springframework/ai/vectorstore/milvus/autoconfigure/MilvusServiceClientProperties.java",
+    "fqn": "org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusServiceClientProperties.getClientPemPath",
+    "kind": "method",
+    "name": "getClientPemPath",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 216,
+    "uuid": "fcac9988-d43b-54cd-b3e9-750c22b830c4"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "mcp/common/src/main/java/org/springframework/ai/mcp/aot/package-info.java",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "54133d09-cb26-59e3-b098-adf251349a5c"
+  },
+  {
+    "caller_count": 795,
+    "caller_samples": [
+      "toOptions in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicCacheProperties.java",
+      "disabled in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicCacheOptions.java",
+      "defaultsAreSane in models/spring-ai-anthropic/src/test/java/org/springframework/ai/anthropic/AnthropicCacheOptionsTests.java"
+    ],
+    "dependencies": [
+      "builder"
+    ],
+    "docstring": "Create a default {@link ToolCallingManager} builder.",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java",
+    "fqn": "org.springframework.ai.model.tool.ToolCallingManager.builder",
+    "kind": "method",
+    "name": "builder",
+    "repo_name": "spring-ai",
+    "signature": "()",
+    "start_line": 46,
+    "uuid": "6b479fc6-bb1f-5c75-9497-afb3b3a3a3df"
+  }
+]

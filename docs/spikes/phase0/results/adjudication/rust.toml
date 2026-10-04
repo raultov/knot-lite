@@ -1,0 +1,666 @@
+# knot-rag gold adjudication (T7.3) — Rust / knot
+#
+# GOLD RULE (applied to every verdict): `tp` iff the reported container is the
+# OWNER of a genuine reference site to the target symbol (owner =
+# container_at(file, site_line); same symbol — not a homonym, not a string or
+# comment, not another member/overload). `fp` when the container owns no such
+# site: knot's parser/resolver attributes intents to enclosing or sibling
+# entities (`mod x;` declarations, impl-block types, object literals) or
+# resolves to a different member (`embed` vs `embed_query`, `VectorDb::connect`
+# vs `ConnectExt`). Rationale: "who calls this symbol" means direct reference
+# owners — also LSP's callHierarchy/references granularity (gates G1-G4).
+#
+# spot_check items are the seed-42 sample of auto-tp agreements (T7.3 rule 2),
+# verified by reading the code — all 10 confirmed tp.
+#
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_handler.rs", line = 129, name = "handle_list_tools_request" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `tools: Self::tools()` at mcp_handler.rs:135 — Self resolves to KnotMcpHandler"
+evidence = "src/mcp_handler.rs:135"
+#   128 | impl ServerHandler for KnotMcpHandler {
+#   129 |     async fn handle_list_tools_request(
+#   130 |         &self,
+#   131 |         _request: Option<PaginatedRequestParams>,
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/db/vector/mod.rs", line = 111, name = "test_multiple_embedded_entities" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `EntityKind::Class/Function` constructions at mod.rs:112-114"
+evidence = "src/db/vector/mod.rs:112"
+#   111 |     fn test_multiple_embedded_entities() {
+#   112 |         let entity1 = create_embedded_entity("Entity1", EntityKind::Class, 0.1);
+#   113 |         let entity2 = create_embedded_entity("Entity2", EntityKind::Class, 0.2);
+#   114 |         let entity3 = create_embedded_entity("Entity3", EntityKind::Function, 0.3);
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/languages/toml.rs", line = 100, name = "extract_cargo_features" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `EntityKind::CargoFeature` at toml.rs:124"
+evidence = "src/pipeline/parser/languages/toml.rs:124"
+#   123 |             feature_name.as_str(),
+#   124 |             EntityKind::CargoFeature,
+#   125 |             format!("cargo:crate:feature:{}", feature_name),
+#   126 |             enabled_features.map(|ef| format!("enables: [{}]", ef)),
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/ingest/resolve/cross_repo.rs", line = 519, name = "test_primary_selection_prefers_package_id_marker" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `use crate::models::{EntityKind, ...}` at cross_repo.rs:523 and `EntityKind::ProjectIdentity` at 531/549"
+evidence = "src/pipeline/ingest/resolve/cross_repo.rs:523"
+#   522 |         // alphabetical order or depth ties.
+#   523 |         use crate::models::{EntityKind, ResolutionEntity};
+#   524 |         use uuid::Uuid;
+#   525 | 
+
+[[item]]
+target = "rust-04"
+entity = { file = "src/pipeline/ingest/resolve/calls.rs", line = 1242, name = "test_python_super_init_no_parent_returns_no_edge" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `resolve_reference_intents(&mut entities)` call at calls.rs:1276"
+evidence = "src/pipeline/ingest/resolve/calls.rs:1242"
+#  1275 |         let mut entities = vec![child_class, child_init];
+#  1276 |         resolve_reference_intents(&mut entities);
+#  1277 | 
+#  1278 |         let child_init_entity = entities.iter().find(|e| e.uuid == child_init_uuid).unwrap();
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/languages/xml.rs", line = 363, name = "test_extract_maven_project_identity_with_dependencies" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `e.kind == EntityKind::ProjectIdentity` at xml.rs:384"
+evidence = "src/pipeline/parser/languages/xml.rs:384"
+#   383 |             .iter()
+#   384 |             .filter(|e| e.kind == EntityKind::ProjectIdentity)
+#   385 |             .collect();
+#   386 |         assert_eq!(proj_ids.len(), 1);
+
+[[item]]
+target = "rust-04"
+entity = { file = "src/pipeline/ingest/resolve/calls.rs", line = 623, name = "test_resolve_self_method_same_class_name_collision" }
+found_by = ["lsp", "knot_db", "heuristic", "lsp_calls", "knot_db_calls"]
+verdict = "tp"
+reason = "spot check: `resolve_reference_intents(&mut entities)` call at calls.rs:664"
+evidence = "src/pipeline/ingest/resolve/calls.rs:623"
+#   663 |         let mut entities = vec![module_func, my_class, class_method, caller_method];
+#   664 |         resolve_reference_intents(&mut entities);
+#   665 | 
+#   666 |         let caller = entities.iter().find(|e| e.name == "caller").unwrap();
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/languages/groovy/tests.rs", line = 1158, name = "bare_typed_property_is_extracted" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `EntityKind::GroovyProperty` at tests.rs:1161"
+evidence = "src/pipeline/parser/languages/groovy/tests.rs:1161"
+#  1160 |     let entities = extract_entities_groovy(source, "Session.groovy", "test-repo");
+#  1161 |     let prop = pick_entity(&entities, "baseDir", EntityKind::GroovyProperty);
+#  1162 |     assert_eq!(prop.enclosing_class.as_deref(), Some("Session"));
+#  1163 |     assert_eq!(prop.fqn, "Session.baseDir");
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/models/entity.rs", line = 573, name = "test_uuid_stable_across_machines" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `EntityKind::Class` constructions at entity.rs:576/589/610"
+evidence = "src/models/entity.rs:576"
+#   575 |             "Config",
+#   576 |             EntityKind::Class,
+#   577 |             "mycrate::config::Config",
+#   578 |             None,
+
+[[item]]
+target = "rust-15"
+entity = { file = "src/db/mod.rs", line = 17, name = "init_databases" }
+found_by = ["lsp", "knot_db", "heuristic"]
+verdict = "tp"
+reason = "spot check: `use graph::ConnectExt;` at mod.rs:18"
+evidence = "src/db/mod.rs:18"
+#    17 | pub async fn init_databases(cfg: &Config) -> Result<(vector::VectorDb, graph::GraphDb)> {
+#    18 |     use graph::ConnectExt;
+#    19 |     use vector::VectorConnectExt;
+#    20 | 
+
+[[item]]
+target = "rust-02"
+entity = { file = "src/pipeline/runner.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (prepare::prepare_entities,)"
+evidence = "src/pipeline/runner.rs:28"
+
+[[item]]
+target = "rust-02"
+entity = { file = "benches/pipeline_bench.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (prepare::prepare_entities,)"
+evidence = "benches/pipeline_bench.rs:20"
+
+[[item]]
+target = "rust-03"
+entity = { file = "src/pipeline/embed.rs", line = 203, name = "test_embedder_init_and_embed_basic" }
+found_by = ["knot_db", "heuristic", "knot_db_calls"]
+verdict = "fp"
+reason = "the test calls `embedder.embed(entities, 1)` at embed.rs:225 — the `embed` method, not `embed_query`; knot's name resolver attached the wrong member"
+evidence = "src/pipeline/embed.rs:225"
+#   202 |     #[test]
+#   203 |     fn test_embedder_init_and_embed_basic() {
+#   204 |         let temp_dir = tempfile::tempdir().unwrap();
+#   205 |         let mut embedder =
+
+[[item]]
+target = "rust-03"
+entity = { file = "src/cli_tools/search_hybrid_context/mod.rs", line = 68, name = "run_search_hybrid_context" }
+found_by = ["lsp", "lsp_calls"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (pub async fn run_search_hybrid_context()"
+evidence = "src/cli_tools/search_hybrid_context/mod.rs:68"
+#    81 |         .unwrap()
+#    82 |         .embed_query(query)
+#    83 |         .map_err(|e| anyhow::anyhow!("Embedding failed: {}", e))?;
+#    84 | 
+
+[[item]]
+target = "rust-04"
+entity = { file = "src/pipeline/ingest/resolve/calls.rs", line = 451, name = "tests" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::pipeline::ingest::resolve::resolve_reference_inte)"
+evidence = "src/pipeline/ingest/resolve/calls.rs:455"
+#   454 |     use crate::models::{EntityKind, ReferenceIntent, RelationshipType, ResolutionEntity};
+#   455 |     use crate::pipeline::ingest::resolve::resolve_reference_intents;
+#   456 | 
+#   457 |     #[test]
+
+[[item]]
+target = "rust-04"
+entity = { file = "src/pipeline/ingest/mod.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (resolve_reference_intents, resolve_reference_intents_with_co)"
+evidence = "src/pipeline/ingest/mod.rs:14"
+
+[[item]]
+target = "rust-08"
+entity = { file = "src/cli_tools/mod.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (pub use find_callers::{format_reference_entry, format_refere)"
+evidence = "src/cli_tools/mod.rs:24"
+
+[[item]]
+target = "rust-09"
+entity = { file = "src/pipeline/runner.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (input::discover_files,)"
+evidence = "src/pipeline/runner.rs:26"
+
+[[item]]
+target = "rust-10"
+entity = { file = "src/pipeline/state.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::pipeline::files::to_repo_relative;)"
+evidence = "src/pipeline/state.rs:19"
+
+[[item]]
+target = "rust-11"
+entity = { file = "src/pipeline/watch.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (files::is_supported_file, progress::ProgressTracker,)"
+evidence = "src/pipeline/watch.rs:17"
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/pipeline/parser/languages/kotlin.rs", line = 6, name = "collect_all_reference_intents_kotlin" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "no ParsedEntity reference in the function span (it collects ReferenceIntents only)"
+evidence = "src/pipeline/parser/languages/kotlin.rs:6"
+#     5 | /// Recursively extract all call intents from Kotlin.
+#     6 | pub(crate) fn collect_all_reference_intents_kotlin(
+#     7 |     node: Node<'_>,
+#     8 |     source: &[u8],
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/pipeline/parser/languages/varnish/mod.rs", line = 5, name = "vtc" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "`mod vtc;` declaration owns no ParsedEntity site; the uses live in varnish/mod.rs:11/24/42 and vtc.rs — mod-declaration attribution"
+evidence = "src/pipeline/parser/languages/varnish/mod.rs:5"
+notable = true
+#     4 | mod vcl;
+#     5 | mod vtc;
+#     6 | 
+#     7 | pub(crate) use vcc::extract_entities_vcc;
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/models/entity.rs", line = 417, name = "ResolutionEntity" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "struct span (417-432) has no ParsedEntity text; `impl From<&ParsedEntity>` at 434 is a separate impl entity"
+evidence = "src/models/entity.rs:417"
+#   416 | #[derive(Debug, Clone)]
+#   417 | pub struct ResolutionEntity {
+#   418 |     pub uuid: Uuid,
+#   419 |     pub name: String,
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/models/entity.rs", line = 456, name = "from" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "`from` (456-460) has no ParsedEntity text; only `ee.entity` field access"
+evidence = "src/models/entity.rs:456"
+#   455 | impl From<&EmbeddedEntity> for ResolutionEntity {
+#   456 |     fn from(ee: &EmbeddedEntity) -> Self {
+#   457 |         let mut e = ResolutionEntity::from(&ee.entity);
+#   458 |         e.signature = ee.entity.signature.clone();
+
+[[item]]
+target = "rust-12"
+entity = { file = "benches/channel_backpressure_bench.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use knot::models::ParsedEntity;)"
+evidence = "benches/channel_backpressure_bench.rs:13"
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/pipeline/parser/languages/javascript/jsx.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::models::{CallIntent, EntityKind, ParsedEntity};)"
+evidence = "src/pipeline/parser/languages/javascript/jsx.rs:1"
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/pipeline/parser/languages/varnish/vtc.rs", line = 35, name = "handle_test_case" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (let mut entity = ParsedEntity::new()"
+evidence = "src/pipeline/parser/languages/varnish/vtc.rs:37"
+#    36 |         let desc = parse_quoted_or_rest(trimmed);
+#    37 |         let mut entity = ParsedEntity::new(
+#    38 |             desc.clone(),
+#    39 |             EntityKind::VtcTestCase,
+
+[[item]]
+target = "rust-12"
+entity = { file = "src/pipeline/parser/languages/varnish/vtc.rs", line = 55, name = "handle_server" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (let mut entity = ParsedEntity::new()"
+evidence = "src/pipeline/parser/languages/varnish/vtc.rs:77"
+#    76 |         }
+#    77 |         let mut entity = ParsedEntity::new(
+#    78 |             name.clone(),
+#    79 |             EntityKind::VtcServer,
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/models/mod.rs", line = 13, name = "subgraph" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "`mod subgraph;` owns no EntityKind site; the `pub use entity::{... EntityKind ...}` at mod.rs:16 is file-level"
+evidence = "src/models/mod.rs:13"
+notable = true
+#    12 | mod repo_scope;
+#    13 | mod subgraph;
+#    14 | 
+#    15 | pub use cli_args::{Cli, Commands};
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/languages/toml.rs", line = 3, name = "extract_entities_toml" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "function span (3-38) has no EntityKind text; EntityKind uses are at toml.rs:1 (import), 72, 87 (other functions)"
+evidence = "src/pipeline/parser/languages/toml.rs:3"
+#     2 | 
+#     3 | pub(crate) fn extract_entities_toml(
+#     4 |     source: &str,
+#     5 |     file_path: &str,
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/languages/varnish/mod.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::models::{EntityKind, ParsedEntity};)"
+evidence = "src/pipeline/parser/languages/varnish/mod.rs:11"
+
+[[item]]
+target = "rust-13"
+entity = { file = "src/pipeline/parser/mod.rs", line = 1170, name = "test_bounded_channel_capacity_backpressure" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (crate::models::EntityKind::Class,)"
+evidence = "src/pipeline/parser/mod.rs:1176"
+#  1175 |             "TestEntity",
+#  1176 |             crate::models::EntityKind::Class,
+#  1177 |             "com.test.TestEntity",
+#  1178 |             None,
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/query.rs", line = 898, name = "QueryExt" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "QueryExt trait span has no GraphDb text"
+evidence = "src/db/graph/query.rs:898"
+#   897 | )]
+#   898 | pub trait QueryExt {
+#   899 |     async fn get_entities_with_dependencies(
+#   900 |         &self,
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/query.rs", line = 631, name = "fold_hidden" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "fold_hidden span has no GraphDb text; `impl GraphDb` at 649 is a separate entity"
+evidence = "src/db/graph/query.rs:631"
+#   630 | /// the distinct kind list sorted and capped for rendering.
+#   631 | fn fold_hidden(
+#   632 |     hidden_rows: Vec<TargetRow>,
+#   633 |     hidden_uuids: &mut std::collections::HashSet<String>,
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/upsert.rs", line = 8, name = "group_entities_by_kind" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "group_entities_by_kind span references EmbeddedEntity, not GraphDb"
+evidence = "src/db/graph/upsert.rs:8"
+#     7 | use uuid::Uuid;
+#     8 | fn group_entities_by_kind(entities: &[EmbeddedEntity]) -> HashMap<String, Vec<&EmbeddedEntity>> {
+#     9 |     let mut groups: HashMap<String, Vec<&EmbeddedEntity>> = HashMap::new();
+#    10 |     for e in entities {
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/upsert.rs", line = 54, name = "UpsertExt" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "UpsertExt trait span has no GraphDb text; `impl UpsertExt for GraphDb` at 88 is a separate entity"
+evidence = "src/db/graph/upsert.rs:54"
+#    53 | )]
+#    54 | pub trait UpsertExt {
+#    55 |     async fn load_entity_mappings(
+#    56 |         &self,
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/delete.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use super::GraphDb;)"
+evidence = "src/db/graph/delete.rs:5"
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/cli_tools/explore_file.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::db::graph::{GraphDb, QueryExt};)"
+evidence = "src/cli_tools/explore_file.rs:9"
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/query.rs", line = 1642, name = "test_get_file_entities" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (let graph_db = GraphDb::connect(\"bolt://localhost:7687\", \"ne)"
+evidence = "src/db/graph/query.rs:1643"
+#  1642 |     async fn test_get_file_entities() {
+#  1643 |         let graph_db = GraphDb::connect("bolt://localhost:7687", "neo4j", "password")
+#  1644 |             .await
+#  1645 |             .expect("Failed to connect to Neo4j");
+
+[[item]]
+target = "rust-14"
+entity = { file = "src/db/graph/query.rs", line = 1564, name = "test_get_entities_with_dependencies" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (let graph_db = GraphDb::connect(\"bolt://localhost:7687\", \"ne)"
+evidence = "src/db/graph/query.rs:1565"
+#  1564 |     async fn test_get_entities_with_dependencies() {
+#  1565 |         let graph_db = GraphDb::connect("bolt://localhost:7687", "neo4j", "password")
+#  1566 |             .await
+#  1567 |             .expect("Failed to connect to Neo4j");
+
+[[item]]
+target = "rust-15"
+entity = { file = "src/bin/knot.rs", line = 22, name = "main" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "main calls `VectorDb::connect` at knot.rs:39 (VectorConnectExt), not the ConnectExt trait"
+evidence = "src/bin/knot.rs:39"
+notable = true
+#    21 | #[tokio::main]
+#    22 | async fn main() -> anyhow::Result<()> {
+#    23 |     utils::init_logging_for_cli()?;
+#    24 | 
+
+[[item]]
+target = "rust-15"
+entity = { file = "src/mcp_handler.rs", line = 33, name = "KnotMcpHandler" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "KnotMcpHandler struct span has no ConnectExt text"
+evidence = "src/mcp_handler.rs:33"
+#    32 | /// without database/model dependencies.
+#    33 | pub struct KnotMcpHandler {
+#    34 |     pub vector_db: Option<Arc<VectorDb>>,
+#    35 |     pub graph_db: Option<Arc<GraphDb>>,
+
+[[item]]
+target = "rust-15"
+entity = { file = "benches/graph_upsert_bench.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use knot::db::graph::{ConnectExt, DeleteExt, GraphDb, Upsert)"
+evidence = "benches/graph_upsert_bench.rs:21"
+
+[[item]]
+target = "rust-15"
+entity = { file = "src/db/graph/connection.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (impl ConnectExt for GraphDb {)"
+evidence = "src/db/graph/connection.rs:47"
+
+[[item]]
+target = "rust-15"
+entity = { file = "src/db/graph/query.rs", line = 1543, name = "tests" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::db::graph::connection::ConnectExt;)"
+evidence = "src/db/graph/query.rs:1546"
+#  1545 |     use super::QueryExt;
+#  1546 |     use crate::db::graph::connection::ConnectExt;
+#  1547 | 
+#  1548 |     #[ignore = "requires local Neo4j instance running on bolt://localhost:7687"]
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/cli_tools/explore_file.rs", line = 31, name = "normalize_explore_input" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "normalize_explore_input span has no RepoScope text"
+evidence = "src/cli_tools/explore_file.rs:31"
+#    30 | ///    or `path/to/Cargo.toml` and still hit a stored entity.
+#    31 | pub fn normalize_explore_input(input: &str, repo_root: Option<&Path>) -> String {
+#    32 |     let mut normalized = input.replace('\\', "/");
+#    33 |     if normalized.starts_with("./") {
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/cli_tools/search_hybrid_context/mod.rs", line = 29, name = "recall" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "`pub mod recall;` owns no RepoScope site; the `use crate::models::RepoScope;` at mod.rs:35 is file-level"
+evidence = "src/cli_tools/search_hybrid_context/mod.rs:29"
+notable = true
+#    28 | pub mod rank;
+#    29 | pub mod recall;
+#    30 | 
+#    31 | use crate::db::{
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/cli_tools/list_files.rs", line = 648, name = "glob_pages_entire_graph_scope_without_dropping_matches" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (let repo_scope = RepoScope::All;)"
+evidence = "src/cli_tools/list_files.rs:666"
+#   665 | 
+#   666 |         let repo_scope = RepoScope::All;
+#   667 | 
+#   668 |         let res = run_list_files_with_fetcher(
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/bin/knot.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (models::{Cli, Commands, RepoScope},)"
+evidence = "src/bin/knot.rs:16"
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/bin/knot.rs", line = 212, name = "build_repo_scope" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (fn build_repo_scope(repo: Option<&str>, default: &str) -> Re)"
+evidence = "src/bin/knot.rs:212"
+#   211 | /// existing CLI invocations keep their current behavior.
+#   212 | fn build_repo_scope(repo: Option<&str>, default: &str) -> RepoScope {
+#   213 |     repo.map(RepoScope::parse)
+#   214 |         .unwrap_or_else(|| RepoScope::One(default.to_string()))
+
+[[item]]
+target = "rust-16"
+entity = { file = "src/bin/knot.rs", line = 259, name = "repo_flag_absent_uses_config_default" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (assert_eq!(scope, RepoScope::One(\"default-repo\".to_string()))"
+evidence = "src/bin/knot.rs:261"
+#   260 |         let scope = build_repo_scope(None, "default-repo");
+#   261 |         assert_eq!(scope, RepoScope::One("default-repo".to_string()));
+#   262 |     }
+#   263 | }
+
+[[item]]
+target = "rust-17"
+entity = { file = "src/pipeline/runner.rs", line = 36, name = "run_indexing_pipeline" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "run_indexing_pipeline span has no Embedder text"
+evidence = "src/pipeline/runner.rs:36"
+#    35 | /// gets the log lines for free without opting into the API).
+#    36 | pub async fn run_indexing_pipeline(
+#    37 |     cfg: &Config,
+#    38 |     vector_db: &Arc<VectorDb>,
+
+[[item]]
+target = "rust-17"
+entity = { file = "src/cli_tools/search_hybrid_context/mod.rs", line = 29, name = "recall" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "`pub mod recall;` owns no Embedder site; the use at mod.rs:36 is file-level"
+evidence = "src/cli_tools/search_hybrid_context/mod.rs:29"
+#    28 | pub mod rank;
+#    29 | pub mod recall;
+#    30 | 
+#    31 | use crate::db::{
+
+[[item]]
+target = "rust-17"
+entity = { file = "src/pipeline/runner.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (embed::{Embedder, needs_reset},)"
+evidence = "src/pipeline/runner.rs:17"
+
+[[item]]
+target = "rust-17"
+entity = { file = "src/pipeline/embed.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (impl Embedder {)"
+evidence = "src/pipeline/embed.rs:34"
+
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_tools/list_files.rs", line = 50, name = "ListFilesTool" }
+found_by = ["heuristic"]
+verdict = "fp"
+reason = "ListFilesTool struct span has no KnotMcpHandler text; the `handler: &KnotMcpHandler` parameter at line 68 is inside `handle`"
+evidence = "src/mcp_tools/list_files.rs:50"
+#    49 | #[derive(JsonSchema)]
+#    50 | pub struct ListFilesTool {
+#    51 |     #[json_schema(
+#    52 |         description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary) or glob pattern (segments: `*` segment wildcard, `**` any depth, `?` one char). Absolute paths under the local checkout are accepted and normalized like 'explore_file'. Omit to list every indexed file.",
+
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_tools/search_hybrid_context/mod.rs", line = 16, name = "format" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "`pub mod format;` owns no KnotMcpHandler site; the use at mod.rs:23 is file-level"
+evidence = "src/mcp_tools/search_hybrid_context/mod.rs:16"
+#    15 | 
+#    16 | pub mod format;
+#    17 | 
+#    18 | use rust_mcp_sdk::macros::{JsonSchema, mcp_tool};
+
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_tools/list_repositories.rs", line = 60, name = "ListRepositoriesTool" }
+found_by = ["knot_db", "heuristic"]
+verdict = "fp"
+reason = "ListRepositoriesTool struct span has no KnotMcpHandler text; the handler parameter is inside `handle`"
+evidence = "src/mcp_tools/list_repositories.rs:60"
+#    59 | #[derive(JsonSchema)]
+#    60 | pub struct ListRepositoriesTool {
+#    61 |     #[json_schema(
+#    62 |         description = "Optional filter to narrow down repositories by name (case-insensitive substring match). When provided, only repositories whose name contains this string are returned. Examples: 'auth' matches 'auth-service' and 'Auth-Lib', 'api' matches 'my-api'. Omit to list all indexed repositories.",
+
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_tools/search_hybrid_context/mod.rs", line = 0, name = "<file>" }
+found_by = ["lsp"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (use crate::mcp_handler::KnotMcpHandler;)"
+evidence = "src/mcp_tools/search_hybrid_context/mod.rs:23"
+
+[[item]]
+target = "rust-18"
+entity = { file = "src/mcp_tools/list_files.rs", line = 66, name = "handle" }
+found_by = ["lsp", "heuristic"]
+verdict = "tp"
+reason = "genuine reference site owned by the container (handler: &KnotMcpHandler,)"
+evidence = "src/mcp_tools/list_files.rs:68"
+#    67 |         params: CallToolRequestParams,
+#    68 |         handler: &KnotMcpHandler,
+#    69 |     ) -> std::result::Result<CallToolResult, CallToolError> {
+#    70 |         use crate::cli_tools;

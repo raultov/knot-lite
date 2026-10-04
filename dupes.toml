@@ -1,0 +1,61 @@
+# Duplication thresholds for knot-rag (cargo-dupes 0.2.1).
+#
+# Inherited from knot on 2026-10-03 (analysis scope + exclusions kept
+# verbatim). knot's ratchet counts encoded knot's own backlog; knot-rag
+# starts with none, so the ratchet starts at ZERO and may only stay there.
+#
+# IMPORTANT: cargo-dupes reads this file ONLY from the analysed directory
+# (no parent lookup) and `cargo dupes check` silently passes when no
+# dupes.toml is found. Every crate that is not at the repository root must
+# therefore carry a symlink to this file (docs/spikes/phase0/dupes.toml ->
+# ../../../dupes.toml); the Makefile refuses to run the gate without it.
+#
+# NOTE: cargo-dupes normalizes the AST (identifiers become positional
+# placeholders and literal VALUES are erased, though their types are kept).
+# Two functions that differ only in the string literals they embed therefore
+# collapse into one fingerprint. Handle such false positives through
+# .dupes-ignore.toml with a `reason`, never by raising the thresholds.
+
+# --- Analysis scope ---
+
+# Minimum source lines for a code unit to be considered.
+# (knot measurement) Measured curve (exact duplicate groups): 0 -> 38 | 5 -> 23 | 10 -> 19
+#                                          15 -> 13 | 20 -> 5
+# Below 10 lines an extracted helper is rarely an improvement, and the group
+# count explodes. 10 is the useful point. Later target: keep at 10 and drive
+# the group count to 0 instead.
+min_lines = 10
+
+# Minimum AST node count. Left at the tool default; min_lines is the axis that
+# actually discriminates useful findings in this codebase.
+min_nodes = 10
+
+# Similarity threshold for near duplicates. Sweeping 0.8 -> 0.9 does not change
+# the result on this tree (both hits sit at 92% and 99%), so the default stands.
+similarity_threshold = 0.8
+
+# --- Exclusions ---
+
+# Test code is structurally repetitive by design (arrange/act/assert) and
+# gating on it yields permanent false positives: without exclusions the repo
+# reports 246 groups / 16.7%, with them 19 groups / 4.0%.
+#
+# exclude_tests drops #[test] functions and #[cfg(test)] modules, but it only
+# sees the file being parsed: helpers in src/**/tests.rs are invisible to it
+# because the #[cfg(test)] attribute lives on the parent's `mod tests;`
+# declaration. Hence the explicit "tests.rs" pattern.
+#
+# Patterns are plain substring matches on the path; the trailing slash on
+# "tests/" and "benches/" keeps them from matching unrelated files.
+exclude_tests = true
+exclude = ["tests/", "benches/", "tests.rs"]
+
+# --- CI thresholds (consumed by `cargo dupes check`) ---
+#
+# RATCHET: greenfield project, no accepted backlog. These values may only
+# ever be lowered, which at zero means: extract a shared, parameterised
+# helper instead of duplicating code.
+max_exact_duplicates = 0
+max_near_duplicates = 0
+max_exact_percent = 0.0
+max_near_percent = 0.0

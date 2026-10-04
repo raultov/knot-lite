@@ -1,0 +1,193 @@
+[
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "main in src/bin/knot-indexer.rs"
+    ],
+    "dependencies": [
+      "connect",
+      "ensure_indexes",
+      "ensure_collection",
+      "connect"
+    ],
+    "docstring": "Initialize database connections and perform pre-flight checks.\nConnects to Qdrant and Neo4j, creates the Qdrant collection if it doesn't exist,\nand ensures Neo4j indexes are present.",
+    "file_path": "src/db/mod.rs",
+    "fqn": "knot::db::init_databases",
+    "kind": "rust_function",
+    "name": "init_databases",
+    "repo_name": "knot",
+    "signature": "(cfg: &Config)",
+    "start_line": 17,
+    "uuid": "0128e3b1-7019-578b-940a-7988eb19a05a"
+  },
+  {
+    "dependencies": [
+      "connect"
+    ],
+    "docstring": "",
+    "file_path": "src/db/vector/connection.rs",
+    "fqn": "knot::db::vector::connection::tests::test_vector_db_connection",
+    "kind": "rust_function",
+    "name": "test_vector_db_connection",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 129,
+    "uuid": "17438552-58d8-559c-a2c1-030a6a43d7ff"
+  },
+  {
+    "caller_count": 153,
+    "caller_samples": [
+      "exercise_qualified_calls in tests/testing_files/rust/sample.rs",
+      "exercise_qualified_calls in tests/testing_files/rust/sample.rs",
+      "new in src/mcp_handler.rs"
+    ],
+    "dependencies": [
+      "connect",
+      "new",
+      "init",
+      "connect"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::KnotMcpHandler::new",
+    "kind": "rust_method",
+    "name": "new",
+    "repo_name": "knot",
+    "signature": "(\n        qdrant_url: &str,\n        qdrant_collection: &str,\n        neo4j_uri: &str,\n        neo4j_user: &str,\n        neo4j_password: &str,\n        embed_dim: u64,\n        cache_dir: std::path::PathBuf,\n    )",
+    "start_line": 46,
+    "uuid": "c6122fba-fc3c-5cd5-bcd5-93aa7f65934f"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "repo_embed_markers in src/db/graph/query_repo.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Build a marker straight from the Neo4j `:Repository` row parsed with\n`coalesce` fallbacks (`''` / `-1` map to `None`).",
+    "file_path": "src/startup_guard.rs",
+    "fqn": "knot::startup_guard::RepoEmbedMarker::from_row",
+    "kind": "rust_method",
+    "name": "from_row",
+    "repo_name": "knot",
+    "signature": "(\n        repo_name: String,\n        embed_model: String,\n        embed_dim: i64,\n        qdrant_collection: String,\n    )",
+    "start_line": 104,
+    "uuid": "bb9572a6-f8c4-5fd5-a5c6-014568447264"
+  },
+  {
+    "caller_count": 103,
+    "caller_samples": [
+      "loadData in tests/testing_files/kotlin/sample.kt",
+      "result in tests/testing_files/kotlin/sample.kt",
+      "main in tests/testing_files/kotlin/sample.kt"
+    ],
+    "dependencies": [],
+    "docstring": "Connect to Qdrant and return a ready-to-use [`VectorDb`].",
+    "file_path": "src/db/vector/connection.rs",
+    "fqn": "knot::db::vector::connection::VectorDb::connect",
+    "kind": "rust_method",
+    "name": "connect",
+    "repo_name": "knot",
+    "signature": "(url: &str, collection: &str, embed_dim: u64)",
+    "start_line": 64,
+    "uuid": "439a2be9-a979-5e4c-b7b7-dc30cd378a8a"
+  },
+  {
+    "dependencies": [
+      "ingest_batch",
+      "connect",
+      "connect"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/batch.rs",
+    "fqn": "knot::pipeline::ingest::batch::tests::test_ingest_batch_empty",
+    "kind": "rust_function",
+    "name": "test_ingest_batch_empty",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 51,
+    "uuid": "d6da67f0-10bd-5e83-bfca-b364d5a000a0"
+  },
+  {
+    "dependencies": [
+      "repo_name",
+      "resolve_repo_path",
+      "repo_path",
+      "collection_was_supplied",
+      "resolve_repo_name",
+      "qdrant_collection",
+      "load_knot_env",
+      "repo_name",
+      "neo4j_password"
+    ],
+    "docstring": "Common shared logic for loading environment and resolving repo_path/repo_name.\nParses the CLI generically via the two-step matches round-trip so the\n`qdrant_collection` `ValueSource` can be inspected (an explicitly\nsupplied collection must win over the model-derived default).\nReturns `(cli, collection_supplied, repo_path, repo_name, neo4j_password)`.",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::Config::load_env_and_parse",
+    "kind": "rust_method",
+    "name": "load_env_and_parse",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 552,
+    "uuid": "787bec70-c77a-5698-be56-b99ed4b20b16"
+  },
+  {
+    "dependencies": [
+      "connect",
+      "ensure_collection"
+    ],
+    "docstring": "",
+    "file_path": "src/db/vector/connection.rs",
+    "fqn": "knot::db::vector::connection::tests::test_vector_db_ensure_collection_idempotent",
+    "kind": "rust_function",
+    "name": "test_vector_db_ensure_collection_idempotent",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 149,
+    "uuid": "f9c49242-32b6-5edd-be07-58f0684f2f1b"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "inject_custom_ca_certs",
+      "setup_watch_mode",
+      "load_for_indexer",
+      "init_databases",
+      "init_logging",
+      "load_indexer",
+      "run_indexing_pipeline",
+      "configure_rayon",
+      "print_startup_banner",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot-indexer.rs",
+    "fqn": "knot::bin::knot-indexer::main",
+    "kind": "rust_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 17,
+    "uuid": "64fd7e6c-a7f2-50c2-b3f1-da76b6a3579e"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Thin wrapper around the Qdrant async client.",
+    "file_path": "src/db/vector/mod.rs",
+    "fqn": "knot::db::vector::VectorDb",
+    "kind": "rust_struct",
+    "name": "VectorDb",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 18,
+    "type_usage_count": 39,
+    "type_usage_samples": [
+      "recall in src/cli_tools/search_hybrid_context/mod.rs",
+      "SearchContext in src/cli_tools/search_hybrid_context/mod.rs",
+      "init_databases in src/db/mod.rs"
+    ],
+    "uuid": "5d548b0b-ef96-548d-bab1-1769a2123ddb"
+  }
+]

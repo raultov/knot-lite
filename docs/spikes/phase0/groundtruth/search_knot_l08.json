@@ -1,0 +1,125 @@
+[
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "README.md",
+    "fqn": "README.md::knot > 📖 Usage > 🤖 Install Agent Skills For AI Agents",
+    "kind": "markdown_section",
+    "name": "🤖 Install Agent Skills For AI Agents",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 300,
+    "uuid": "752ace8c-a7dc-572d-925f-5b54086dc685"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/mcp_tools/mod.rs",
+    "fqn": "knot::mcp_tools::tests::test_all_tools_have_input_schema",
+    "kind": "rust_function",
+    "name": "test_all_tools_have_input_schema",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 137,
+    "uuid": "a398592d-16b5-5f89-ae0c-43ed776e261d"
+  },
+  {
+    "dependencies": [
+      "assert_regression_first",
+      "ranked_pool"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::regression_java_spring_ai_chat_client_create",
+    "kind": "rust_function",
+    "name": "regression_java_spring_ai_chat_client_create",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1715,
+    "uuid": "3dd963bc-64eb-5f68-a719-3213b2bd77ac"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "kind": "markdown_section",
+    "name": "v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1447,
+    "uuid": "9b1c0d58-4f0e-5fdf-86ce-15d23bba7ca2"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "kind": "markdown_section",
+    "name": "v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1475,
+    "uuid": "1b9bbe6e-126b-5fac-a9cc-02b938a0c57b"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "kind": "markdown_section",
+    "name": "v0.8.4 — Agent-Skills Documentation Installer & Lightweight Clients",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1451,
+    "uuid": "fe53d972-53a7-55a4-aed2-ee0ef8e34826"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "kind": "markdown_section",
+    "name": "v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1101,
+    "uuid": "3f36fd9e-7abe-56c4-b058-b34a2e6a5922"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "kind": "markdown_section",
+    "name": "v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1073,
+    "uuid": "5364319d-11ae-5835-b62f-61737774c444"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "CHANGELOG.md",
+    "fqn": "CHANGELOG.md::Changelog > v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "kind": "markdown_section",
+    "name": "v1.4.12 — Python Constructor Call Resolution & Agent Skills Packaging",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 1077,
+    "uuid": "bbeb47ba-3744-5b4c-b0d2-7a6527351f05"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "README.md",
+    "fqn": "README.md::knot > 📖 Usage > 📖 Agent-Skills Guides",
+    "kind": "markdown_section",
+    "name": "📖 Agent-Skills Guides",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 321,
+    "uuid": "b62be128-289b-5cd0-bed9-51b2363cedc6"
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "calls": [
+    {
+      "file_path": "src/bin/knot-mcp.rs",
+      "kind": "rust_function",
+      "name": "main",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 21,
+      "target_file_path": "src/startup_guard.rs",
+      "target_fqn": "knot::startup_guard::verify_startup",
+      "target_name": "verify_startup",
+      "target_repo_name": "knot",
+      "target_signature": "(cfg: &crate::config::Config)",
+      "target_start_line": 34
+    },
+    {
+      "file_path": "src/bin/knot.rs",
+      "kind": "rust_function",
+      "name": "main",
+      "rel_type": "CALLS",
+      "repo_name": "knot",
+      "signature": "()",
+      "start_line": 22,
+      "target_file_path": "src/startup_guard.rs",
+      "target_fqn": "knot::startup_guard::verify_startup",
+      "target_name": "verify_startup",
+      "target_repo_name": "knot",
+      "target_signature": "(cfg: &crate::config::Config)",
+      "target_start_line": 34
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "verify_startup",
+    "targets": [
+      {
+        "file_path": "src/startup_guard.rs",
+        "fqn": "knot::startup_guard::verify_startup",
+        "kind": "rust_function",
+        "name": "verify_startup",
+        "repo_name": "knot",
+        "start_line": 34,
+        "uuid": "5e078f28-327d-54b0-a336-151250ce0886"
+      }
+    ],
+    "tier": "exact_name",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

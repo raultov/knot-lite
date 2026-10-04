@@ -1,0 +1,167 @@
+[
+  {
+    "dependencies": [
+      "entry",
+      "pending",
+      "settle",
+      "approved",
+      "emit"
+    ],
+    "docstring": "",
+    "file_path": "src/state/consentStore.ts",
+    "fqn": "consentStore",
+    "kind": "constant",
+    "name": "consentStore",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 41,
+    "uuid": "835748a7-4adc-5851-b2ba-7d8f759533bd"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "copyInstallCommand in src/webmcp/tools/copyInstallCommand.ts",
+      "approved in src/webmcp/tools/copyInstallCommand.ts"
+    ],
+    "dependencies": [
+      "settle",
+      "entry",
+      "emit",
+      "pending"
+    ],
+    "docstring": "",
+    "file_path": "src/state/consentStore.ts",
+    "fqn": "request",
+    "kind": "method",
+    "name": "request",
+    "repo_name": "knot-site",
+    "signature": "(reason: string, signal?: AbortSignal)",
+    "start_line": 51,
+    "uuid": "44059fc5-1fa8-5302-b84e-bd5c7a803071"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/consentStore.ts",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "ab96607c-3bbd-576a-90de-e57bcdb0fc16"
+  },
+  {
+    "dependencies": [
+      "respond",
+      "onKeyDown"
+    ],
+    "docstring": "Confirmation modal for agent-initiated actions that touch the user's\nmachine (clipboard writes). The decision is ALWAYS human: the pending\npromise only resolves when Allow or Deny is clicked, or Escape denies.",
+    "file_path": "src/components/ConsentModal.tsx",
+    "fqn": "ConsentModal",
+    "kind": "function",
+    "name": "ConsentModal",
+    "repo_name": "knot-site",
+    "signature": "()",
+    "start_line": 10,
+    "type_usage_count": 1,
+    "type_usage_samples": [
+      "<module> in src/components/ConsentModal.tsx"
+    ],
+    "uuid": "e7eaf77e-bbed-5220-8b53-cc848a6e703e"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/consentStore.ts",
+    "fqn": "ConsentRequest",
+    "kind": "interface",
+    "name": "ConsentRequest",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 11,
+    "type_usage_count": 2,
+    "type_usage_samples": [
+      "<module> in src/state/consentStore.ts",
+      "snapshot in src/state/consentStore.ts"
+    ],
+    "uuid": "ae39b194-0a58-57e6-8359-66ef3263274b"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "ConsentModal in src/components/ConsentModal.tsx",
+      "onKeyDown in src/components/ConsentModal.tsx"
+    ],
+    "dependencies": [
+      "pending",
+      "approved",
+      "settle"
+    ],
+    "docstring": "",
+    "file_path": "src/state/consentStore.ts",
+    "fqn": "respond",
+    "kind": "method",
+    "name": "respond",
+    "repo_name": "knot-site",
+    "signature": "(approved: boolean)",
+    "start_line": 68,
+    "uuid": "9b074fdc-d80c-5044-8580-309cf46c8023"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "ConsentModal in src/components/ConsentModal.tsx",
+      "onKeyDown in src/components/ConsentModal.tsx"
+    ],
+    "dependencies": [
+      "onKeyDown",
+      "respond"
+    ],
+    "docstring": "Confirmation modal for agent-initiated actions that touch the user's\nmachine (clipboard writes). The decision is ALWAYS human: the pending\npromise only resolves when Allow or Deny is clicked, or Escape denies.",
+    "file_path": "src/components/ConsentModal.tsx",
+    "fqn": "onKeyDown",
+    "kind": "function",
+    "name": "onKeyDown",
+    "repo_name": "knot-site",
+    "signature": "(event: globalThis.KeyboardEvent)",
+    "start_line": 34,
+    "uuid": "d40acbd4-9ef4-5773-9522-fc53939c056d"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "<module> in scripts/webmcp-budget.mjs",
+      "withLogging in src/webmcp/invocationLog.ts",
+      "result in src/webmcp/invocationLog.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/toolcore/types.ts",
+    "fqn": "ToolDefinition.execute",
+    "kind": "method",
+    "name": "execute",
+    "repo_name": "knot-site",
+    "signature": "(input: TInput)",
+    "start_line": 68,
+    "uuid": "35c98c9a-2116-5707-af94-39424169b118"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/toolcore/types.ts",
+    "fqn": "ToolDefinition",
+    "kind": "interface",
+    "name": "ToolDefinition",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 61,
+    "type_usage_count": 14,
+    "type_usage_samples": [
+      "<module> in functions/mcp.ts",
+      "toMcpTool in functions/mcp.ts",
+      "<module> in src/toolcore/definitions/compareKnotEditions.ts"
+    ],
+    "uuid": "b77cc608-1103-5434-ad45-e4cc33ad6e96"
+  }
+]

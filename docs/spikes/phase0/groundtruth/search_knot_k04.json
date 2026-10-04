@@ -1,0 +1,184 @@
+[
+  {
+    "dependencies": [
+      "lexical_boost",
+      "lexical_boost_in_context"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/search_hybrid_context/rank.rs",
+    "fqn": "knot::cli_tools::search_hybrid_context::rank::tests::generic_name_boost_attenuated_without_context",
+    "kind": "rust_function",
+    "name": "generic_name_boost_attenuated_without_context",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 1521,
+    "uuid": "a7905da2-80d9-5a18-98b6-51bc1c29495f"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "extract_single_delegation in src/pipeline/parser/languages/kotlin.rs"
+    ],
+    "dependencies": [
+      "node_text"
+    ],
+    "docstring": "Walk down from a delegation_specifier to find the user_type → identifier text.",
+    "file_path": "src/pipeline/parser/languages/kotlin.rs",
+    "fqn": "knot::pipeline::parser::languages::kotlin::extract_delegation_type_name",
+    "kind": "rust_function",
+    "name": "extract_delegation_type_name",
+    "repo_name": "knot",
+    "signature": "(specifier: Node<'_>, source: &[u8])",
+    "start_line": 356,
+    "uuid": "642af5ef-dd8f-52e5-8e0d-62a215d56745"
+  },
+  {
+    "dependencies": [
+      "identifier_tokens"
+    ],
+    "docstring": "",
+    "file_path": "src/utils/identifiers.rs",
+    "fqn": "knot::utils::identifiers::tests::tokenizes_snake_case",
+    "kind": "rust_function",
+    "name": "tokenizes_snake_case",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 64,
+    "uuid": "9b5aea02-8040-5f98-bc52-9336da9a8b97"
+  },
+  {
+    "dependencies": [
+      "identifier_token_phrase",
+      "identifier_tokens"
+    ],
+    "docstring": "",
+    "file_path": "src/utils/identifiers.rs",
+    "fqn": "knot::utils::identifiers::tests::tokenizes_camel_case",
+    "kind": "rust_function",
+    "name": "tokenizes_camel_case",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 52,
+    "uuid": "cc8f3145-1b2f-57c0-afe0-b6b5722bcce1"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs"
+    ],
+    "dependencies": [
+      "find_callers_query"
+    ],
+    "docstring": "Find all entities that call a given entity (reverse dependency lookup).\n*Deprecated:** Use `find_references()` instead for comprehensive relationship tracking.",
+    "file_path": "src/db/graph/query.rs",
+    "fqn": "knot::db::graph::query::GraphDb::find_callers",
+    "kind": "rust_method",
+    "name": "find_callers",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        entity_name: &str,\n        repo_names: &[String],\n    )",
+    "start_line": 1146,
+    "uuid": "74ec75de-fbb5-53cf-a2a9-f4f81d569fcc"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs"
+    ],
+    "dependencies": [
+      "find_callers_query"
+    ],
+    "docstring": "Find all entities that call a given entity (reverse dependency lookup).\n*Deprecated:** Use `find_references()` instead for comprehensive relationship tracking.",
+    "file_path": "src/db/graph/query.rs",
+    "fqn": "knot::db::graph::query::GraphDb::find_callers",
+    "kind": "rust_method",
+    "name": "find_callers",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        entity_name: &str,\n        repo_names: &[String],\n    )",
+    "start_line": 1147,
+    "uuid": "329826f2-27fd-513c-a4fb-0dbdace2910a"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs"
+    ],
+    "dependencies": [
+      "find_callers_query"
+    ],
+    "docstring": "Find all entities that call a given entity (reverse dependency lookup).\n*Deprecated:** Use `find_references()` instead for comprehensive relationship tracking.",
+    "file_path": "src/db/graph/query.rs",
+    "fqn": "knot::db::graph::query::GraphDb::find_callers",
+    "kind": "rust_method",
+    "name": "find_callers",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        entity_name: &str,\n        repo_names: &[String],\n    )",
+    "start_line": 1145,
+    "uuid": "34566c2a-259b-5fb1-887d-4983c653953d"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs"
+    ],
+    "dependencies": [
+      "find_callers_query"
+    ],
+    "docstring": "Find all entities that call a given entity (reverse dependency lookup).\n*Deprecated:** Use `find_references()` instead for comprehensive relationship tracking.",
+    "file_path": "src/db/graph/query.rs",
+    "fqn": "knot::db::graph::query::GraphDb::find_callers",
+    "kind": "rust_method",
+    "name": "find_callers",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        entity_name: &str,\n        repo_names: &[String],\n    )",
+    "start_line": 1160,
+    "uuid": "4141fcec-dd48-5863-99b4-47d613501bb3"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs",
+      "test_find_callers in src/db/graph/query.rs"
+    ],
+    "dependencies": [
+      "find_callers_query"
+    ],
+    "docstring": "Find all entities that call a given entity (reverse dependency lookup).\n*Deprecated:** Use `find_references()` instead for comprehensive relationship tracking.",
+    "file_path": "src/db/graph/query.rs",
+    "fqn": "knot::db::graph::query::GraphDb::find_callers",
+    "kind": "rust_method",
+    "name": "find_callers",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        entity_name: &str,\n        repo_names: &[String],\n    )",
+    "start_line": 1159,
+    "uuid": "a78c5bc9-7fc5-506a-9869-da27aa9dde1b"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "find_this_member in src/pipeline/parser/languages/javascript/tests.rs"
+    ],
+    "dependencies": [
+      "find_this_member",
+      "children",
+      "extract_single_call_intent_javascript"
+    ],
+    "docstring": "find member_expression: this.myProperty",
+    "file_path": "src/pipeline/parser/languages/javascript/tests.rs",
+    "fqn": "knot::pipeline::parser::languages::javascript::tests::find_this_member",
+    "kind": "rust_function",
+    "name": "find_this_member",
+    "repo_name": "knot",
+    "signature": "(node: tree_sitter::Node<'_>)",
+    "start_line": 108,
+    "uuid": "7479d6e2-1dbb-5b61-aab8-860af42d44a6"
+  }
+]

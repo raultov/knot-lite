@@ -1,0 +1,243 @@
+[
+  {
+    "caller_count": 33,
+    "caller_samples": [
+      "mutate in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "model in models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java",
+      "mutate in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/DeepSeekChatOptions.java"
+    ],
+    "dependencies": [
+      "self"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-openai/src/main/java/org/springframework/ai/openai/AbstractOpenAiOptions.java",
+    "fqn": "org.springframework.ai.openai.AbstractOpenAiOptions.model",
+    "kind": "method",
+    "name": "model",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable String model)",
+    "start_line": 253,
+    "uuid": "b3ee144f-8667-5c9c-bef5-ae49222089a1"
+  },
+  {
+    "caller_count": 23,
+    "caller_samples": [
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java",
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java",
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java"
+    ],
+    "dependencies": [
+      "getModel"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiModerationOptions.java",
+    "fqn": "org.springframework.ai.openai.OpenAiModerationOptions.merge",
+    "kind": "method",
+    "name": "merge",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable ModerationOptions options)",
+    "start_line": 109,
+    "uuid": "0dc964ca-0df2-5cfc-894d-12a88692732b"
+  },
+  {
+    "caller_count": 9,
+    "caller_samples": [
+      "prompt in spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/DefaultChatClient.java",
+      "ollamaChatRequest in models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/OllamaChatModel.java",
+      "options in models/spring-ai-ollama/src/test/java/org/springframework/ai/ollama/OllamaEmbeddingModelTests.java"
+    ],
+    "dependencies": [],
+    "docstring": "Sets the default options.\n@param options The default options to use\n@return This builder",
+    "file_path": "models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiAudioSpeechModel.java",
+    "fqn": "org.springframework.ai.openai.OpenAiAudioSpeechModel.options",
+    "kind": "method",
+    "name": "options",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable OpenAiAudioSpeechOptions options)",
+    "start_line": 399,
+    "uuid": "af223b60-a83c-5323-89ca-1d7da2db6c39"
+  },
+  {
+    "caller_count": 23,
+    "caller_samples": [
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java",
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java",
+      "merge in models/spring-ai-deepseek/src/main/java/org/springframework/ai/deepseek/api/DeepSeekStreamFunctionCallingHelper.java"
+    ],
+    "dependencies": [
+      "getKnownSpeakerReferences",
+      "getKnownSpeakerNames",
+      "getTimestampGranularities",
+      "getTemperature",
+      "getPrompt",
+      "getChunkingStrategy",
+      "isDiarizedJsonWorkaroundEnabled",
+      "getResponseFormat",
+      "getModel",
+      "getLanguage"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiAudioTranscriptionOptions.java",
+    "fqn": "org.springframework.ai.openai.OpenAiAudioTranscriptionOptions.merge",
+    "kind": "method",
+    "name": "merge",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable AudioTranscriptionOptions from)",
+    "start_line": 241,
+    "uuid": "50ed5a5b-2da1-56ad-9e66-5c175d2065c5"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/models/spring-ai-autoconfigure-model-ollama/src/main/java/org/springframework/ai/model/ollama/autoconfigure/OllamaChatProperties.java",
+    "fqn": "org.springframework.ai.model.ollama.autoconfigure.OllamaChatProperties.Options",
+    "kind": "class",
+    "name": "Options",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 454,
+    "type_usage_count": 69,
+    "type_usage_samples": [
+      "AnthropicChatProperties in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java",
+      "getOptions in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java",
+      "setOptions in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java"
+    ],
+    "uuid": "a6fc6a73-1b65-5436-82bf-110c1416ab50"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "auto-configurations/models/spring-ai-autoconfigure-model-openai/src/main/java/org/springframework/ai/model/openai/autoconfigure/OpenAiModerationProperties.java",
+    "fqn": "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationProperties.Options",
+    "kind": "class",
+    "name": "Options",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 66,
+    "type_usage_count": 69,
+    "type_usage_samples": [
+      "AnthropicChatProperties in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java",
+      "getOptions in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java",
+      "setOptions in auto-configurations/models/spring-ai-autoconfigure-model-anthropic/src/main/java/org/springframework/ai/model/anthropic/autoconfigure/AnthropicChatProperties.java"
+    ],
+    "uuid": "085cf502-5237-5aee-9d30-e48201c79728"
+  },
+  {
+    "caller_count": 13,
+    "caller_samples": [
+      "call in models/spring-ai-bedrock/src/main/java/org/springframework/ai/bedrock/cohere/BedrockCohereEmbeddingModel.java",
+      "buildEmbeddingRequest in models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/OllamaEmbeddingModel.java",
+      "mergeOptions in models/spring-ai-postgresml/src/test/java/org/springframework/ai/postgresml/PostgresMlEmbeddingOptionsTests.java"
+    ],
+    "dependencies": [
+      "getClipGuidancePreset",
+      "getStylePreset",
+      "getNumBatch",
+      "getSeed",
+      "mergeOption",
+      "getHeight",
+      "getWidth",
+      "builder",
+      "getCfgScale",
+      "getSteps",
+      "getModel",
+      "build",
+      "getResponseFormat",
+      "getSampler"
+    ],
+    "docstring": "Merge runtime and default {@link ImageOptions} to compute the final options to use\nin the request. Protected access for testing purposes, though maybe useful for\nfuture subclassing as options change.",
+    "file_path": "models/spring-ai-stability-ai/src/main/java/org/springframework/ai/stabilityai/StabilityAiImageModel.java",
+    "fqn": "org.springframework.ai.stabilityai.StabilityAiImageModel.mergeOptions",
+    "kind": "method",
+    "name": "mergeOptions",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable ImageOptions runtimeOptions, StabilityAiImageOptions options)",
+    "start_line": 122,
+    "uuid": "55a5f5df-c9d6-5ce0-86d6-ad13e2164e3b"
+  },
+  {
+    "caller_count": 13,
+    "caller_samples": [
+      "call in models/spring-ai-bedrock/src/main/java/org/springframework/ai/bedrock/cohere/BedrockCohereEmbeddingModel.java",
+      "buildEmbeddingRequest in models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/OllamaEmbeddingModel.java",
+      "mergeOptions in models/spring-ai-postgresml/src/test/java/org/springframework/ai/postgresml/PostgresMlEmbeddingOptionsTests.java"
+    ],
+    "dependencies": [
+      "getTransformer",
+      "getMetadataMode",
+      "getKwargs",
+      "kwargs",
+      "build",
+      "builder",
+      "mergeOption",
+      "vectorType",
+      "getVectorType",
+      "transformer"
+    ],
+    "docstring": "Merge the default and request options.\n@param requestOptions request options to merge.\n@return the merged options.",
+    "file_path": "models/spring-ai-postgresml/src/main/java/org/springframework/ai/postgresml/PostgresMlEmbeddingModel.java",
+    "fqn": "org.springframework.ai.postgresml.PostgresMlEmbeddingModel.mergeOptions",
+    "kind": "method",
+    "name": "mergeOptions",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable EmbeddingOptions requestOptions)",
+    "start_line": 156,
+    "uuid": "398efd60-bf35-5614-98ae-5daf9b78c2d7"
+  },
+  {
+    "caller_count": 13,
+    "caller_samples": [
+      "call in models/spring-ai-bedrock/src/main/java/org/springframework/ai/bedrock/cohere/BedrockCohereEmbeddingModel.java",
+      "buildEmbeddingRequest in models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/OllamaEmbeddingModel.java",
+      "mergeOptions in models/spring-ai-postgresml/src/test/java/org/springframework/ai/postgresml/PostgresMlEmbeddingOptionsTests.java"
+    ],
+    "dependencies": [
+      "getF16KV",
+      "getUseMMap",
+      "getNumGPU",
+      "getVocabOnly",
+      "getUseMLock",
+      "getMainGPU",
+      "getLogitsAll",
+      "getNumBatch",
+      "getTruncate",
+      "getKeepAlive",
+      "getLowVRAM",
+      "getNumCtx",
+      "getModel",
+      "builder",
+      "mergeOption",
+      "getUseNUMA",
+      "getNumThread",
+      "build",
+      "getDimensions"
+    ],
+    "docstring": "",
+    "file_path": "models/spring-ai-ollama/src/main/java/org/springframework/ai/ollama/OllamaEmbeddingModel.java",
+    "fqn": "org.springframework.ai.ollama.OllamaEmbeddingModel.mergeOptions",
+    "kind": "method",
+    "name": "mergeOptions",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable EmbeddingOptions requestOptions)",
+    "start_line": 159,
+    "uuid": "25493e0f-3237-50d0-a680-4dc8d20e9176"
+  },
+  {
+    "caller_count": 12,
+    "caller_samples": [
+      "mergeOptions in models/spring-ai-bedrock/src/main/java/org/springframework/ai/bedrock/cohere/BedrockCohereEmbeddingModel.java",
+      "buildEmbeddingRequest in models/spring-ai-google-genai-embedding/src/main/java/org/springframework/ai/google/genai/text/GoogleGenAiTextEmbeddingModel.java",
+      "buildImagePrompt in models/spring-ai-google-genai-image/src/main/java/org/springframework/ai/google/genai/image/GoogleGenAiImageModel.java"
+    ],
+    "dependencies": [],
+    "docstring": "Return the runtime value if not null, or else the default value.",
+    "file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/ModelOptionsUtils.java",
+    "fqn": "org.springframework.ai.model.ModelOptionsUtils.mergeOption",
+    "kind": "method",
+    "name": "mergeOption",
+    "repo_name": "spring-ai",
+    "signature": "(@Nullable T runtimeValue, @Nullable T defaultValue)",
+    "start_line": 38,
+    "uuid": "8014f121-a187-5d29-b300-b35734ef2352"
+  }
+]

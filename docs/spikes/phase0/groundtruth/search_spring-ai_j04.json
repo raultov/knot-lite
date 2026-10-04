@@ -1,0 +1,160 @@
+[
+  {
+    "dependencies": [
+      "NonTransientAiException",
+      "TransientAiException",
+      "handleError",
+      "getExcludeOnHttpCodes",
+      "getOnHttpCodes",
+      "isOnClientErrors"
+    ],
+    "docstring": "",
+    "file_path": "auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+    "fqn": "org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration.responseErrorHandler",
+    "kind": "method",
+    "name": "responseErrorHandler",
+    "repo_name": "spring-ai",
+    "signature": "(SpringAiRetryProperties properties)",
+    "start_line": 91,
+    "uuid": "689dfd7a-e55d-5b4d-b97b-b5b976b522fb"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "handleError in spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java",
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "handleError in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java"
+    ],
+    "dependencies": [
+      "NonTransientAiException",
+      "getOnHttpCodes",
+      "getExcludeOnHttpCodes",
+      "isOnClientErrors",
+      "TransientAiException"
+    ],
+    "docstring": "",
+    "file_path": "auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+    "fqn": "org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration.handleError",
+    "kind": "method",
+    "name": "handleError",
+    "repo_name": "spring-ai",
+    "signature": "(ClientHttpResponse response)",
+    "start_line": 106,
+    "uuid": "8bfb8acf-9589-5f2c-8e0d-a8aa267d958d"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "handleError in spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java",
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "handleError in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java"
+    ],
+    "dependencies": [
+      "TransientAiException",
+      "NonTransientAiException"
+    ],
+    "docstring": "",
+    "file_path": "spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java",
+    "fqn": "org.springframework.ai.retry.RetryUtils.handleError",
+    "kind": "method",
+    "name": "handleError",
+    "repo_name": "spring-ai",
+    "signature": "(final ClientHttpResponse response)",
+    "start_line": 79,
+    "uuid": "fd89db74-cd68-5042-84ac-e9a3d655a13b"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-retry/src/main/java/org/springframework/ai/retry/TransientAiException.java",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "8d424ab9-c476-52bb-869f-4ef8d6741d6b"
+  },
+  {
+    "caller_count": 17,
+    "caller_samples": [
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "handleError in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "deepSeekChatTransientError in models/spring-ai-deepseek/src/test/java/org/springframework/ai/deepseek/DeepSeekRetryTests.java"
+    ],
+    "dependencies": [],
+    "docstring": "Root of the hierarchy of Model access exceptions that are considered transient - where\na previously failed operation might be able to succeed when the operation is retried\nwithout any intervention.\n@author Christian Tzolov\n@since 0.8.1",
+    "file_path": "spring-ai-retry/src/main/java/org/springframework/ai/retry/TransientAiException.java",
+    "fqn": "org.springframework.ai.retry.TransientAiException",
+    "kind": "class",
+    "name": "TransientAiException",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 29,
+    "type_usage_count": 41,
+    "type_usage_samples": [
+      "<module> in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "SpringAiRetryAutoConfiguration in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "retryTemplate in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java"
+    ],
+    "uuid": "9318492d-e6fa-59fc-b794-06ac021bdda8"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "handleError in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "ollamaChatNonTransientErrorShouldNotRetry in models/spring-ai-ollama/src/test/java/org/springframework/ai/ollama/OllamaRetryTests.java"
+    ],
+    "dependencies": [],
+    "docstring": "Root of the hierarchy of Model access exceptions that are considered non-transient -\nwhere a retry of the same operation would fail unless the cause of the Exception is\ncorrected.\n@author Christian Tzolov\n@since 0.8.1",
+    "file_path": "spring-ai-retry/src/main/java/org/springframework/ai/retry/NonTransientAiException.java",
+    "fqn": "org.springframework.ai.retry.NonTransientAiException",
+    "kind": "class",
+    "name": "NonTransientAiException",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 29,
+    "type_usage_count": 14,
+    "type_usage_samples": [
+      "<module> in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "SpringAiRetryAutoConfiguration in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java"
+    ],
+    "uuid": "83eadeba-1186-5f76-ba97-1c3d4523b017"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Properties for AI Retry.\n@author Christian Tzolov",
+    "file_path": "auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryProperties.java",
+    "fqn": "org.springframework.ai.retry.autoconfigure.SpringAiRetryProperties.SpringAiRetryProperties",
+    "kind": "class",
+    "name": "SpringAiRetryProperties",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 32,
+    "type_usage_count": 6,
+    "type_usage_samples": [
+      "SpringAiRetryAutoConfiguration in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "retryTemplate in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java",
+      "responseErrorHandler in auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java"
+    ],
+    "uuid": "8ed938f6-c61e-559c-bb6b-e8876d7e62fb"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "hasError in spring-ai-retry/src/test/java/org/springframework/ai/retry/RetryUtilsTests.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java",
+    "fqn": "org.springframework.ai.retry.RetryUtils.hasError",
+    "kind": "method",
+    "name": "hasError",
+    "repo_name": "spring-ai",
+    "signature": "(final ClientHttpResponse response)",
+    "start_line": 68,
+    "uuid": "72cc8f14-e93d-58b9-a5d2-38e464861fe1"
+  }
+]

@@ -1,0 +1,70 @@
+# Tier-1 file-location queries (no parser: line-window chunks) — Appendix B.2.
+# Before running S2, verify each expected file is classified tier-1 by the
+# chunker; if knot parses it into entities, move the query to entities.toml
+# or replace it and log the change.
+
+[[query]]
+id = "l01"
+repo = "knot"
+text = "run every end to end test suite"
+expected = ["tests/run_all_e2e_fast.sh"]
+
+[[query]]
+id = "l02"
+repo = "knot"
+text = "build the container image"
+expected = ["Dockerfile"]
+
+[[query]]
+id = "l03"
+repo = "knot"
+text = "start qdrant and neo4j containers"
+expected = ["docker-compose.yml"]
+
+[[query]]
+id = "l04"
+repo = "knot"
+text = "run formatting lint tests and duplication gates"
+expected = ["Makefile"]
+
+[[query]]
+id = "l05"
+repo = "knot"
+text = "publish a github release when a tag is pushed"
+expected = [".github/workflows/release.yml"]
+
+[[query]]
+id = "l06"
+repo = "knot"
+text = "code duplication thresholds"
+expected = ["dupes.toml"]
+
+[[query]]
+id = "l07"
+repo = "knot"
+text = "compare performance metrics between runs"
+expected = ["scripts/compare_perf_metrics.sh"]
+
+[[query]]
+id = "l08"
+repo = "knot"
+text = "install agent skills"
+expected = ["scripts/install-agent-skills.sh"]
+
+[[query]]
+id = "l09"
+repo = "knot"
+text = "clippy complexity thresholds"
+expected = ["clippy.toml"]
+
+[[query]]
+id = "l10"
+repo = "spring-ai"
+text = "maven wrapper launcher script"
+expected = ["mvnw"]
+
+[[query]]
+id = "l11"
+repo = "spring-ai"
+text = "deploy the javadoc site"
+expected = [".github/workflows/deploy-javadoc.yml"]

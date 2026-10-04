@@ -1,0 +1,189 @@
+[
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in src/state/router.ts",
+      "snapshot in src/state/router.ts"
+    ],
+    "dependencies": [
+      "pageFromHash",
+      "hash",
+      "sectionFromHash"
+    ],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "readFromLocation",
+    "kind": "function",
+    "name": "readFromLocation",
+    "repo_name": "knot-site",
+    "signature": "()",
+    "start_line": 33,
+    "uuid": "e1bfe8b3-65d2-580e-99c4-d9da137926a0"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "readFromLocation in src/state/router.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "hash",
+    "kind": "constant",
+    "name": "hash",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 34,
+    "uuid": "494bfe87-4a6f-58ab-ac44-31685e3725b9"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "readFromLocation in src/state/router.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "pageFromHash",
+    "kind": "function",
+    "name": "pageFromHash",
+    "repo_name": "knot-site",
+    "signature": "(hash: string)",
+    "start_line": 23,
+    "uuid": "5b7c49ef-70ad-5281-b4d0-95110fc9a2bd"
+  },
+  {
+    "dependencies": [
+      "readFromLocation"
+    ],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "<module>",
+    "kind": "function",
+    "name": "<module>",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 1,
+    "uuid": "79252762-cef4-5e69-b652-1aa3c3f8c430"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "readFromLocation in src/state/router.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "sectionFromHash",
+    "kind": "function",
+    "name": "sectionFromHash",
+    "repo_name": "knot-site",
+    "signature": "(hash: string)",
+    "start_line": 28,
+    "uuid": "62cc9c13-6d12-5417-8db9-197aee950125"
+  },
+  {
+    "dependencies": [
+      "readFromLocation"
+    ],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "snapshot",
+    "kind": "constant",
+    "name": "snapshot",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 38,
+    "uuid": "079895d2-e244-53c3-9fa6-a10d1f75230f"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/state/router.ts",
+    "fqn": "RouteSnapshot",
+    "kind": "interface",
+    "name": "RouteSnapshot",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 17,
+    "type_usage_count": 2,
+    "type_usage_samples": [
+      "readFromLocation in src/state/router.ts",
+      "snapshot in src/state/router.ts"
+    ],
+    "uuid": "1b2e0992-e89c-51f5-bc2b-b63c58aa6939"
+  },
+  {
+    "caller_count": 31,
+    "caller_samples": [
+      "discoverRes in scripts/webmcp-budget.mjs",
+      "modernListRes in scripts/webmcp-budget.mjs",
+      "discoverRes in scripts/webmcp-budget.mjs"
+    ],
+    "dependencies": [
+      "text",
+      "resText"
+    ],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "callEndpoint",
+    "kind": "function",
+    "name": "callEndpoint",
+    "repo_name": "knot-site",
+    "signature": "(opts)",
+    "start_line": 353,
+    "uuid": "9522b300-4899-5a58-8eb6-4a45d4910a8c"
+  },
+  {
+    "caller_count": 31,
+    "caller_samples": [
+      "discoverRes in scripts/webmcp-budget.mjs",
+      "modernListRes in scripts/webmcp-budget.mjs",
+      "discoverRes in scripts/webmcp-budget.mjs"
+    ],
+    "dependencies": [
+      "resText",
+      "text"
+    ],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "callEndpoint",
+    "kind": "function",
+    "name": "callEndpoint",
+    "repo_name": "knot-site",
+    "signature": "(opts)",
+    "start_line": 372,
+    "uuid": "74e9e115-9ab1-5925-b4b5-d7092d370b3f"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "<module> in src/main.tsx"
+    ],
+    "dependencies": [
+      "useWebMcp",
+      "Installation",
+      "KnotServer",
+      "knotTools",
+      "Updates",
+      "Contact",
+      "Demo",
+      "Features",
+      "TokenEfficiency"
+    ],
+    "docstring": "",
+    "file_path": "src/App.tsx",
+    "fqn": "App",
+    "kind": "function",
+    "name": "App",
+    "repo_name": "knot-site",
+    "signature": "()",
+    "start_line": 30,
+    "type_usage_count": 2,
+    "type_usage_samples": [
+      "<module> in src/App.tsx",
+      "<module> in src/main.tsx"
+    ],
+    "uuid": "a823aeed-c3bb-503a-8abf-b7cdb53ebf68"
+  }
+]

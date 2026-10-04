@@ -1,0 +1,197 @@
+[
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "fetchJson in scripts/fetch-updates.mjs",
+      "postContact in src/components/Contact.tsx",
+      "body in src/components/Contact.tsx"
+    ],
+    "dependencies": [
+      "payload"
+    ],
+    "docstring": "",
+    "file_path": "src/toolcore/format.ts",
+    "fqn": "json",
+    "kind": "constant",
+    "name": "json",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 45,
+    "uuid": "cb13633b-f658-57bf-98b9-385dbd21753e"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "getLatestReleases in src/toolcore/definitions/getLatestReleases.ts",
+      "getLatestReleases in src/toolcore/definitions/getLatestReleases.ts",
+      "searchKnotCapabilities in src/toolcore/definitions/searchKnotCapabilities.ts"
+    ],
+    "dependencies": [
+      "count",
+      "isTruncated",
+      "jsonText",
+      "payload",
+      "build"
+    ],
+    "docstring": "",
+    "file_path": "src/toolcore/format.ts",
+    "fqn": "jsonTextFitting",
+    "kind": "function",
+    "name": "jsonTextFitting",
+    "repo_name": "knot-site",
+    "signature": "(\n  items: readonly T[],\n  build: (slice: readonly T[], truncated: boolean) => unknown,\n)",
+    "start_line": 37,
+    "uuid": "e5876c60-6993-5835-badb-c154cce12b51"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "compareKnotEditions in src/toolcore/definitions/compareKnotEditions.ts",
+      "listSupportedLanguages in src/toolcore/definitions/listSupportedLanguages.ts",
+      "listSupportedLanguages in src/toolcore/definitions/listSupportedLanguages.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/toolcore/format.ts",
+    "fqn": "jsonText",
+    "kind": "function",
+    "name": "jsonText",
+    "repo_name": "knot-site",
+    "signature": "(value: unknown)",
+    "start_line": 18,
+    "uuid": "22612261-56a7-593b-bce2-d6562b787ff7"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "result in src/webmcp/useWebMcp.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "tool",
+    "kind": "constant",
+    "name": "tool",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 265,
+    "uuid": "76c1b1e1-98b0-57f9-93ac-7acd2743f40f"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "buildLlmsText in scripts/generate-agent-assets.mjs"
+    ],
+    "dependencies": [],
+    "docstring": "One line per measured task plus the total, mirroring the table published in\nthe knot README. Numbers come from the shared data layer so the UI, llms.txt\nand any future consumer stay in sync.",
+    "file_path": "scripts/generate-agent-assets.mjs",
+    "fqn": "buildTokenEfficiencyText",
+    "kind": "function",
+    "name": "buildTokenEfficiencyText",
+    "repo_name": "knot-site",
+    "signature": "(data)",
+    "start_line": 136,
+    "uuid": "6a63e746-cda0-58ad-aa80-32c32612fb91"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "useWebMcp in src/webmcp/useWebMcp.ts",
+      "result in src/webmcp/useWebMcp.ts"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "scripts/webmcp-budget.mjs",
+    "fqn": "tool",
+    "kind": "constant",
+    "name": "tool",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 254,
+    "uuid": "6b185032-9b79-5743-9324-6ae1c26626d3"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "writeLlmsText in scripts/generate-agent-assets.mjs",
+      "text in scripts/generate-agent-assets.mjs",
+      "writeLlmsText in scripts/generate-agent-assets.mjs"
+    ],
+    "dependencies": [
+      "updates",
+      "data",
+      "data",
+      "knotServerSections",
+      "installLines",
+      "serverFeatures",
+      "section",
+      "featureLines",
+      "buildTokenEfficiencyText",
+      "knotSections",
+      "updates",
+      "releaseLines"
+    ],
+    "docstring": "",
+    "file_path": "scripts/generate-agent-assets.mjs",
+    "fqn": "buildLlmsText",
+    "kind": "function",
+    "name": "buildLlmsText",
+    "repo_name": "knot-site",
+    "signature": "(data, updates)",
+    "start_line": 95,
+    "uuid": "17cbbaf3-25c9-5619-a8e0-98aedb4e6866"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "buildEntries in scripts/fetch-updates.mjs"
+    ],
+    "dependencies": [
+      "json"
+    ],
+    "docstring": "",
+    "file_path": "scripts/fetch-updates.mjs",
+    "fqn": "fetchJson",
+    "kind": "function",
+    "name": "fetchJson",
+    "repo_name": "knot-site",
+    "signature": "(url)",
+    "start_line": 53,
+    "uuid": "2bc5b5d4-2af7-5208-a58b-3b471e9d71f0"
+  },
+  {
+    "dependencies": [
+      "errorText",
+      "sliced",
+      "jsonTextFitting"
+    ],
+    "docstring": "",
+    "file_path": "src/toolcore/definitions/getLatestReleases.ts",
+    "fqn": "getLatestReleases",
+    "kind": "constant",
+    "name": "getLatestReleases",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 35,
+    "uuid": "8b4ee04e-6c99-5090-83d9-28e235f39753"
+  },
+  {
+    "dependencies": [
+      "errorText",
+      "jsonTextFitting",
+      "sliced"
+    ],
+    "docstring": "",
+    "file_path": "src/toolcore/definitions/getLatestReleases.ts",
+    "fqn": "getLatestReleases",
+    "kind": "constant",
+    "name": "getLatestReleases",
+    "repo_name": "knot-site",
+    "signature": "",
+    "start_line": 39,
+    "uuid": "3e04f187-07cd-55fa-b95f-573796f7c1fb"
+  }
+]

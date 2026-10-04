@@ -1,0 +1,219 @@
+[
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "run_deps_command in src/bin/knot.rs",
+      "run_deps_command in src/bin/knot.rs",
+      "deps_handler in src/handlers/search.rs"
+    ],
+    "dependencies": [
+      "resolve_max_depth",
+      "find_repo_dependencies",
+      "find_repo_dependents"
+    ],
+    "docstring": "",
+    "file_path": "src/cli_tools/deps.rs",
+    "fqn": "knot::cli_tools::deps::run_deps",
+    "kind": "rust_function",
+    "name": "run_deps",
+    "repo_name": "knot",
+    "signature": "(\n    repo_name: &str,\n    max_depth: u32,\n    reverse: bool,\n    graph_db: &Arc<GraphDb>,\n)",
+    "start_line": 144,
+    "uuid": "7c4ee1d6-4887-5fd3-a2c8-5a03b69142d2"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "link_cross_repo_dependencies in src/pipeline/ingest/resolve/cross_repo.rs",
+      "resolve_declared_dependencies in src/pipeline/ingest/resolve/cross_repo.rs",
+      "find_declaring_consumers in src/pipeline/ingest/resolve/cross_repo.rs"
+    ],
+    "dependencies": [
+      "find_repository_by_artifact",
+      "dependency_lookup_probes"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/cross_repo.rs",
+    "fqn": "knot::pipeline::ingest::resolve::cross_repo::match_dependency_to_repository",
+    "kind": "rust_function",
+    "name": "match_dependency_to_repository",
+    "repo_name": "knot",
+    "signature": "(\n    dep_name: &str,\n    graph_db: &GraphDb,\n)",
+    "start_line": 241,
+    "uuid": "ff58d8e4-1016-5a96-9ff9-da53f9197c26"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_pipeline_inner in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "select_primary_identity",
+      "parse_artifact_identity",
+      "sweep_existing_consumers",
+      "find_repository_identity",
+      "parse_build_system_from_fqn",
+      "find_build_dependency_names",
+      "parse_version_from_signature",
+      "upsert_repository",
+      "match_dependency_to_repository",
+      "upsert_repo_dependency",
+      "upsert_repository_node"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/ingest/resolve/cross_repo.rs",
+    "fqn": "knot::pipeline::ingest::resolve::cross_repo::link_cross_repo_dependencies",
+    "kind": "rust_function",
+    "name": "link_cross_repo_dependencies",
+    "repo_name": "knot",
+    "signature": "(\n    entities: &[ResolutionEntity],\n    graph_db: &GraphDb,\n    cfg: &Config,\n)",
+    "start_line": 10,
+    "uuid": "0f8188ca-cfd9-51c6-8d1b-5239a7600cd9"
+  },
+  {
+    "caller_count": 9,
+    "caller_samples": [
+      "test_extract_single_simple_dependency in src/pipeline/parser/languages/toml.rs",
+      "test_extract_table_dependency_with_features in src/pipeline/parser/languages/toml.rs",
+      "test_extract_git_dependency in src/pipeline/parser/languages/toml.rs"
+    ],
+    "dependencies": [
+      "extract_dependency",
+      "extract_cargo_features",
+      "getAuditUser",
+      "extract_workspace_members",
+      "from_str",
+      "extract_cargo_package"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/toml.rs",
+    "fqn": "knot::pipeline::parser::languages::toml::extract_entities_toml",
+    "kind": "rust_function",
+    "name": "extract_entities_toml",
+    "repo_name": "knot",
+    "signature": "(\n    source: &str,\n    file_path: &str,\n    repo_name: &str,\n)",
+    "start_line": 3,
+    "uuid": "2ec7b6d7-66b1-570e-bf0e-05fbaeff87fe"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_deps in src/cli_tools/deps.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Find all repositories that depend on this repo (reverse lookup,\ntransitive, up to max_depth).",
+    "file_path": "src/db/graph/query_repo.rs",
+    "fqn": "knot::db::graph::query_repo::GraphDb::find_repo_dependents",
+    "kind": "rust_method",
+    "name": "find_repo_dependents",
+    "repo_name": "knot",
+    "signature": "(&self, repo_name: &str, max_depth: u32)",
+    "start_line": 93,
+    "uuid": "5a9413b4-9b41-5b75-88ff-32f61c74bf70"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "collect_deps_diagnostics in src/cli_tools/deps.rs",
+      "sweep_existing_consumers in src/pipeline/ingest/resolve/cross_repo.rs"
+    ],
+    "dependencies": [
+      "find_dependency_candidates",
+      "reverse_sweep_needle",
+      "match_dependency_to_repository"
+    ],
+    "docstring": "Indexed repositories that declare `repo_name` as a build dependency,\nmapped to the first declared name that resolves back to it.\n`Ok(None)` means the question is **unanswerable**: this repository has no\nmatchable build identity (`reverse_sweep_needle` returned `None` — e.g.\n`build_system: \"none\"`, or a Maven identity without a group). This is\ndeliberately distinct from `Ok(Some(empty))`, which means every indexed\nrepository's declarations were checked and none resolves to it. Callers\n(the reverse sweep at ingest, and the reverse diagnostics in\n`cli_tools::deps`) must never render \"nobody declares it\" for `None`.",
+    "file_path": "src/pipeline/ingest/resolve/cross_repo.rs",
+    "fqn": "knot::pipeline::ingest::resolve::cross_repo::find_declaring_consumers",
+    "kind": "rust_function",
+    "name": "find_declaring_consumers",
+    "repo_name": "knot",
+    "signature": "(\n    repo_name: &str,\n    identity: &RepoIdentity,\n    graph_db: &GraphDb,\n)",
+    "start_line": 339,
+    "uuid": "283aa417-b6ac-5ef0-8ecd-7d9891f32080"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "collect_deps_diagnostics in src/cli_tools/deps.rs"
+    ],
+    "dependencies": [
+      "match_dependency_to_repository"
+    ],
+    "docstring": "Create `DEPENDS_ON` edges from already-indexed consumers to this\nrepository, so a dependency edge appears the moment the library itself is\nindexed. Precision is delegated entirely to\n`match_dependency_to_repository`: the Cypher `CONTAINS` filter only\nnarrows candidates (one `NodeIndexContainsScan` on the name text index),\nand an edge is created only when the authoritative matcher resolves the\nraw dependency name back to exactly this repository. There is no second\ncopy of the matching rules.\nResolve declared build-dependency names against the repository registry.\nFor each name (in input order — never re-sorted, callers rely on the\nquery's ORDER BY for stable output), returns the declared name verbatim\ntogether with the repository it resolves to, or `None` when no indexed\nrepository matches. Resolution delegates entirely to\n[`match_dependency_to_repository`], so the probe precedence is shared\nwith ingest linking — there is no second copy of the matching rules.",
+    "file_path": "src/pipeline/ingest/resolve/cross_repo.rs",
+    "fqn": "knot::pipeline::ingest::resolve::cross_repo::resolve_declared_dependencies",
+    "kind": "rust_function",
+    "name": "resolve_declared_dependencies",
+    "repo_name": "knot",
+    "signature": "(\n    dep_names: &[String],\n    graph_db: &GraphDb,\n)",
+    "start_line": 317,
+    "uuid": "b0eb12da-8e91-5258-8bbb-4a9bc4f6e8a5"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "dispatch_by_extension in src/pipeline/parser/mod.rs"
+    ],
+    "dependencies": [
+      "extract_entities_vcc",
+      "extract_entities_xml",
+      "extract_entities_groovy",
+      "extract_entities_csproj",
+      "extract_entities_toml",
+      "extract_entities_gradle",
+      "extract_entities_vcl",
+      "extract_entities_vtc",
+      "extract_entities_jenkins"
+    ],
+    "docstring": "Hand-written (non-tree-sitter) language parsers. Returns `None` for\nextensions not handled here.",
+    "file_path": "src/pipeline/parser/mod.rs",
+    "fqn": "knot::pipeline::parser::dispatch_lexical_lang",
+    "kind": "rust_function",
+    "name": "dispatch_lexical_lang",
+    "repo_name": "knot",
+    "signature": "(ext: &str, ctx: &FileCtx<'_>)",
+    "start_line": 594,
+    "uuid": "ff5476ab-0fd1-5b55-a3f2-6f2790c5609b"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "call_extract in src/pipeline/parser/languages/msbuild.rs",
+      "dispatch_lexical_lang in src/pipeline/parser/mod.rs"
+    ],
+    "dependencies": [
+      "child_text",
+      "new",
+      "attr",
+      "cpm_map_for",
+      "strip_utf8_bom"
+    ],
+    "docstring": "─── Public API ─────────────────────────────────────────────────────────\nParse a `.csproj` source and emit one `ProjectIdentity` and one\n`BuildDependency` per `<PackageReference>`. Used by the dispatcher when\n`Path::extension() == \"csproj\"`.\n`source` is the file contents; `file_path` is the canonical repo-relative\npath; `repo_name` is the logical repo name; `csproj_abs_dir` is the\ndirectory of the csproj (used to locate `Directory.Packages.props`);\n`repo_root` is the canonical repo root (used as the CPM walk\nboundary).",
+    "file_path": "src/pipeline/parser/languages/msbuild.rs",
+    "fqn": "knot::pipeline::parser::languages::msbuild::extract_entities_csproj",
+    "kind": "rust_function",
+    "name": "extract_entities_csproj",
+    "repo_name": "knot",
+    "signature": "(ctx: &MsbuildContext<'_>)",
+    "start_line": 178,
+    "uuid": "489dd5ed-bd13-58a4-9530-c54d0a98940d"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "run_deps in src/cli_tools/deps.rs",
+      "resolve_and_save_relationships in src/pipeline/ingest/resolve/mod.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Find all repositories that this repo depends on (transitive, up to max_depth).",
+    "file_path": "src/db/graph/query_repo.rs",
+    "fqn": "knot::db::graph::query_repo::GraphDb::find_repo_dependencies",
+    "kind": "rust_method",
+    "name": "find_repo_dependencies",
+    "repo_name": "knot",
+    "signature": "(&self, repo_name: &str, max_depth: u32)",
+    "start_line": 87,
+    "uuid": "45997df0-eab9-5fa3-8e52-5553c2956893"
+  }
+]

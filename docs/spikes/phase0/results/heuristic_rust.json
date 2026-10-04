@@ -1,0 +1,5675 @@
+{
+  "schema": "knot-rag-spike/heuristic/v1",
+  "lang": "rust",
+  "repo": "knot",
+  "resolve_ms": 895,
+  "entities": 4809,
+  "metrics_debug": "entities_indexed=4809 references_resolved=4423 references_ambiguous_skipped=581 references_unresolved=11534",
+  "targets": [
+    {
+      "id": "rust-01",
+      "callers": [
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1020,
+          "name": "test_parsed_entity_file_path_is_relative"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1062,
+          "name": "test_parsed_entity_file_path_verbatim_without_repo_root"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1094,
+          "name": "test_parse_config_repo_name_assignment"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1112,
+          "name": "test_parse_files_with_empty_input"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 4
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-02",
+      "callers": [
+        {
+          "file": "benches/pipeline_bench.rs",
+          "line": 41,
+          "name": "parse_benchmark"
+        },
+        {
+          "file": "benches/pipeline_bench.rs",
+          "line": 128,
+          "name": "bench_preparation_stage"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 354,
+          "name": "test_prepare_entities_batch"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 745,
+          "name": "embed_text_is_deterministic_and_bounded"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 794,
+          "name": "prepare_entities_leaves_markdown_embed_text_untouched"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 482,
+          "name": "embed_and_forward"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 6
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-03",
+      "callers": [
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 203,
+          "name": "test_embedder_init_and_embed_basic"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 233,
+          "name": "test_embedder_embed_query"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 250,
+          "name": "bge_query_and_passage_vectors_differ_by_prefix"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 3
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-04",
+      "callers": [
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 458,
+          "name": "test_resolve_local_call"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 480,
+          "name": "test_resolve_static_call"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 502,
+          "name": "test_resolve_instance_call_fuzzy"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 524,
+          "name": "test_e2e_rust_same_file_function_resolution"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 623,
+          "name": "test_resolve_self_method_same_class_name_collision"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 680,
+          "name": "test_resolve_rust_qualified_call_with_homonyms"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 720,
+          "name": "test_resolve_rust_self_method_call"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 747,
+          "name": "test_resolve_fallback_uniqueness_guard"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 768,
+          "name": "test_resolve_fallback_arg_count_disambiguation"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 798,
+          "name": "test_python_class_call_redirects_to_init"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 850,
+          "name": "test_python_class_call_no_init_keeps_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 888,
+          "name": "test_python_class_call_inherited_init"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 946,
+          "name": "test_function_named_like_class_not_redirected"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 991,
+          "name": "test_call_disambiguation_by_receiver_chain_segments"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1049,
+          "name": "test_call_disambiguation_ties_are_dropped"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1100,
+          "name": "test_python_super_init_resolves_to_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1180,
+          "name": "test_java_super_call_resolves_to_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1242,
+          "name": "test_python_super_init_no_parent_returns_no_edge"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1291,
+          "name": "test_python_class_call_with_existing_init_no_duplicate"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 498,
+          "name": "test_resolve_deduplication"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 546,
+          "name": "test_parallel_resolution_deterministic"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 582,
+          "name": "test_parallel_resolution_deduplication"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 602,
+          "name": "test_parallel_resolution_many_to_one"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 317,
+          "name": "test_web_reference_resolves_by_exact_kind"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 373,
+          "name": "test_resolve_inheritance"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 400,
+          "name": "test_resolve_type_reference"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 429,
+          "name": "test_resolve_self_method_inherited_from_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 478,
+          "name": "test_type_reference_prefers_same_file"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 526,
+          "name": "test_type_reference_skips_when_ambiguous_no_hints"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 562,
+          "name": "test_type_reference_enclosing_class_disambiguates"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 610,
+          "name": "test_extends_uses_same_ladder"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 662,
+          "name": "test_groovy_extends_resolves_to_extends_relationship"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 718,
+          "name": "test_qualified_type_reference_resolves_by_fqn_suffix"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 754,
+          "name": "test_qualified_reference_resolves_non_type_member"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 787,
+          "name": "test_qualified_reference_has_no_bare_last_segment_fallback"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 817,
+          "name": "test_qualified_reference_ambiguous_suffix_is_skipped"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 857,
+          "name": "test_qualified_reference_prefers_same_file"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 678,
+          "name": "resolve_together"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 38
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-05",
+      "callers": [
+        {
+          "file": "src/bin/knot-mcp.rs",
+          "line": 21,
+          "name": "main"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 305,
+          "name": "run_streaming_ingest"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 3
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-06",
+      "callers": [
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/utils/mod.rs",
+          "line": 294,
+          "name": "test_format_output_null_returns_no_match_message"
+        },
+        {
+          "file": "src/utils/mod.rs",
+          "line": 300,
+          "name": "test_format_output_json_pretty_print"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 3
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-07",
+      "callers": [
+        {
+          "file": "src/bin/knot-mcp.rs",
+          "line": 21,
+          "name": "main"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-08",
+      "callers": [
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/mcp_tools/find_callers.rs",
+          "line": 87,
+          "name": "handle"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-09",
+      "callers": [
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 211,
+          "name": "test_discover_files_basic"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 252,
+          "name": "test_discover_files_with_gitignore"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 274,
+          "name": "test_discover_files_empty"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 283,
+          "name": "test_discover_files_config_excluded_by_default"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 311,
+          "name": "test_discover_files_build_system_json_always_included"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 356,
+          "name": "test_discover_files_csproj_always_indexed"
+        },
+        {
+          "file": "src/pipeline/input.rs",
+          "line": 405,
+          "name": "test_discover_files_props_not_swept_by_extension"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 264,
+          "name": "classify_pipeline_inputs"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 8
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-10",
+      "callers": [
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 288,
+          "name": "test_classify_files_for_indexing_no_clean_unchanged"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 346,
+          "name": "test_to_repo_relative_nested_file"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 353,
+          "name": "test_to_repo_relative_root_file"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 360,
+          "name": "test_to_repo_relative_trailing_slash_root"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 368,
+          "name": "test_to_repo_relative_backslash_normalization"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 382,
+          "name": "test_to_repo_relative_outside_root_falls_back_absolute"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 394,
+          "name": "test_to_repo_relative_no_leading_dot_slash"
+        },
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 407,
+          "name": "test_to_repo_relative_no_trailing_slash"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 264,
+          "name": "new"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1005,
+          "name": "test_file_path_conversion"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 258,
+          "name": "classify_files"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 315,
+          "name": "update_files"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 398,
+          "name": "test_classify_files"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 447,
+          "name": "test_update_and_remove_files"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 678,
+          "name": "test_classify_files_uses_relative_keys"
+        },
+        {
+          "file": "src/pipeline/state.rs",
+          "line": 704,
+          "name": "test_update_files_stores_relative_keys"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 16
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-11",
+      "callers": [
+        {
+          "file": "src/pipeline/files.rs",
+          "line": 327,
+          "name": "test_is_supported_file"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 47,
+          "name": "setup_watch_mode_with_progress"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 171,
+          "name": "test_watch_supported_files"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 251,
+          "name": "test_supported_file_extensions"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 265,
+          "name": "test_unsupported_file_extensions"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 286,
+          "name": "test_supported_file_with_nested_paths"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 328,
+          "name": "test_supported_files_case_sensitivity"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 7
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-12",
+      "callers": [
+        {
+          "file": "benches/channel_backpressure_bench.rs",
+          "line": 16,
+          "name": "repo_root"
+        },
+        {
+          "file": "benches/channel_backpressure_bench.rs",
+          "line": 35,
+          "name": "bench_channel_capacity"
+        },
+        {
+          "file": "benches/channel_backpressure_bench.rs",
+          "line": 84,
+          "name": "bench_concurrency_levels"
+        },
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 24,
+          "name": "make_test_parsed_entity"
+        },
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 65,
+          "name": "make_embedded_entity"
+        },
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 72,
+          "name": "generate_entities"
+        },
+        {
+          "file": "benches/pipeline_bench.rs",
+          "line": 23,
+          "name": "repo_root"
+        },
+        {
+          "file": "benches/pipeline_bench.rs",
+          "line": 41,
+          "name": "parse_benchmark"
+        },
+        {
+          "file": "benches/pipeline_bench.rs",
+          "line": 128,
+          "name": "bench_preparation_stage"
+        },
+        {
+          "file": "benches/token_tree_bench.rs",
+          "line": 24,
+          "name": "run_token_tree_extraction"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 42,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 47,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 31,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 36,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 417,
+          "name": "ResolutionEntity"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 435,
+          "name": "from"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 456,
+          "name": "from"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 473,
+          "name": "new"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 573,
+          "name": "test_uuid_stable_across_machines"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 645,
+          "name": "EmbeddedEntity"
+        },
+        {
+          "file": "src/models/mod.rs",
+          "line": 13,
+          "name": "subgraph"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 23,
+          "name": "model"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 113,
+          "name": "embed"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 196,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 203,
+          "name": "test_embedder_init_and_embed_basic"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 250,
+          "name": "bge_query_and_passage_vectors_differ_by_prefix"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 14,
+          "name": "is_csharp_kind"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 40,
+          "name": "enrich_and_create_entity"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 362,
+          "name": "set_markdown_embed_text"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 386,
+          "name": "apply_js_require_alias"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/mod.rs",
+          "line": 14,
+          "name": "entity_richness"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/mod.rs",
+          "line": 33,
+          "name": "extract_entities"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/post_passes.rs",
+          "line": 8,
+          "name": "set_module_default_export"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/post_passes.rs",
+          "line": 41,
+          "name": "run_post_passes"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 5,
+          "name": "call_method_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 18,
+          "name": "receiverless_call_method_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 32,
+          "name": "type_reference_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 44,
+          "name": "value_reference_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 56,
+          "name": "extends_parent_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 68,
+          "name": "implements_interface_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2355,
+          "name": "parse_markdown_sample_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 32,
+          "name": "extract"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 44,
+          "name": "find_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 55,
+          "name": "entities_of_kind"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 4,
+          "name": "extract_entities_gradle"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/accessors.rs",
+          "line": 9,
+          "name": "synthesize_property_accessors"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/accessors.rs",
+          "line": 136,
+          "name": "make_synthetic_accessor"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 32,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 51,
+          "name": "extract_entities_groovy"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 111,
+          "name": "postprocess_tree_sitter_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 146,
+          "name": "GroovyScan"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 222,
+          "name": "try_type_declaration"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 264,
+          "name": "try_methods"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 387,
+          "name": "push_property"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 419,
+          "name": "fix_method_end_lines"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 435,
+          "name": "assign_method_call_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/refs.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/refs.rs",
+          "line": 166,
+          "name": "extract_method_calls"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 9,
+          "name": "pick_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 16,
+          "name": "pick_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 32,
+          "name": "find_method_in_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 46,
+          "name": "find_synthetic_accessor"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 7,
+          "name": "extract_chart_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 83,
+          "name": "extract_values_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 113,
+          "name": "walk_helm_values"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 195,
+          "name": "extract_helm_template"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 271,
+          "name": "extract_template_refs"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 16,
+          "name": "parse_html_attribute_node"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 50,
+          "name": "extract_html_attribute"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 154,
+          "name": "extract_html_elements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 235,
+          "name": "extract_entities_html"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 287,
+          "name": "extract_script_imports"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 369,
+          "name": "extract_link_stylesheet_imports"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 412,
+          "name": "extract_html_file_imports"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 21,
+          "name": "handle_dom_css_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 67,
+          "name": "collect_dom_css_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 118,
+          "name": "attach_to_module_or_create"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 252,
+          "name": "parse_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/jsx.rs",
+          "line": 16,
+          "name": "extract_jsx_component_invocation"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/jsx.rs",
+          "line": 117,
+          "name": "extract_jsx_html_attributes"
+        },
+        {
+          "file": "src/pipeline/parser/languages/jenkins.rs",
+          "line": 4,
+          "name": "extract_entities_jenkins"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 7,
+          "name": "extract_entities_json_config"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 43,
+          "name": "extract_package_json"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 159,
+          "name": "walk_json"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 6,
+          "name": "collect_all_reference_intents_kotlin"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 571,
+          "name": "extract_anonymous_object_implementations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 594,
+          "name": "extract_anonymous_objects_recursive"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 678,
+          "name": "find_enclosing_fqn"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 925,
+          "name": "test_extract_anonymous_object_implements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 991,
+          "name": "test_extract_anonymous_object_no_inheritance"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 3,
+          "name": "extract_entities_k8s"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 44,
+          "name": "extract_single_k8s_resource"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 178,
+          "name": "extract_entities_csproj"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 289,
+          "name": "extract_entities_props"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 307,
+          "name": "call_extract"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 8,
+          "name": "extract_entities_properties"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 84,
+          "name": "process_property_line"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/calls.rs",
+          "line": 19,
+          "name": "collect_rust_call_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/fqn.rs",
+          "line": 22,
+          "name": "RustModuleContext"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/fqn.rs",
+          "line": 56,
+          "name": "qualify_rust_fqns"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/impls.rs",
+          "line": 24,
+          "name": "reclassify_methods_in_impl_blocks"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/impls.rs",
+          "line": 129,
+          "name": "collect_rust_trait_implementations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/macros.rs",
+          "line": 13,
+          "name": "collect_rust_macro_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 17,
+          "name": "type_ref_names"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 28,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 230,
+          "name": "test_find_nearest_entity_empty_list"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 349,
+          "name": "test_collect_rust_trait_implementations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 407,
+          "name": "test_collect_rust_call_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1202,
+          "name": "test_extract_scoped_call_self_translated_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1362,
+          "name": "test_self_in_return_type_resolves_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1415,
+          "name": "test_self_in_struct_expression_resolves_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1470,
+          "name": "test_self_outside_impl_emits_as_self"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1513,
+          "name": "make_rust_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1832,
+          "name": "test_qualify_rust_fqns_skips_non_rust_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/types.rs",
+          "line": 22,
+          "name": "translate_self_in_type_name"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/types.rs",
+          "line": 36,
+          "name": "collect_rust_type_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/utils.rs",
+          "line": 12,
+          "name": "find_nearest_entity_by_line"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 3,
+          "name": "extract_entities_toml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 45,
+          "name": "extract_cargo_package"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 100,
+          "name": "extract_cargo_features"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 138,
+          "name": "extract_workspace_members"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 170,
+          "name": "extract_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/mod.rs",
+          "line": 5,
+          "name": "vtc"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/mod.rs",
+          "line": 24,
+          "name": "aggregate_varnish_builtin_subs"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 4,
+          "name": "VccState"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 57,
+          "name": "handle_module"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 85,
+          "name": "handle_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 122,
+          "name": "handle_object"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 153,
+          "name": "handle_method"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 215,
+          "name": "extract_entities_vcc"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 6,
+          "name": "Parser"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 69,
+          "name": "extract_entities_vcl"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 77,
+          "name": "extract_entities_vcl_with_offset"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 168,
+          "name": "parse_file"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 251,
+          "name": "parse_vcl_version"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 282,
+          "name": "parse_backend"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 404,
+          "name": "parse_probe"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 520,
+          "name": "parse_acl"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 551,
+          "name": "parse_sub"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 834,
+          "name": "parse_new_statement"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 911,
+          "name": "parse_import"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 961,
+          "name": "parse_include"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1002,
+          "name": "parse_unused"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 7,
+          "name": "VtcContext"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 35,
+          "name": "handle_test_case"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 55,
+          "name": "handle_server"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 96,
+          "name": "handle_client"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 138,
+          "name": "handle_logexpect"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 162,
+          "name": "handle_barrier"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 206,
+          "name": "extract_entities_vtc"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 333,
+          "name": "parse_varnish_command"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 3,
+          "name": "extract_entities_xml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 77,
+          "name": "extract_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 105,
+          "name": "extract_plugin"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 7,
+          "name": "extract_entities_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 32,
+          "name": "walk_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 23,
+          "name": "comments"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 124,
+          "name": "parse_files_stream"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 210,
+          "name": "parse_files"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 289,
+          "name": "extract_with_query"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 308,
+          "name": "parse_single_file"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 326,
+          "name": "dispatch_by_filename"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 353,
+          "name": "dispatch_by_extension"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 377,
+          "name": "dispatch_query_lang"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 461,
+          "name": "dispatch_typescript"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 482,
+          "name": "dispatch_rust"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 499,
+          "name": "dispatch_c_header"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 518,
+          "name": "dispatch_html_lang"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 540,
+          "name": "dispatch_config_lang"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 594,
+          "name": "dispatch_lexical_lang"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 654,
+          "name": "dispatch_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 859,
+          "name": "test_parse_files_empty_list"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 878,
+          "name": "test_parse_files_with_mock_channel"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1129,
+          "name": "test_channel_sender_behavior_mock"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1141,
+          "name": "test_bounded_channel_blocking_send"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1170,
+          "name": "test_bounded_channel_capacity_backpressure"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1197,
+          "name": "test_bounded_channel_receives_after_blocking_send"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1224,
+          "name": "test_parse_files_stream_callback_once_per_file"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1267,
+          "name": "test_parse_files_stream_callback_counts_unparseable"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1306,
+          "name": "test_parse_files_stream_none_callback"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1355,
+          "name": "given_files_to_parse_when_stream_completes_then_entities_extracted_receives_the_total"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1414,
+          "name": "given_a_saturated_channel_when_parsing_completes_then_total_is_published_before_blocking"
+        },
+        {
+          "file": "src/pipeline/parser/mod.rs",
+          "line": 1504,
+          "name": "given_only_on_file_parsed_set_when_parsing_then_it_still_fires_once_per_file"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 12,
+          "name": "collect_orphaned_references"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 174,
+          "name": "find_nearest_entity_by_line"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 219,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 224,
+          "name": "test_find_nearest_entity_by_line_before"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 274,
+          "name": "test_find_nearest_entity_by_line_exact"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 296,
+          "name": "test_find_nearest_entity_by_line_after"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 332,
+          "name": "test_find_nearest_entity_by_line_before_all"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 368,
+          "name": "test_find_nearest_entity_containment_preferred"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 409,
+          "name": "test_find_nearest_entity_containment_chooses_smallest_range"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 66,
+          "name": "prepare_entities"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 79,
+          "name": "build_embed_text"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 167,
+          "name": "call_names"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 195,
+          "name": "calls_section_text"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 263,
+          "name": "role_sentence"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 291,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 296,
+          "name": "test_build_embed_text_minimal"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 320,
+          "name": "test_build_embed_text_full"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 354,
+          "name": "test_prepare_entities_batch"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 398,
+          "name": "test_build_embed_text_build_dependency"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 422,
+          "name": "test_build_embed_text_build_plugin"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 446,
+          "name": "test_build_embed_text_build_task"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 469,
+          "name": "test_build_embed_text_pipeline_stage"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 491,
+          "name": "test_build_embed_text_pipeline_step"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 513,
+          "name": "test_build_embed_text_groovy_class"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 533,
+          "name": "test_build_embed_text_groovy_interface"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 552,
+          "name": "test_build_embed_text_groovy_trait"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 571,
+          "name": "test_build_embed_text_groovy_method"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 594,
+          "name": "test_embed_text_groovy_method_includes_docstring"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 619,
+          "name": "test_build_embed_text_groovy_property"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 641,
+          "name": "embed_text_includes_fqn"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 664,
+          "name": "embed_text_includes_tokenized_identifier"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 704,
+          "name": "embed_text_includes_outgoing_call_names"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 745,
+          "name": "embed_text_is_deterministic_and_bounded"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 794,
+          "name": "prepare_entities_leaves_markdown_embed_text_untouched"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 854,
+          "name": "role_sentence_leads_with_docstring"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 884,
+          "name": "role_sentence_falls_back_to_call_names"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 921,
+          "name": "role_sentence_bare_identifier_when_nothing_known"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 947,
+          "name": "role_sentence_truncates_long_docstring_on_char_boundary"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 986,
+          "name": "role_sentence_strips_comment_markers"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1008,
+          "name": "embed_text_role_line_precedes_structural_fields"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1047,
+          "name": "role_sentence_handles_non_code_kinds"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1074,
+          "name": "role_sentence_uses_shorter_call_cap_than_calls_section"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 36,
+          "name": "run_indexing_pipeline"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 305,
+          "name": "run_streaming_ingest"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 377,
+          "name": "spawn_parse_stage"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 446,
+          "name": "spawn_embed_task"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 482,
+          "name": "embed_and_forward"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 235
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-13",
+      "callers": [
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 24,
+          "name": "make_test_parsed_entity"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 42,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 47,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 81,
+          "name": "create_embedded_test_entity"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 91,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 109,
+          "name": "test_create_test_entity"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 121,
+          "name": "test_create_embedded_test_entity"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 131,
+          "name": "test_multiple_test_entities"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 140,
+          "name": "test_entity_with_relationships"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 2402,
+          "name": "test_root_kind_rank_is_total_over_known_kinds"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 500,
+          "name": "test_contains_uuid_list_contains_all_batch_uuids"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 518,
+          "name": "test_contains_cipher_repo_name_still_used_for_parent_lookup"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 547,
+          "name": "test_upsert_entities"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 570,
+          "name": "test_upsert_relationships"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 592,
+          "name": "test_upsert_calls"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 744,
+          "name": "test_unwind_entity_grouping_by_kind"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 783,
+          "name": "test_unwind_entity_param_map_construction"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 933,
+          "name": "test_unwind_entity_grouping_single_kind"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 943,
+          "name": "test_unwind_entity_grouping_all_different_kinds"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 1034,
+          "name": "test_entity_param_map_includes_enclosing_class_fqn"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 7,
+          "name": "kind_to_label"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 16,
+          "name": "test_kind_to_label_class"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 21,
+          "name": "test_kind_to_label_interface"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 26,
+          "name": "test_kind_to_label_method"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 31,
+          "name": "test_kind_to_label_function"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 36,
+          "name": "test_kind_to_label_constant"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 41,
+          "name": "test_kind_to_label_enum"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 46,
+          "name": "test_kind_to_label_html_element"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 51,
+          "name": "test_kind_to_label_html_id"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 56,
+          "name": "test_kind_to_label_html_class"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 61,
+          "name": "test_kind_to_label_css_class"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 66,
+          "name": "test_kind_to_label_css_id"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 71,
+          "name": "test_kind_to_label_css_variable"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 76,
+          "name": "test_kind_to_label_scss_variable"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 81,
+          "name": "test_kind_to_label_scss_mixin"
+        },
+        {
+          "file": "src/db/graph/utils.rs",
+          "line": 86,
+          "name": "test_kind_to_label_scss_function"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 31,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 36,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 70,
+          "name": "create_embedded_entity"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 84,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 89,
+          "name": "test_create_test_entity"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 101,
+          "name": "test_create_embedded_entity"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 111,
+          "name": "test_multiple_embedded_entities"
+        },
+        {
+          "file": "src/db/vector/mod.rs",
+          "line": 130,
+          "name": "test_uuid_consistency"
+        },
+        {
+          "file": "src/db/vector/upsert.rs",
+          "line": 74,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/vector/upsert.rs",
+          "line": 82,
+          "name": "test_upsert_entities"
+        },
+        {
+          "file": "src/db/vector/upsert.rs",
+          "line": 111,
+          "name": "test_upsert_single_entity"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 262,
+          "name": "fmt"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 283,
+          "name": "ParsedEntity"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 417,
+          "name": "ResolutionEntity"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 473,
+          "name": "new"
+        },
+        {
+          "file": "src/models/entity.rs",
+          "line": 573,
+          "name": "test_uuid_stable_across_machines"
+        },
+        {
+          "file": "src/models/mod.rs",
+          "line": 13,
+          "name": "subgraph"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 196,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 203,
+          "name": "test_embedder_init_and_embed_basic"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 250,
+          "name": "bge_query_and_passage_vectors_differ_by_prefix"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 65,
+          "name": "test_ingest_batch_with_entities"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/aliases.rs",
+          "line": 202,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/aliases.rs",
+          "line": 207,
+          "name": "mock_entity_with_alias"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 7,
+          "name": "disambiguate_overload"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 172,
+          "name": "redirect_class_call_to_constructor"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 451,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 524,
+          "name": "test_e2e_rust_same_file_function_resolution"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 623,
+          "name": "test_resolve_self_method_same_class_name_collision"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 680,
+          "name": "test_resolve_rust_qualified_call_with_homonyms"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 798,
+          "name": "test_python_class_call_redirects_to_init"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 850,
+          "name": "test_python_class_call_no_init_keeps_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 888,
+          "name": "test_python_class_call_inherited_init"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 946,
+          "name": "test_function_named_like_class_not_redirected"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 991,
+          "name": "test_call_disambiguation_by_receiver_chain_segments"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1049,
+          "name": "test_call_disambiguation_ties_are_dropped"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1100,
+          "name": "test_python_super_init_resolves_to_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1180,
+          "name": "test_java_super_call_resolves_to_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1242,
+          "name": "test_python_super_init_no_parent_returns_no_edge"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/calls.rs",
+          "line": 1291,
+          "name": "test_python_class_call_with_existing_init_no_duplicate"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/context.rs",
+          "line": 7,
+          "name": "RunMetrics"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/context.rs",
+          "line": 44,
+          "name": "ResolutionContext"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 10,
+          "name": "link_cross_repo_dependencies"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 519,
+          "name": "test_primary_selection_prefers_package_id_marker"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 570,
+          "name": "test_primary_selection_falls_back_to_shallowest_without_marker"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 670,
+          "name": "test_build_dependency_kind_string_matches_cypher_literal"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 9,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 131,
+          "name": "LookupMaps"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 144,
+          "name": "build"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 293,
+          "name": "resolve_intent"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 424,
+          "name": "resolve_web_reference"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 546,
+          "name": "test_parallel_resolution_deterministic"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 602,
+          "name": "test_parallel_resolution_many_to_one"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 16,
+          "name": "is_type_like"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 94,
+          "name": "resolve_web_reference"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 160,
+          "name": "resolve_non_call_reference_typed"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 307,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 317,
+          "name": "test_web_reference_resolves_by_exact_kind"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 373,
+          "name": "test_resolve_inheritance"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 400,
+          "name": "test_resolve_type_reference"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 429,
+          "name": "test_resolve_self_method_inherited_from_parent_class"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 478,
+          "name": "test_type_reference_prefers_same_file"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 526,
+          "name": "test_type_reference_skips_when_ambiguous_no_hints"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 562,
+          "name": "test_type_reference_enclosing_class_disambiguates"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 610,
+          "name": "test_extends_uses_same_ladder"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 718,
+          "name": "test_qualified_type_reference_resolves_by_fqn_suffix"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 754,
+          "name": "test_qualified_reference_resolves_non_type_member"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 787,
+          "name": "test_qualified_reference_has_no_bare_last_segment_fallback"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 817,
+          "name": "test_qualified_reference_ambiguous_suffix_is_skipped"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/non_calls.rs",
+          "line": 857,
+          "name": "test_qualified_reference_prefers_same_file"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 52,
+          "name": "is_override_capable_method"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 66,
+          "name": "is_override_capable_type"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 273,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 279,
+          "name": "capable_type"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 284,
+          "name": "capable_method"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 302,
+          "name": "scenario_a_groovy_interface_impl"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 342,
+          "name": "scenario_b_java_interface_impl"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 374,
+          "name": "scenario_c_kotlin_superclass_override"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 397,
+          "name": "scenario_d_multilevel_nearest"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 422,
+          "name": "scenario_d2_walk_through"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 443,
+          "name": "scenario_e_diamond_all_declare"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 482,
+          "name": "scenario_e_diamond_dedup_converging"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 512,
+          "name": "scenario_f_nested_class_grouping"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 528,
+          "name": "scenario_f_unmatched_fqn_skipped"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 543,
+          "name": "scenario_g_unrelated_types"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 558,
+          "name": "scenario_h_overload_fanout"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 590,
+          "name": "scenario_i_no_supertype_method"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 606,
+          "name": "scenario_j_constructors_excluded"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 626,
+          "name": "scenario_k_static_hiding_pinned"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 645,
+          "name": "scenario_m_incremental_batch_missing_supertype"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 670,
+          "name": "scenario_n_non_participating_unaffected"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 757,
+          "name": "scenario_o_groovy_property_accessor_overrides_interface_getter"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 804,
+          "name": "scenario_o2_property_node_itself_does_not_override"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/overrides.rs",
+          "line": 843,
+          "name": "nextflow_isession_getbasedir_regression"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/test_utils.rs",
+          "line": 10,
+          "name": "mock_resolution_entity_with_kind"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/test_utils.rs",
+          "line": 35,
+          "name": "mock_resolution_entity_at"
+        },
+        {
+          "file": "src/pipeline/parser/comments.rs",
+          "line": 23,
+          "name": "extract_comments"
+        },
+        {
+          "file": "src/pipeline/parser/comments.rs",
+          "line": 269,
+          "name": "extract_inline_comments_recursive"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 8,
+          "name": "ClassContext"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 89,
+          "name": "fqn_shape"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 174,
+          "name": "compute_fqn_and_context"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 336,
+          "name": "compute_rust_qualified_fqn"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 377,
+          "name": "compute_rust_qualified_fqn_from_kind"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 411,
+          "name": "compute_rust_qualified_fqn_with_inline_modules"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 446,
+          "name": "build_synthetic_fqn"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 476,
+          "name": "test_compute_fqn_and_context_class"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 485,
+          "name": "test_compute_fqn_and_context_method_with_class"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 498,
+          "name": "test_compute_fqn_and_context_method_without_class"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 507,
+          "name": "test_compute_fqn_and_context_function"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 521,
+          "name": "test_compute_fqn_and_context_constant_with_class"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 534,
+          "name": "test_compute_fqn_and_context_enum"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 607,
+          "name": "test_compute_fqn_and_context_kotlin_method_in_object"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 620,
+          "name": "test_compute_fqn_and_context_kotlin_object_nested"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 638,
+          "name": "test_compute_fqn_and_context_kotlin_function_top_level"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 757,
+          "name": "test_rust_fqn_struct_uses_module_path"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 769,
+          "name": "test_rust_fqn_method_includes_module"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 781,
+          "name": "test_rust_fqn_function_no_enclosing"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 793,
+          "name": "test_rust_fqn_struct_at_crate_root_no_module"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 800,
+          "name": "test_rust_fqn_method_at_crate_root"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 812,
+          "name": "test_rust_fqn_nested_struct_uses_enclosing_segment"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 890,
+          "name": "test_rust_fqn_fixture_entity"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 908,
+          "name": "test_rust_fqn_fixture_method"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 926,
+          "name": "test_rust_fqn_loose_entity"
+        },
+        {
+          "file": "src/pipeline/parser/context.rs",
+          "line": 944,
+          "name": "test_rust_fqn_crate_src_unchanged"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 13,
+          "name": "detect_kotlin_class_kind"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 44,
+          "name": "CaptureState"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 94,
+          "name": "process_capture"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 194,
+          "name": "handle_class_captures"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 234,
+          "name": "handle_method_captures"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 296,
+          "name": "handle_kotlin_decl_captures"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 338,
+          "name": "handle_kotlin_function_capture"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 394,
+          "name": "handle_function_captures"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 447,
+          "name": "promote_captured_entity"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 515,
+          "name": "handle_python_capture"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 639,
+          "name": "handle_csharp_capture"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/captures.rs",
+          "line": 678,
+          "name": "handle_cpp_captures"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 14,
+          "name": "is_csharp_kind"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 40,
+          "name": "enrich_and_create_entity"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 209,
+          "name": "FqnEnrichment"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/enrich.rs",
+          "line": 232,
+          "name": "apply_cpp_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/post_passes.rs",
+          "line": 8,
+          "name": "set_module_default_export"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/post_passes.rs",
+          "line": 41,
+          "name": "run_post_passes"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 5,
+          "name": "call_method_names"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 113,
+          "name": "test_extract_entities_simple_java_class"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 134,
+          "name": "test_extract_entities_simple_typescript_function"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 174,
+          "name": "test_extract_entities_interface_java"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 212,
+          "name": "test_extract_entities_constant_typescript"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 491,
+          "name": "test_extract_entities_deduplication_javascript"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 581,
+          "name": "test_extract_entities_deduplication_respects_kind"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 807,
+          "name": "test_extract_entities_css_class"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 828,
+          "name": "test_extract_entities_css_id"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 874,
+          "name": "test_extract_scss_and_css_classes_together"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 905,
+          "name": "test_extract_entities_scss_mixin"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 926,
+          "name": "test_extract_entities_scss_function"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1037,
+          "name": "test_extract_html_elements_and_attributes"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1066,
+          "name": "test_extract_html_with_custom_elements"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1096,
+          "name": "test_extract_javascript_with_class_and_function"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1140,
+          "name": "test_extract_hybrid_ecosystem_full_integration"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1205,
+          "name": "test_extract_python_class"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1226,
+          "name": "test_extract_python_function"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1269,
+          "name": "test_extract_python_async_function"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1416,
+          "name": "test_extract_python_method_within_class"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1468,
+          "name": "test_extract_python_constant"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 1573,
+          "name": "test_extract_python_module_synthetic_entity"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2035,
+          "name": "test_extract_python_optional_return_type"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2055,
+          "name": "test_extract_python_py2_exception_syntax"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2084,
+          "name": "test_extract_python_py3_exception_syntax"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2111,
+          "name": "test_extract_python_method_enclosing_class_is_set"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2369,
+          "name": "test_extract_entities_markdown_section_body_in_embed_text"
+        },
+        {
+          "file": "src/pipeline/parser/extractor/tests.rs",
+          "line": 2435,
+          "name": "test_extract_entities_markdown_section_fqn_chain"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/capture.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/capture.rs",
+          "line": 23,
+          "name": "CsharpCapture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/capture.rs",
+          "line": 166,
+          "name": "capture_from"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 32,
+          "name": "extract"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 44,
+          "name": "find_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 55,
+          "name": "entities_of_kind"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 99,
+          "name": "test_extract_class_interface_struct_enum"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 127,
+          "name": "test_extract_record_class_and_record_struct_are_records"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 147,
+          "name": "test_extract_method_property_constructor"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 173,
+          "name": "test_extract_field_and_const_detection"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 198,
+          "name": "test_extract_delegate_event_indexer_operator"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 232,
+          "name": "test_extract_local_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 256,
+          "name": "test_extract_block_and_file_scoped_namespaces"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 303,
+          "name": "test_fqn_file_scoped_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 311,
+          "name": "test_fqn_block_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 319,
+          "name": "test_fqn_nested_block_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 335,
+          "name": "test_fqn_no_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 343,
+          "name": "test_fqn_nested_type_in_type"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 357,
+          "name": "test_fqn_nested_type_in_nested_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 376,
+          "name": "test_fqn_method_under_file_scoped_namespace"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 396,
+          "name": "test_fqn_member_of_nested_type"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 607,
+          "name": "test_orphan_pass_captures_top_level_statements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 632,
+          "name": "test_xml_doc_comments_captured_as_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 659,
+          "name": "test_attribute_captured_in_decorators"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 836,
+          "name": "test_is_pattern_emits_qualified_nested_type_reference"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 853,
+          "name": "test_switch_arm_constant_pattern_emits_qualified_reference"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 865,
+          "name": "test_static_member_access_emits_qualified_reference"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 877,
+          "name": "test_declaration_pattern_emits_qualified_not_bare"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 894,
+          "name": "test_enum_member_name_is_not_a_type_reference"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 906,
+          "name": "test_declaration_names_are_not_type_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/csharp/tests.rs",
+          "line": 920,
+          "name": "test_invocation_receiver_path_does_not_duplicate_call_intent"
+        },
+        {
+          "file": "src/pipeline/parser/languages/css.rs",
+          "line": 13,
+          "name": "handle_css_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/css.rs",
+          "line": 69,
+          "name": "test_handle_css_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/css.rs",
+          "line": 82,
+          "name": "test_handle_css_id"
+        },
+        {
+          "file": "src/pipeline/parser/languages/css.rs",
+          "line": 95,
+          "name": "test_handle_scss_mixin"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 4,
+          "name": "extract_entities_gradle"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 288,
+          "name": "test_full_gradle_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 331,
+          "name": "test_gradle_project_identity_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 366,
+          "name": "test_gradle_project_identity_group_with_equals"
+        },
+        {
+          "file": "src/pipeline/parser/languages/gradle.rs",
+          "line": 384,
+          "name": "test_groovy_comments_are_skipped"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/accessors.rs",
+          "line": 9,
+          "name": "synthesize_property_accessors"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/accessors.rs",
+          "line": 136,
+          "name": "make_synthetic_accessor"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/capture.rs",
+          "line": 3,
+          "name": "handle_groovy_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/inheritance.rs",
+          "line": 6,
+          "name": "try_extract_type_declaration"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/inheritance.rs",
+          "line": 87,
+          "name": "extract_inheritance_intents"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 32,
+          "name": "tests"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 264,
+          "name": "try_methods"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 387,
+          "name": "push_property"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/mod.rs",
+          "line": 435,
+          "name": "assign_method_call_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 9,
+          "name": "pick_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 16,
+          "name": "pick_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 32,
+          "name": "find_method_in_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 46,
+          "name": "find_synthetic_accessor"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 62,
+          "name": "test_groovy_class_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 73,
+          "name": "test_groovy_interface_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 84,
+          "name": "test_groovy_enum_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 95,
+          "name": "test_groovy_method_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 104,
+          "name": "test_groovy_trait_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 115,
+          "name": "test_groovy_property_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 126,
+          "name": "test_groovy_multiple_classes"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 140,
+          "name": "test_groovy_constructor_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 151,
+          "name": "test_groovy_empty_body_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 162,
+          "name": "test_groovy_method_in_class_extracts_correctly"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 178,
+          "name": "test_groovy_parse_sample_full_file_types"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 220,
+          "name": "test_groovy_parse_sample_full_file_methods_and_properties"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 276,
+          "name": "test_groovy_parse_sample_full_file_docstrings"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 372,
+          "name": "test_groovy_nested_scope_tracking"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 542,
+          "name": "test_groovy_interface_extends_multiple"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 554,
+          "name": "test_groovy_trait_implements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 564,
+          "name": "test_groovy_enum_implements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 612,
+          "name": "test_groovy_extends_intent_attached_to_class_not_methods"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 801,
+          "name": "test_groovy_abstract_method_has_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 829,
+          "name": "test_groovy_def_method_has_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 837,
+          "name": "test_groovy_property_has_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 845,
+          "name": "test_groovy_multiline_method_has_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 866,
+          "name": "test_groovy_method_without_doc_has_none"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 921,
+          "name": "bug_javadoc_body_line_yields_no_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 942,
+          "name": "bug_bare_property_is_indexed"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1017,
+          "name": "javadoc_body_with_parens_is_not_a_method"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1055,
+          "name": "braces_inside_block_comment_do_not_corrupt_scope"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1077,
+          "name": "single_line_block_comment_does_not_leak"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1089,
+          "name": "trailing_line_comment_is_ignored"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1158,
+          "name": "bare_typed_property_is_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1167,
+          "name": "generic_typed_property_is_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1179,
+          "name": "def_property_is_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1191,
+          "name": "modifier_prefixed_property_is_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1203,
+          "name": "java_style_semicolon_field_is_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1215,
+          "name": "initialized_property_still_extracted"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1247,
+          "name": "import_and_package_lines_are_not_properties"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1260,
+          "name": "type_declaration_line_is_not_a_property"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1273,
+          "name": "script_level_bare_identifier_is_not_a_property"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1325,
+          "name": "final_property_generates_getter_only"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1343,
+          "name": "explicit_setter_suppresses_synthetic_setter"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1365,
+          "name": "explicit_getter_suppresses_synthetic_getter"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1401,
+          "name": "synthetic_accessor_metadata"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1421,
+          "name": "synthetic_accessor_uuid_is_distinct"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1436,
+          "name": "synthetic_accessors_have_no_reference_intents"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1453,
+          "name": "url_string_with_double_slash_is_tolerated"
+        },
+        {
+          "file": "src/pipeline/parser/languages/groovy/tests.rs",
+          "line": 1697,
+          "name": "test_new_constructor_not_method_declaration"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 7,
+          "name": "extract_chart_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 113,
+          "name": "walk_helm_values"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 271,
+          "name": "extract_template_refs"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 376,
+          "name": "test_parse_chart_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 404,
+          "name": "test_parse_chart_dependencies"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 426,
+          "name": "test_parse_values_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 448,
+          "name": "test_parse_template_variables"
+        },
+        {
+          "file": "src/pipeline/parser/languages/helm.rs",
+          "line": 482,
+          "name": "test_parse_release_and_chart_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 16,
+          "name": "parse_html_attribute_node"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 50,
+          "name": "extract_html_attribute"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 154,
+          "name": "extract_html_elements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 252,
+          "name": "handle_html_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 287,
+          "name": "extract_script_imports"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 369,
+          "name": "extract_link_stylesheet_imports"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 446,
+          "name": "test_extract_custom_elements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 486,
+          "name": "test_extract_id_attributes"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 507,
+          "name": "test_split_class_attributes"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 532,
+          "name": "test_ignore_standard_html_elements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/html.rs",
+          "line": 552,
+          "name": "test_extract_multiple_custom_elements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 21,
+          "name": "handle_dom_css_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/dom_css.rs",
+          "line": 118,
+          "name": "attach_to_module_or_create"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/jsx.rs",
+          "line": 16,
+          "name": "extract_jsx_component_invocation"
+        },
+        {
+          "file": "src/pipeline/parser/languages/javascript/jsx.rs",
+          "line": 117,
+          "name": "extract_jsx_html_attributes"
+        },
+        {
+          "file": "src/pipeline/parser/languages/jenkins.rs",
+          "line": 4,
+          "name": "extract_entities_jenkins"
+        },
+        {
+          "file": "src/pipeline/parser/languages/jenkins.rs",
+          "line": 163,
+          "name": "test_full_jenkinsfile_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/jenkins.rs",
+          "line": 214,
+          "name": "test_jenkinsfile_mixed_with_gradle_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 43,
+          "name": "extract_package_json"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 159,
+          "name": "walk_json"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 230,
+          "name": "test_parse_simple_config"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 245,
+          "name": "test_parse_nested_config"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 264,
+          "name": "test_parse_package_json_dependencies"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 306,
+          "name": "test_parse_package_json_project_identity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 333,
+          "name": "test_package_json_without_dependencies_emits_project_identity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 365,
+          "name": "test_non_package_json_named_file_is_not_treated_as_manifest"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 380,
+          "name": "test_package_json_without_name_falls_back_to_config_walk"
+        },
+        {
+          "file": "src/pipeline/parser/languages/json_config.rs",
+          "line": 395,
+          "name": "test_parse_tsconfig"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 6,
+          "name": "collect_all_reference_intents_kotlin"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 594,
+          "name": "extract_anonymous_objects_recursive"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 925,
+          "name": "test_extract_anonymous_object_implements"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kotlin.rs",
+          "line": 991,
+          "name": "test_extract_anonymous_object_no_inheritance"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 3,
+          "name": "extract_entities_k8s"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 32,
+          "name": "map_k8s_kind"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 44,
+          "name": "extract_single_k8s_resource"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 286,
+          "name": "test_parse_deployment"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 337,
+          "name": "test_parse_service"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 366,
+          "name": "test_parse_configmap"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 386,
+          "name": "test_parse_ingress"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 426,
+          "name": "test_parse_multi_resource_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/kubernetes.rs",
+          "line": 463,
+          "name": "test_parse_unknown_kind"
+        },
+        {
+          "file": "src/pipeline/parser/languages/markdown.rs",
+          "line": 4,
+          "name": "handle_markdown_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 178,
+          "name": "extract_entities_csproj"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 326,
+          "name": "test_extract_csproj_package_reference_attribute_version"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 349,
+          "name": "test_extract_csproj_identity_from_package_id"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 382,
+          "name": "test_extract_csproj_identity_falls_back_to_assembly_name"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 410,
+          "name": "test_extract_csproj_identity_falls_back_to_file_stem"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 429,
+          "name": "test_extract_csproj_version_property"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 445,
+          "name": "test_extract_csproj_project_reference_skipped"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 461,
+          "name": "test_extract_csproj_tolerates_utf8_bom"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 507,
+          "name": "test_extract_csproj_empty_project_yields_identity_only"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 528,
+          "name": "test_extract_csproj_xmlns_and_conditions_ignored"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 552,
+          "name": "test_extract_csproj_versionless_without_props_is_unknown"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 576,
+          "name": "test_extract_csproj_package_reference_update_attribute"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 595,
+          "name": "test_extract_csproj_cpm_resolves_version_from_props"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 649,
+          "name": "test_extract_csproj_cpm_nearest_ancestor_wins"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 697,
+          "name": "test_cpm_cache_parses_props_once"
+        },
+        {
+          "file": "src/pipeline/parser/languages/msbuild.rs",
+          "line": 763,
+          "name": "test_extract_csproj_under_root_dir_with_no_props"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 8,
+          "name": "extract_entities_properties"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 84,
+          "name": "process_property_line"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 146,
+          "name": "test_parse_simple_pairs"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 164,
+          "name": "test_parse_colon_delimiter"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 180,
+          "name": "test_parse_comments"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 197,
+          "name": "test_parse_comment_as_docstring"
+        },
+        {
+          "file": "src/pipeline/parser/languages/properties.rs",
+          "line": 216,
+          "name": "test_parse_multiline_values"
+        },
+        {
+          "file": "src/pipeline/parser/languages/python.rs",
+          "line": 5,
+          "name": "handle_python_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/python.rs",
+          "line": 431,
+          "name": "test_handle_python_capture_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/python.rs",
+          "line": 453,
+          "name": "test_handle_python_capture_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/python.rs",
+          "line": 473,
+          "name": "test_handle_python_capture_method"
+        },
+        {
+          "file": "src/pipeline/parser/languages/python.rs",
+          "line": 493,
+          "name": "test_handle_python_capture_constant"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/capture.rs",
+          "line": 16,
+          "name": "handle_rust_capture"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/fqn.rs",
+          "line": 22,
+          "name": "RustModuleContext"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/fqn.rs",
+          "line": 56,
+          "name": "qualify_rust_fqns"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/fqn.rs",
+          "line": 275,
+          "name": "is_qualifiable_rust_kind"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/impls.rs",
+          "line": 24,
+          "name": "reclassify_methods_in_impl_blocks"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/impls.rs",
+          "line": 129,
+          "name": "collect_rust_trait_implementations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 17,
+          "name": "type_ref_names"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 28,
+          "name": "create_test_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 45,
+          "name": "test_handle_rust_capture_struct"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 62,
+          "name": "test_handle_rust_capture_enum"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 79,
+          "name": "test_handle_rust_capture_trait"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 96,
+          "name": "test_handle_rust_capture_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 113,
+          "name": "test_handle_rust_capture_macro"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 130,
+          "name": "test_handle_rust_capture_type_alias"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 147,
+          "name": "test_handle_rust_capture_constant"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 164,
+          "name": "test_handle_rust_capture_module"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 349,
+          "name": "test_collect_rust_trait_implementations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 407,
+          "name": "test_collect_rust_call_references"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1202,
+          "name": "test_extract_scoped_call_self_translated_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1267,
+          "name": "test_rust_method_fqn_includes_impl_target_inherent"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1296,
+          "name": "test_rust_method_fqn_includes_impl_target_trait_for"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1362,
+          "name": "test_self_in_return_type_resolves_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1415,
+          "name": "test_self_in_struct_expression_resolves_to_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1470,
+          "name": "test_self_outside_impl_emits_as_self"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1513,
+          "name": "make_rust_entity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1621,
+          "name": "diagnose_cfg_test_mod_extraction"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1739,
+          "name": "test_qualify_rust_fqns_struct_in_nested_module"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1758,
+          "name": "test_qualify_rust_fqns_method_uses_enclosing_class"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1777,
+          "name": "test_qualify_rust_fqns_function_in_crate_root"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1796,
+          "name": "test_qualify_rust_fqns_no_repo_path_is_noop"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1810,
+          "name": "test_qualify_rust_fqns_no_cargo_toml_uses_loose_prefix"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1832,
+          "name": "test_qualify_rust_fqns_skips_non_rust_entities"
+        },
+        {
+          "file": "src/pipeline/parser/languages/rust/tests.rs",
+          "line": 1860,
+          "name": "test_qualify_rust_fqns_sets_enclosing_class_fqn_for_methods"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 3,
+          "name": "extract_entities_toml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 45,
+          "name": "extract_cargo_package"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 100,
+          "name": "extract_cargo_features"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 138,
+          "name": "extract_workspace_members"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 170,
+          "name": "extract_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 253,
+          "name": "test_extract_single_simple_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 290,
+          "name": "test_extract_table_dependency_with_features"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 326,
+          "name": "test_extract_git_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 349,
+          "name": "test_extract_path_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 378,
+          "name": "test_extract_dev_and_build_dependencies"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 426,
+          "name": "test_extract_package_metadata"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 476,
+          "name": "test_extract_features_section"
+        },
+        {
+          "file": "src/pipeline/parser/languages/toml.rs",
+          "line": 511,
+          "name": "test_extract_workspace_members"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/mod.rs",
+          "line": 5,
+          "name": "vtc"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/mod.rs",
+          "line": 24,
+          "name": "aggregate_varnish_builtin_subs"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 4,
+          "name": "VccState"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 57,
+          "name": "handle_module"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 85,
+          "name": "handle_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 122,
+          "name": "handle_object"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 153,
+          "name": "handle_method"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 335,
+          "name": "test_extract_vcc_module"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 349,
+          "name": "test_extract_vcc_function"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 364,
+          "name": "test_extract_vcc_function_with_rst_prose"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 397,
+          "name": "test_extract_vcc_object_and_method"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 424,
+          "name": "test_extract_vcc_priv_params_excluded"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 442,
+          "name": "test_extract_vcc_enum_params"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcc.rs",
+          "line": 457,
+          "name": "test_extract_vcc_abi_directive_skipped"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 6,
+          "name": "Parser"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 115,
+          "name": "declare_named_block"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 133,
+          "name": "collect_instance"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 145,
+          "name": "collect_declarations"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 168,
+          "name": "parse_file"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 251,
+          "name": "parse_vcl_version"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 282,
+          "name": "parse_backend"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 362,
+          "name": "parse_backend_attr_value"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 398,
+          "name": "is_known_probe"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 404,
+          "name": "parse_probe"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 520,
+          "name": "parse_acl"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 727,
+          "name": "record_acl_ref_after_match_op"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 834,
+          "name": "parse_new_statement"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 911,
+          "name": "parse_import"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 961,
+          "name": "parse_include"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1002,
+          "name": "parse_unused"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1193,
+          "name": "test_extract_vcl_version"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1204,
+          "name": "test_extract_backend"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1220,
+          "name": "test_extract_backend_none"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1231,
+          "name": "test_extract_probe"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1280,
+          "name": "test_extract_acl"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1295,
+          "name": "test_extract_acl_with_flags"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1308,
+          "name": "test_extract_subroutine"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1324,
+          "name": "test_extract_builtin_sub"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1412,
+          "name": "test_extract_import"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1426,
+          "name": "test_extract_import_with_alias"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1478,
+          "name": "test_extract_new_statement"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1504,
+          "name": "test_empty_input"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vcl.rs",
+          "line": 1527,
+          "name": "test_extract_vcl_version_vcl_4_0"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 7,
+          "name": "VtcContext"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 35,
+          "name": "handle_test_case"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 55,
+          "name": "handle_server"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 96,
+          "name": "handle_client"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 138,
+          "name": "handle_logexpect"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 162,
+          "name": "handle_barrier"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 333,
+          "name": "parse_varnish_command"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 410,
+          "name": "test_extract_vtc_test_case"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 427,
+          "name": "test_extract_vtc_vtest"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 445,
+          "name": "test_extract_vtc_server"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 462,
+          "name": "test_extract_vtc_client"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 478,
+          "name": "test_extract_vtc_varnish_instance"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 493,
+          "name": "test_extract_vtc_logexpect"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 509,
+          "name": "test_extract_vtc_barrier"
+        },
+        {
+          "file": "src/pipeline/parser/languages/varnish/vtc.rs",
+          "line": 522,
+          "name": "test_vtc_backend_synthesis_vcl_plus_backend"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 3,
+          "name": "extract_entities_xml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 77,
+          "name": "extract_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 105,
+          "name": "extract_plugin"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 144,
+          "name": "test_extract_single_maven_dependency"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 228,
+          "name": "test_extract_maven_plugins"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 270,
+          "name": "test_extract_dependencies_and_plugins_together"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 336,
+          "name": "test_extract_maven_project_identity"
+        },
+        {
+          "file": "src/pipeline/parser/languages/xml.rs",
+          "line": 363,
+          "name": "test_extract_maven_project_identity_with_dependencies"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 32,
+          "name": "walk_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 106,
+          "name": "test_parse_flat_keys"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 126,
+          "name": "test_parse_nested_keys"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 150,
+          "name": "test_parse_array_values"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 170,
+          "name": "test_parse_depth_limit"
+        },
+        {
+          "file": "src/pipeline/parser/languages/yaml.rs",
+          "line": 197,
+          "name": "test_parse_multi_document_yaml"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 12,
+          "name": "collect_orphaned_references"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 224,
+          "name": "test_find_nearest_entity_by_line_before"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 274,
+          "name": "test_find_nearest_entity_by_line_exact"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 296,
+          "name": "test_find_nearest_entity_by_line_after"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 332,
+          "name": "test_find_nearest_entity_by_line_before_all"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 368,
+          "name": "test_find_nearest_entity_containment_preferred"
+        },
+        {
+          "file": "src/pipeline/parser/orphans.rs",
+          "line": 409,
+          "name": "test_find_nearest_entity_containment_chooses_smallest_range"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 66,
+          "name": "prepare_entities"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 296,
+          "name": "test_build_embed_text_minimal"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 320,
+          "name": "test_build_embed_text_full"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 354,
+          "name": "test_prepare_entities_batch"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 398,
+          "name": "test_build_embed_text_build_dependency"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 422,
+          "name": "test_build_embed_text_build_plugin"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 446,
+          "name": "test_build_embed_text_build_task"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 469,
+          "name": "test_build_embed_text_pipeline_stage"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 491,
+          "name": "test_build_embed_text_pipeline_step"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 513,
+          "name": "test_build_embed_text_groovy_class"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 533,
+          "name": "test_build_embed_text_groovy_interface"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 552,
+          "name": "test_build_embed_text_groovy_trait"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 571,
+          "name": "test_build_embed_text_groovy_method"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 594,
+          "name": "test_embed_text_groovy_method_includes_docstring"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 619,
+          "name": "test_build_embed_text_groovy_property"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 641,
+          "name": "embed_text_includes_fqn"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 664,
+          "name": "embed_text_includes_tokenized_identifier"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 704,
+          "name": "embed_text_includes_outgoing_call_names"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 745,
+          "name": "embed_text_is_deterministic_and_bounded"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 794,
+          "name": "prepare_entities_leaves_markdown_embed_text_untouched"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 854,
+          "name": "role_sentence_leads_with_docstring"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 884,
+          "name": "role_sentence_falls_back_to_call_names"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 921,
+          "name": "role_sentence_bare_identifier_when_nothing_known"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 947,
+          "name": "role_sentence_truncates_long_docstring_on_char_boundary"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 986,
+          "name": "role_sentence_strips_comment_markers"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1008,
+          "name": "embed_text_role_line_precedes_structural_fields"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1047,
+          "name": "role_sentence_handles_non_code_kinds"
+        },
+        {
+          "file": "src/pipeline/prepare.rs",
+          "line": 1074,
+          "name": "role_sentence_uses_shorter_call_cap_than_calls_section"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 542
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-14",
+      "callers": [
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 24,
+          "name": "make_test_parsed_entity"
+        },
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 76,
+          "name": "connect_and_cleanup"
+        },
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 113,
+          "name": "cleanup_benchmark_data"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 172,
+          "name": "run_deps_command"
+        },
+        {
+          "file": "src/cli_tools/deps.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/cli_tools/deps.rs",
+          "line": 89,
+          "name": "collect_deps_diagnostics"
+        },
+        {
+          "file": "src/cli_tools/deps.rs",
+          "line": 144,
+          "name": "run_deps"
+        },
+        {
+          "file": "src/cli_tools/explore_file.rs",
+          "line": 31,
+          "name": "normalize_explore_input"
+        },
+        {
+          "file": "src/cli_tools/explore_file.rs",
+          "line": 97,
+          "name": "run_explore_file"
+        },
+        {
+          "file": "src/cli_tools/find_callers.rs",
+          "line": 31,
+          "name": "run_find_callers"
+        },
+        {
+          "file": "src/cli_tools/list_files.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/cli_tools/list_files.rs",
+          "line": 315,
+          "name": "run_list_files"
+        },
+        {
+          "file": "src/cli_tools/repos.rs",
+          "line": 22,
+          "name": "run_list_repos"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/enrich.rs",
+          "line": 19,
+          "name": "enrich_with_relationships"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 29,
+          "name": "recall"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 49,
+          "name": "SearchContext"
+        },
+        {
+          "file": "src/cli_tools/subgraph.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/cli_tools/subgraph.rs",
+          "line": 38,
+          "name": "run_get_subgraph"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 22,
+          "name": "index_statements"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 49,
+          "name": "connect"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 73,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 129,
+          "name": "test_graph_db_connection"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 138,
+          "name": "test_graph_db_ensure_indexes"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 153,
+          "name": "test_ensure_indexes_creates_entity_repo_fqn_index"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 191,
+          "name": "test_contains_auto_link_explain_succeeds"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 12,
+          "name": "DeleteExt"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 96,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 103,
+          "name": "test_graph_db_delete_by_repo"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 115,
+          "name": "test_graph_db_delete_by_file_paths"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 134,
+          "name": "test_graph_db_delete_by_file_paths_empty"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 631,
+          "name": "fold_hidden"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 898,
+          "name": "QueryExt"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1543,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1550,
+          "name": "test_get_entities_with_dependencies_empty"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1564,
+          "name": "test_get_entities_with_dependencies"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1579,
+          "name": "test_find_references"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1598,
+          "name": "test_find_references_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1616,
+          "name": "test_find_callers"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1629,
+          "name": "test_find_callers_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1642,
+          "name": "test_get_file_entities"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1657,
+          "name": "test_get_file_entities_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1670,
+          "name": "param_binding_uses_repo_names_list"
+        },
+        {
+          "file": "src/db/graph/query_repo.rs",
+          "line": 78,
+          "name": "RepoIdentity"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 46,
+          "name": "validate_relationship_types"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 121,
+          "name": "resolve_subgraph_root_node"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 171,
+          "name": "find_root_by_uuid"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 213,
+          "name": "collect_related_nodes"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 300,
+          "name": "collect_subgraph_edges"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 399,
+          "name": "test_get_entity_subgraph_not_found"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 426,
+          "name": "test_get_entity_subgraph_valid_entity"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 450,
+          "name": "test_get_entity_subgraph_invalid_relationship"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 472,
+          "name": "test_get_entity_subgraph_outgoing_only"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 494,
+          "name": "test_get_entity_subgraph_multiple_relationships"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 518,
+          "name": "test_get_entity_subgraph_truncation"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 545,
+          "name": "test_get_entity_subgraph_with_visible_kinds"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 577,
+          "name": "test_get_entity_subgraph_connectivity"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 8,
+          "name": "group_entities_by_kind"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 54,
+          "name": "UpsertExt"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 454,
+          "name": "auto_link_contains"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 518,
+          "name": "test_contains_cipher_repo_name_still_used_for_parent_lookup"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 532,
+          "name": "test_load_entity_mappings_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 547,
+          "name": "test_upsert_entities"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 560,
+          "name": "test_upsert_entities_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 570,
+          "name": "test_upsert_relationships"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 583,
+          "name": "test_upsert_relationships_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 592,
+          "name": "test_upsert_calls"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 603,
+          "name": "test_upsert_calls_empty"
+        },
+        {
+          "file": "src/db/mod.rs",
+          "line": 17,
+          "name": "init_databases"
+        },
+        {
+          "file": "src/db/mod.rs",
+          "line": 37,
+          "name": "test_graph_db_exports"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 33,
+          "name": "KnotMcpHandler"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 46,
+          "name": "new"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 15,
+          "name": "ingest_batch"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 51,
+          "name": "test_ingest_batch_empty"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 65,
+          "name": "test_ingest_batch_with_entities"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 10,
+          "name": "link_cross_repo_dependencies"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 241,
+          "name": "match_dependency_to_repository"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 317,
+          "name": "resolve_declared_dependencies"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 339,
+          "name": "find_declaring_consumers"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/cross_repo.rs",
+          "line": 373,
+          "name": "sweep_existing_consumers"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 9,
+          "name": "test_utils"
+        },
+        {
+          "file": "src/pipeline/ingest/resolve/mod.rs",
+          "line": 24,
+          "name": "resolve_and_save_relationships"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 36,
+          "name": "run_indexing_pipeline"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 55,
+          "name": "run_indexing_pipeline_with_progress"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 95,
+          "name": "run_pipeline_inner"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 220,
+          "name": "ensure_embed_marker_allows_run"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 305,
+          "name": "run_streaming_ingest"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 527,
+          "name": "spawn_ingest_task"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 613,
+          "name": "clean_stale_data"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 31,
+          "name": "setup_watch_mode"
+        },
+        {
+          "file": "src/pipeline/watch.rs",
+          "line": 47,
+          "name": "setup_watch_mode_with_progress"
+        },
+        {
+          "file": "src/startup_guard.rs",
+          "line": 34,
+          "name": "verify_startup"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 92
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-15",
+      "callers": [
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 24,
+          "name": "make_test_parsed_entity"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 22,
+          "name": "index_statements"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 96,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/mod.rs",
+          "line": 29,
+          "name": "GraphDb"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1543,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 393,
+          "name": "tests"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 518,
+          "name": "test_contains_cipher_repo_name_still_used_for_parent_lookup"
+        },
+        {
+          "file": "src/db/mod.rs",
+          "line": 17,
+          "name": "init_databases"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 33,
+          "name": "KnotMcpHandler"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 44,
+          "name": "tests"
+        },
+        {
+          "file": "src/startup_guard.rs",
+          "line": 34,
+          "name": "verify_startup"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 12
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-16",
+      "callers": [
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 212,
+          "name": "build_repo_scope"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 244,
+          "name": "repo_flag_builds_scope_list"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 253,
+          "name": "repo_flag_builds_scope_all"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 259,
+          "name": "repo_flag_absent_uses_config_default"
+        },
+        {
+          "file": "src/cli_tools/explore_file.rs",
+          "line": 31,
+          "name": "normalize_explore_input"
+        },
+        {
+          "file": "src/cli_tools/explore_file.rs",
+          "line": 97,
+          "name": "run_explore_file"
+        },
+        {
+          "file": "src/cli_tools/find_callers.rs",
+          "line": 31,
+          "name": "run_find_callers"
+        },
+        {
+          "file": "src/cli_tools/list_files.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/cli_tools/list_files.rs",
+          "line": 315,
+          "name": "run_list_files"
+        },
+        {
+          "file": "src/cli_tools/list_files.rs",
+          "line": 326,
+          "name": "run_list_files_with_fetcher"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/enrich.rs",
+          "line": 19,
+          "name": "enrich_with_relationships"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 29,
+          "name": "recall"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 68,
+          "name": "run_search_hybrid_context"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 8,
+          "name": "search_hybrid_context"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 15,
+          "name": "repo_scope_from_args"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 29,
+          "name": "repo_scope_from_args_absent_is_all"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 35,
+          "name": "repo_scope_from_args_string_all"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 42,
+          "name": "repo_scope_from_args_string_list"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 52,
+          "name": "repo_scope_from_args_array"
+        },
+        {
+          "file": "src/mcp_tools/mod.rs",
+          "line": 62,
+          "name": "repo_scope_from_args_null_is_all"
+        },
+        {
+          "file": "src/models/mod.rs",
+          "line": 13,
+          "name": "subgraph"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 29,
+          "name": "parse"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 65,
+          "name": "parse_optional"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 78,
+          "name": "from_json"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 106,
+          "name": "is_unfiltered"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 117,
+          "name": "parse_empty_is_all"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 122,
+          "name": "parse_whitespace_only_is_all"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 127,
+          "name": "parse_all_sentinel"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 132,
+          "name": "parse_all_sentinel_case_insensitive"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 138,
+          "name": "parse_star_sentinel"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 143,
+          "name": "parse_star_wins_over_list"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 148,
+          "name": "parse_star_is_not_a_glob"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 156,
+          "name": "parse_all_wins_over_list"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 161,
+          "name": "parse_single_repo"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 169,
+          "name": "parse_multi_repo"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 177,
+          "name": "parse_multi_trims_tokens"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 185,
+          "name": "parse_multi_drops_empty_tokens"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 193,
+          "name": "parse_multi_dedups_preserving_order"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 201,
+          "name": "parse_preserves_repo_case"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 209,
+          "name": "parse_optional_none_is_all"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 214,
+          "name": "parse_optional_some_parses"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 222,
+          "name": "from_json_string"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 231,
+          "name": "from_json_array"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 240,
+          "name": "from_json_absent_is_all"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 247,
+          "name": "from_json_non_string_items_skipped"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 256,
+          "name": "filter_names_empty_for_all"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 261,
+          "name": "filter_names_one_and_many"
+        },
+        {
+          "file": "src/models/repo_scope.rs",
+          "line": 273,
+          "name": "is_unfiltered_only_for_all"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 49
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-17",
+      "callers": [
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 29,
+          "name": "recall"
+        },
+        {
+          "file": "src/cli_tools/search_hybrid_context/mod.rs",
+          "line": 49,
+          "name": "SearchContext"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 33,
+          "name": "KnotMcpHandler"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 46,
+          "name": "new"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 59,
+          "name": "init"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 67,
+          "name": "init_with_model"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 203,
+          "name": "test_embedder_init_and_embed_basic"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 233,
+          "name": "test_embedder_embed_query"
+        },
+        {
+          "file": "src/pipeline/embed.rs",
+          "line": 250,
+          "name": "bge_query_and_passage_vectors_differ_by_prefix"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 36,
+          "name": "run_indexing_pipeline"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 437,
+          "name": "EmbedTaskEnv"
+        },
+        {
+          "file": "src/pipeline/runner.rs",
+          "line": 446,
+          "name": "spawn_embed_task"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 13
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-18",
+      "callers": [
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 0,
+          "name": "<file>"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 46,
+          "name": "new"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 69,
+          "name": "new_dry_run"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 106,
+          "name": "dispatch"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 129,
+          "name": "handle_list_tools_request"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 300,
+          "name": "tools_returns_the_full_surface"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 325,
+          "name": "every_tool_has_name_description_and_object_schema"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 343,
+          "name": "dispatch_refuses_in_dry_run_mode"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 353,
+          "name": "dispatch_refuses_every_tool_in_dry_run_mode"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 365,
+          "name": "dispatch_rejects_unknown_tool"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 387,
+          "name": "offline_handler_reports_missing_databases_not_dry_run"
+        },
+        {
+          "file": "src/mcp_tools/explore_file.rs",
+          "line": 41,
+          "name": "ExploreFileTool"
+        },
+        {
+          "file": "src/mcp_tools/explore_file.rs",
+          "line": 60,
+          "name": "handle"
+        },
+        {
+          "file": "src/mcp_tools/find_callers.rs",
+          "line": 58,
+          "name": "FindCallersTool"
+        },
+        {
+          "file": "src/mcp_tools/find_callers.rs",
+          "line": 87,
+          "name": "handle"
+        },
+        {
+          "file": "src/mcp_tools/list_files.rs",
+          "line": 50,
+          "name": "ListFilesTool"
+        },
+        {
+          "file": "src/mcp_tools/list_files.rs",
+          "line": 66,
+          "name": "handle"
+        },
+        {
+          "file": "src/mcp_tools/list_repo_dependencies.rs",
+          "line": 84,
+          "name": "ListRepoDependenciesTool"
+        },
+        {
+          "file": "src/mcp_tools/list_repo_dependencies.rs",
+          "line": 106,
+          "name": "handle"
+        },
+        {
+          "file": "src/mcp_tools/list_repositories.rs",
+          "line": 60,
+          "name": "ListRepositoriesTool"
+        },
+        {
+          "file": "src/mcp_tools/list_repositories.rs",
+          "line": 70,
+          "name": "handle"
+        },
+        {
+          "file": "src/mcp_tools/search_hybrid_context/mod.rs",
+          "line": 16,
+          "name": "format"
+        },
+        {
+          "file": "src/mcp_tools/search_hybrid_context/mod.rs",
+          "line": 108,
+          "name": "handle"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 23
+      },
+      "self_count": 1
+    },
+    {
+      "id": "rust-19",
+      "callers": [
+        {
+          "file": "benches/graph_upsert_bench.rs",
+          "line": 76,
+          "name": "connect_and_cleanup"
+        },
+        {
+          "file": "src/bin/knot.rs",
+          "line": 22,
+          "name": "main"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 129,
+          "name": "test_graph_db_connection"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 138,
+          "name": "test_graph_db_ensure_indexes"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 153,
+          "name": "test_ensure_indexes_creates_entity_repo_fqn_index"
+        },
+        {
+          "file": "src/db/graph/connection.rs",
+          "line": 191,
+          "name": "test_contains_auto_link_explain_succeeds"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 103,
+          "name": "test_graph_db_delete_by_repo"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 115,
+          "name": "test_graph_db_delete_by_file_paths"
+        },
+        {
+          "file": "src/db/graph/delete.rs",
+          "line": 134,
+          "name": "test_graph_db_delete_by_file_paths_empty"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1550,
+          "name": "test_get_entities_with_dependencies_empty"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1564,
+          "name": "test_get_entities_with_dependencies"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1579,
+          "name": "test_find_references"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1598,
+          "name": "test_find_references_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1616,
+          "name": "test_find_callers"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1629,
+          "name": "test_find_callers_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1642,
+          "name": "test_get_file_entities"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1657,
+          "name": "test_get_file_entities_with_repo"
+        },
+        {
+          "file": "src/db/graph/query.rs",
+          "line": 1670,
+          "name": "param_binding_uses_repo_names_list"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 399,
+          "name": "test_get_entity_subgraph_not_found"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 426,
+          "name": "test_get_entity_subgraph_valid_entity"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 450,
+          "name": "test_get_entity_subgraph_invalid_relationship"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 472,
+          "name": "test_get_entity_subgraph_outgoing_only"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 494,
+          "name": "test_get_entity_subgraph_multiple_relationships"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 518,
+          "name": "test_get_entity_subgraph_truncation"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 545,
+          "name": "test_get_entity_subgraph_with_visible_kinds"
+        },
+        {
+          "file": "src/db/graph/query_subgraph.rs",
+          "line": 577,
+          "name": "test_get_entity_subgraph_connectivity"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 532,
+          "name": "test_load_entity_mappings_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 547,
+          "name": "test_upsert_entities"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 560,
+          "name": "test_upsert_entities_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 570,
+          "name": "test_upsert_relationships"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 583,
+          "name": "test_upsert_relationships_empty"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 592,
+          "name": "test_upsert_calls"
+        },
+        {
+          "file": "src/db/graph/upsert.rs",
+          "line": 603,
+          "name": "test_upsert_calls_empty"
+        },
+        {
+          "file": "src/db/mod.rs",
+          "line": 17,
+          "name": "init_databases"
+        },
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 46,
+          "name": "new"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 51,
+          "name": "test_ingest_batch_empty"
+        },
+        {
+          "file": "src/pipeline/ingest/batch.rs",
+          "line": 65,
+          "name": "test_ingest_batch_with_entities"
+        },
+        {
+          "file": "src/startup_guard.rs",
+          "line": 34,
+          "name": "verify_startup"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 38
+      },
+      "self_count": 0
+    },
+    {
+      "id": "rust-20",
+      "callers": [
+        {
+          "file": "src/mcp_handler.rs",
+          "line": 106,
+          "name": "dispatch"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    }
+  ]
+}

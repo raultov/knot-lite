@@ -1,0 +1,193 @@
+[
+  {
+    "dependencies": [
+      "default",
+      "compute_file_hash",
+      "classify_files",
+      "to_repo_relative"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::tests::test_classify_files",
+    "kind": "rust_function",
+    "name": "test_classify_files",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 398,
+    "uuid": "645d6728-e109-5a2a-81f6-950d7435800e"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "inject_custom_ca_certs",
+      "setup_watch_mode",
+      "load_for_indexer",
+      "init_databases",
+      "init_logging",
+      "load_indexer",
+      "run_indexing_pipeline",
+      "configure_rayon",
+      "print_startup_banner",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot-indexer.rs",
+    "fqn": "knot::bin::knot-indexer::main",
+    "kind": "rust_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 17,
+    "uuid": "64fd7e6c-a7f2-50c2-b3f1-da76b6a3579e"
+  },
+  {
+    "dependencies": [
+      "to_repo_relative",
+      "classify_files",
+      "compute_file_hash",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::tests::test_classify_files_uses_relative_keys",
+    "kind": "rust_function",
+    "name": "test_classify_files_uses_relative_keys",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 678,
+    "uuid": "6740e294-e026-5bd4-90e5-e14a3005b9e5"
+  },
+  {
+    "dependencies": [
+      "to_repo_relative",
+      "classify_files_for_indexing",
+      "compute_file_hash",
+      "default"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/files.rs",
+    "fqn": "knot::pipeline::files::tests::test_classify_files_for_indexing_no_clean_unchanged",
+    "kind": "rust_function",
+    "name": "test_classify_files_for_indexing_no_clean_unchanged",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 288,
+    "uuid": "f60341c3-9b8a-5b26-8b03-f9c72e09968e"
+  },
+  {
+    "dependencies": [
+      "compute_file_hash"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::tests::test_compute_file_hash",
+    "kind": "rust_function",
+    "name": "test_compute_file_hash",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 350,
+    "uuid": "443c3858-2461-526c-bcd4-ce69abc1855a"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "test_classify_files_for_indexing_clean_mode in src/pipeline/files.rs",
+      "test_classify_files_for_indexing_no_clean_unchanged in src/pipeline/files.rs",
+      "classify_pipeline_inputs in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "classify_files"
+    ],
+    "docstring": "Classify files into unchanged, modified, added, and deleted categories.\n`repo_root` is the canonicalized repo root used by `to_repo_relative` to\ncompute the keys persisted in `index_state` (see\n`docs/specs/relative_file_paths.md` §3.2).",
+    "file_path": "src/pipeline/files.rs",
+    "fqn": "knot::pipeline::files::classify_files_for_indexing",
+    "kind": "rust_function",
+    "name": "classify_files_for_indexing",
+    "repo_name": "knot",
+    "signature": "(\n    all_files: &[PathBuf],\n    index_state: &IndexState,\n    clean_mode: bool,\n    repo_root: &Path,\n)",
+    "start_line": 54,
+    "uuid": "351798a1-b253-5032-912d-77702c531183"
+  },
+  {
+    "caller_count": 3,
+    "caller_samples": [
+      "update_index_state in src/pipeline/files.rs",
+      "test_update_and_remove_files in src/pipeline/state.rs",
+      "test_update_files_stores_relative_keys in src/pipeline/state.rs"
+    ],
+    "dependencies": [
+      "to_repo_relative",
+      "compute_file_hash"
+    ],
+    "docstring": "Update the state with new file hashes.\n`files` are absolute paths (from discovery / parsing). Keys stored\nin `file_hashes` are canonical relative paths against `repo_root`\n(see `docs/specs/relative_file_paths.md` §3.2).",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::IndexState::update_files",
+    "kind": "rust_method",
+    "name": "update_files",
+    "repo_name": "knot",
+    "signature": "(&mut self, files: &[PathBuf], repo_root: &Path)",
+    "start_line": 315,
+    "uuid": "b2f59e2b-e7ed-5215-9c01-7aa34c4d2025"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "run_pipeline_inner in src/pipeline/runner.rs"
+    ],
+    "dependencies": [
+      "calculate_files_to_delete"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/runner.rs",
+    "fqn": "knot::pipeline::runner::clean_stale_data",
+    "kind": "rust_function",
+    "name": "clean_stale_data",
+    "repo_name": "knot",
+    "signature": "(\n    vector_db: &VectorDb,\n    graph_db: &GraphDb,\n    cfg: &Config,\n    deleted_files: &[String],\n    modified_files: &[PathBuf],\n    is_full_index: bool,\n)",
+    "start_line": 613,
+    "uuid": "de00b851-5a62-5a54-b66d-6fa366070297"
+  },
+  {
+    "caller_count": 6,
+    "caller_samples": [
+      "test_classify_files_for_indexing_no_clean_unchanged in src/pipeline/files.rs",
+      "classify_files in src/pipeline/state.rs",
+      "update_files in src/pipeline/state.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Compute the SHA-256 hash of a file.",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::IndexState::compute_file_hash",
+    "kind": "rust_method",
+    "name": "compute_file_hash",
+    "repo_name": "knot",
+    "signature": "(file_path: &Path)",
+    "start_line": 226,
+    "uuid": "0a424ae0-5eea-573a-8eed-9e061911f192"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "classify_files_for_indexing in src/pipeline/files.rs",
+      "test_classify_files in src/pipeline/state.rs",
+      "test_classify_files_uses_relative_keys in src/pipeline/state.rs"
+    ],
+    "dependencies": [
+      "to_repo_relative",
+      "compute_file_hash"
+    ],
+    "docstring": "Classify files based on state comparison.\n`current_files` are absolute `PathBuf`s from `discover_files`.\n`repo_root` is the canonicalized repo root used to compute relative\nkeys (see `docs/specs/relative_file_paths.md` §3.2). The returned\n`unchanged`/`modified`/`added` vectors carry absolute paths (callers\nneed them for I/O); the `deleted` list carries relative keys (to\nmatch what is persisted and to plug into `delete_by_file_paths`).\nReturns four vectors:\n- unchanged: files with identical hashes\n- modified: files with different hashes\n- added: new files not in old state\n- deleted: files in old state but not on disk (relative keys)",
+    "file_path": "src/pipeline/state.rs",
+    "fqn": "knot::pipeline::state::IndexState::classify_files",
+    "kind": "rust_method",
+    "name": "classify_files",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        current_files: &[PathBuf],\n        repo_root: &Path,\n    )",
+    "start_line": 258,
+    "uuid": "e8c86927-036e-5028-9503-8cf7e3058d9b"
+  }
+]

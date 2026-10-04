@@ -1,0 +1,161 @@
+[
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "handle_list_tools in src/handlers/mcp.rs",
+      "handle_list_tools_request in src/mcp_handler.rs",
+      "tools_returns_the_full_surface in src/mcp_handler.rs"
+    ],
+    "dependencies": [],
+    "docstring": "The canonical MCP tool surface, independent of any transport or runtime.\n`knot-mcp` serves it over stdio; embedders such as knot-server serve the\nsame list over HTTP. Keeping one list here is what makes those surfaces\nidentical by construction.",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::KnotMcpHandler::tools",
+    "kind": "rust_method",
+    "name": "tools",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 89,
+    "uuid": "e9862be7-e553-5edb-8104-30d2724502a3"
+  },
+  {
+    "dependencies": [
+      "tools"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::KnotMcpHandler::handle_list_tools_request",
+    "kind": "rust_method",
+    "name": "handle_list_tools_request",
+    "repo_name": "knot",
+    "signature": "(\n        &self,\n        _request: Option<PaginatedRequestParams>,\n        _runtime: Arc<dyn McpServer>,\n    )",
+    "start_line": 129,
+    "uuid": "c3df2f52-e63b-5ab2-a2a4-ab5f6dd5a4a1"
+  },
+  {
+    "dependencies": [
+      "build_server_details"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::tests::test_build_server_details_has_tools_capability",
+    "kind": "rust_function",
+    "name": "test_build_server_details_has_tools_capability",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 233,
+    "uuid": "29de58a6-8194-50df-904f-010375edcdbe"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "<module> in scripts/token_savings_benchmark.py",
+      "<module> in tests/testing_files/python/sample.py"
+    ],
+    "dependencies": [
+      "load_mcp",
+      "init_logging",
+      "build_server_details",
+      "new_dry_run",
+      "fastembed_cache_dir",
+      "inject_custom_ca_certs",
+      "verify_startup"
+    ],
+    "docstring": "",
+    "file_path": "src/bin/knot-mcp.rs",
+    "fqn": "knot::bin::knot-mcp::main",
+    "kind": "rust_function",
+    "name": "main",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 21,
+    "uuid": "f526908c-7c05-592e-a34c-6e5f5673fdbf"
+  },
+  {
+    "dependencies": [
+      "source_between"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::tests::list_tools_request_delegates_to_tools_fn",
+    "kind": "rust_function",
+    "name": "list_tools_request_delegates_to_tools_fn",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 309,
+    "uuid": "6274e2ef-3d19-563d-b25e-b508580e1f16"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "main in src/bin/knot-mcp.rs"
+    ],
+    "dependencies": [
+      "resolve_embed_and_collection"
+    ],
+    "docstring": "Load configuration for the MCP server binary (knot-mcp).\nParses McpCli and only includes MCP-relevant options.",
+    "file_path": "src/config.rs",
+    "fqn": "knot::config::Config::load_mcp",
+    "kind": "rust_method",
+    "name": "load_mcp",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 452,
+    "uuid": "ad41354e-64f7-5b02-8f6a-00a383efc3e9"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "main in src/bin/knot-mcp.rs",
+      "handle_initialize in src/handlers/mcp.rs",
+      "test_build_server_details_has_name in src/mcp_handler.rs"
+    ],
+    "dependencies": [],
+    "docstring": "Build the MCP server details for the `initialize` handshake response.",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::build_server_details",
+    "kind": "rust_function",
+    "name": "build_server_details",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 151,
+    "uuid": "3eea10d9-7506-543c-9c7e-f8e14104262e"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/mcp_tools/mod.rs",
+    "fqn": "knot::mcp_tools::tests::test_all_tools_have_descriptions",
+    "kind": "rust_function",
+    "name": "test_all_tools_have_descriptions",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 113,
+    "uuid": "3edfb07d-cbfc-5340-bee7-3b7900e483b3"
+  },
+  {
+    "dependencies": [
+      "tools"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::tests::tools_returns_the_full_surface",
+    "kind": "rust_function",
+    "name": "tools_returns_the_full_surface",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 300,
+    "uuid": "f8989831-72ba-5906-b5b1-b8b9bd6263e5"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "src/mcp_tools/mod.rs",
+    "fqn": "knot::mcp_tools::tests::test_all_tools_have_valid_names",
+    "kind": "rust_function",
+    "name": "test_all_tools_have_valid_names",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 96,
+    "uuid": "f53d2f49-96f9-58ab-b9c2-a3d4ece481d4"
+  }
+]

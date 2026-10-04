@@ -1,0 +1,116 @@
+# Tier-3 retrieval queries (entities only) — Appendix B.1.
+# `expected` entries ending in '/' are path prefixes, the rest are exact files.
+
+[[query]]
+id = "k01"
+repo = "knot"
+text = "find relevant code by meaning across the repository"
+expected = ["src/cli_tools/search_hybrid_context/", "src/mcp_tools/search_hybrid_context/"]
+
+[[query]]
+id = "k02"
+repo = "knot"
+text = "parse source files into entities in parallel"
+expected = ["src/pipeline/parser/mod.rs"]
+
+[[query]]
+id = "k03"
+repo = "knot"
+text = "compute embeddings for entities with fastembed"
+expected = ["src/pipeline/embed.rs", "src/pipeline/embed/model.rs"]
+
+[[query]]
+id = "k04"
+repo = "knot"
+text = "find who calls a symbol"
+expected = ["src/cli_tools/find_callers.rs", "src/mcp_tools/find_callers.rs"]
+
+[[query]]
+id = "k05"
+repo = "knot"
+text = "list the MCP tools exposed by the server"
+expected = ["src/mcp_handler.rs", "src/mcp_tools/mod.rs"]
+
+[[query]]
+id = "k06"
+repo = "knot"
+text = "track file hashes for incremental indexing"
+expected = ["src/pipeline/state.rs", "src/pipeline/files.rs"]
+
+[[query]]
+id = "k07"
+repo = "knot"
+text = "watch the filesystem and re-index on change"
+expected = ["src/pipeline/watch.rs"]
+
+[[query]]
+id = "k08"
+repo = "knot"
+text = "load configuration from environment and env file"
+expected = ["src/config.rs"]
+
+[[query]]
+id = "s01"
+repo = "knot-site"
+text = "format tool output as JSON within a token budget"
+expected = ["src/toolcore/format.ts"]
+
+[[query]]
+id = "s02"
+repo = "knot-site"
+text = "ask the user for consent before running a tool"
+expected = ["src/state/consentStore.ts", "src/components/ConsentModal.tsx"]
+
+[[query]]
+id = "s03"
+repo = "knot-site"
+text = "hash based client side routing"
+expected = ["src/state/router.ts"]
+
+[[query]]
+id = "s04"
+repo = "knot-site"
+text = "log every webmcp tool invocation"
+expected = ["src/webmcp/invocationLog.ts"]
+
+[[query]]
+id = "s05"
+repo = "knot-site"
+text = "register tools with the browser model context"
+expected = ["src/webmcp/registry.ts", "src/webmcp/useWebMcp.ts"]
+
+[[query]]
+id = "j01"
+repo = "spring-ai"
+text = "call the chat model with a prompt"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java", "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/"]
+
+[[query]]
+id = "j02"
+repo = "spring-ai"
+text = "store documents and search them by similarity"
+expected = ["spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/"]
+
+[[query]]
+id = "j03"
+repo = "spring-ai"
+text = "split documents into token sized chunks"
+expected = ["spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/"]
+
+[[query]]
+id = "j04"
+repo = "spring-ai"
+text = "retry transient errors when calling an AI provider"
+expected = ["spring-ai-retry/src/main/java/org/springframework/ai/retry/"]
+
+[[query]]
+id = "j05"
+repo = "spring-ai"
+text = "expose a java method as a tool the model can call"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/tool/method/"]
+
+[[query]]
+id = "j06"
+repo = "spring-ai"
+text = "merge runtime options with default model options"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/model/ModelOptionsUtils.java"]

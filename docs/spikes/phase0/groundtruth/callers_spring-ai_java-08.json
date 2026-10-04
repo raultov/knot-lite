@@ -1,0 +1,102 @@
+{
+  "calls": [
+    {
+      "file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+      "kind": "method",
+      "name": "accept",
+      "rel_type": "CALLS",
+      "repo_name": "spring-ai",
+      "signature": "(List<Document> documents)",
+      "start_line": 54,
+      "target_file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+      "target_fqn": "org.springframework.ai.vectorstore.VectorStore.add",
+      "target_name": "add",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(List<Document> documents)",
+      "target_start_line": 51
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [
+    {
+      "file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java",
+      "kind": "method",
+      "name": "add",
+      "rel_type": null,
+      "repo_name": "spring-ai",
+      "signature": "(List<Document> documents)",
+      "start_line": 76,
+      "target_file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+      "target_fqn": "org.springframework.ai.vectorstore.VectorStore.add",
+      "target_name": "add",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(List<Document> documents)",
+      "target_start_line": 51
+    },
+    {
+      "file_path": "vector-stores/spring-ai-bedrock-knowledgebase-store/src/main/java/org/springframework/ai/vectorstore/bedrockknowledgebase/BedrockKnowledgeBaseVectorStore.java",
+      "kind": "method",
+      "name": "add",
+      "rel_type": null,
+      "repo_name": "spring-ai",
+      "signature": "(final List<Document> documents)",
+      "start_line": 102,
+      "target_file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+      "target_fqn": "org.springframework.ai.vectorstore.VectorStore.add",
+      "target_name": "add",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(List<Document> documents)",
+      "target_start_line": 51
+    },
+    {
+      "file_path": "vector-stores/spring-ai-pinecone-store/src/main/java/org/springframework/ai/vectorstore/pinecone/PineconeVectorStore.java",
+      "kind": "method",
+      "name": "add",
+      "rel_type": null,
+      "repo_name": "spring-ai",
+      "signature": "(List<Document> documents, String namespace)",
+      "start_line": 137,
+      "target_file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+      "target_fqn": "org.springframework.ai.vectorstore.VectorStore.add",
+      "target_name": "add",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(List<Document> documents)",
+      "target_start_line": 51
+    }
+  ],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "VectorStore.add",
+    "targets": [
+      {
+        "file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStore.java",
+        "fqn": "org.springframework.ai.vectorstore.VectorStore.add",
+        "kind": "method",
+        "name": "add",
+        "repo_name": "spring-ai",
+        "start_line": 51,
+        "uuid": "06e54aa5-a6c8-59c8-bff1-9e0897641089"
+      }
+    ],
+    "tier": "fqn_suffix",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

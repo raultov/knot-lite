@@ -1,0 +1,541 @@
+{
+  "schema": "knot-rag-spike/heuristic/v1",
+  "lang": "ts",
+  "repo": "knot-site",
+  "resolve_ms": 36,
+  "entities": 1520,
+  "metrics_debug": "entities_indexed=1520 references_resolved=254 references_ambiguous_skipped=0 references_unresolved=406",
+  "targets": [
+    {
+      "id": "ts-01",
+      "callers": [
+        {
+          "file": "src/toolcore/definitions/compareKnotEditions.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/listSupportedLanguages.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 37,
+          "name": "jsonTextFitting"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 3
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-02",
+      "callers": [
+        {
+          "file": "src/toolcore/definitions/getLatestReleases.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/searchKnotCapabilities.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-03",
+      "callers": [],
+      "by_rel": {},
+      "self_count": 0
+    },
+    {
+      "id": "ts-04",
+      "callers": [
+        {
+          "file": "scripts/fetch-updates.mjs",
+          "line": 121,
+          "name": "extractSummary"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-05",
+      "callers": [
+        {
+          "file": "src/webmcp/tools/copyInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/tools/getInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-06",
+      "callers": [
+        {
+          "file": "src/toolcore/definitions/getLatestReleases.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/searchKnotCapabilities.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/tools/copyInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/tools/getInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 4
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-07",
+      "callers": [
+        {
+          "file": "src/state/router.ts",
+          "line": 33,
+          "name": "readFromLocation"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-08",
+      "callers": [
+        {
+          "file": "src/state/router.ts",
+          "line": 33,
+          "name": "readFromLocation"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-09",
+      "callers": [
+        {
+          "file": "src/state/consentStore.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/state/consentStore.ts",
+          "line": 31,
+          "name": "settle"
+        },
+        {
+          "file": "src/state/consentStore.ts",
+          "line": 51,
+          "name": "request"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 3
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-10",
+      "callers": [
+        {
+          "file": "src/state/installationStore.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/state/installationStore.ts",
+          "line": 33,
+          "name": "setActiveTab"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-11",
+      "callers": [
+        {
+          "file": "src/webmcp/invocationLog.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/invocationLog.ts",
+          "line": 42,
+          "name": "record"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-12",
+      "callers": [
+        {
+          "file": "src/webmcp/registry.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-13",
+      "callers": [
+        {
+          "file": "functions/mcp.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "functions/mcp.ts",
+          "line": 54,
+          "name": "toMcpTool"
+        },
+        {
+          "file": "src/toolcore/definitions/compareKnotEditions.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/getLatestReleases.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/listSupportedLanguages.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/definitions/searchKnotCapabilities.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/index.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/adapters/toWebMcpTool.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/adapters/toWebMcpTool.ts",
+          "line": 13,
+          "name": "toWebMcpTool"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 14
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-14",
+      "callers": [
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 18,
+          "name": "jsonText"
+        },
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 37,
+          "name": "jsonTextFitting"
+        },
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 55,
+          "name": "plainText"
+        },
+        {
+          "file": "src/toolcore/format.ts",
+          "line": 60,
+          "name": "errorText"
+        },
+        {
+          "file": "src/toolcore/types.ts",
+          "line": 61,
+          "name": "ToolDefinition"
+        },
+        {
+          "file": "src/toolcore/types.ts",
+          "line": 68,
+          "name": "execute"
+        },
+        {
+          "file": "src/webmcp/types.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 8
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-15",
+      "callers": [
+        {
+          "file": "src/toolcore/schemas.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/types.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/toolcore/types.ts",
+          "line": 61,
+          "name": "ToolDefinition"
+        },
+        {
+          "file": "src/webmcp/schemas.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/types.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/types.ts",
+          "line": 40,
+          "name": "WebMcpTool"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 12
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-16",
+      "callers": [
+        {
+          "file": "src/webmcp/adapters/toWebMcpTool.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/adapters/toWebMcpTool.ts",
+          "line": 13,
+          "name": "toWebMcpTool"
+        },
+        {
+          "file": "src/webmcp/invocationLog.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/invocationLog.ts",
+          "line": 52,
+          "name": "withLogging"
+        },
+        {
+          "file": "src/webmcp/registry.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/tools/copyInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/tools/getInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/types.ts",
+          "line": 54,
+          "name": "ModelContext"
+        },
+        {
+          "file": "src/webmcp/types.ts",
+          "line": 55,
+          "name": "registerTool"
+        },
+        {
+          "file": "src/webmcp/useWebMcp.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/webmcp/useWebMcp.ts",
+          "line": 36,
+          "name": "useWebMcp"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 14
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-17",
+      "callers": [
+        {
+          "file": "src/components/Features.tsx",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/components/Features.tsx",
+          "line": 7,
+          "name": "FeatureCard"
+        },
+        {
+          "file": "src/components/KnotServer.tsx",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/components/KnotServer.tsx",
+          "line": 10,
+          "name": "ServerFeatureCard"
+        },
+        {
+          "file": "src/data/features.ts",
+          "line": 1,
+          "name": "<module>"
+        },
+        {
+          "file": "src/data/serverFeatures.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 8
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-18",
+      "callers": [
+        {
+          "file": "src/data/types.ts",
+          "line": 32,
+          "name": "InstallSection"
+        }
+      ],
+      "by_rel": {
+        "REFERENCES": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-19",
+      "callers": [
+        {
+          "file": "src/webmcp/tools/copyInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 2
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-20",
+      "callers": [
+        {
+          "file": "src/webmcp/invocationLog.ts",
+          "line": 52,
+          "name": "withLogging"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 1
+      },
+      "self_count": 0
+    },
+    {
+      "id": "ts-21",
+      "callers": [
+        {
+          "file": "src/components/Installation.tsx",
+          "line": 88,
+          "name": "Installation"
+        },
+        {
+          "file": "src/components/Installation.tsx",
+          "line": 95,
+          "name": "handleTab"
+        },
+        {
+          "file": "src/components/Installation.tsx",
+          "line": 99,
+          "name": "handleTabKeyDown"
+        },
+        {
+          "file": "src/webmcp/tools/getInstallCommand.ts",
+          "line": 1,
+          "name": "<module>"
+        }
+      ],
+      "by_rel": {
+        "CALLS": 4
+      },
+      "self_count": 0
+    }
+  ]
+}

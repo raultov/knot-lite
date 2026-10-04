@@ -1,0 +1,229 @@
+[
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "similaritySearch in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java",
+      "shouldPreserveMetadataIntegerNumberTypesInSearchResults in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "performSimilaritySearch in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java"
+    ],
+    "dependencies": [
+      "convertExpression",
+      "build",
+      "toList",
+      "getSimilarityThreshold",
+      "map",
+      "getFilterExpression",
+      "getQuery",
+      "getTopK",
+      "embed"
+    ],
+    "docstring": "Performs a similarity search on the vector store.\n@param request The {@link SearchRequest} object containing the query and other\nsearch parameters.\n@return A list of documents that are similar to the query.",
+    "file_path": "vector-stores/spring-ai-qdrant-store/src/main/java/org/springframework/ai/vectorstore/qdrant/QdrantVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.qdrant.QdrantVectorStore.doSimilaritySearch",
+    "kind": "method",
+    "name": "doSimilaritySearch",
+    "repo_name": "spring-ai",
+    "signature": "(SearchRequest request)",
+    "start_line": 294,
+    "uuid": "1ffa7d10-ba6d-5137-9e61-bf3444cfaf85"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "set in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java",
+      "set in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java",
+      "get in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java"
+    ],
+    "dependencies": [
+      "returnFields",
+      "embed",
+      "builder",
+      "map",
+      "build",
+      "toList",
+      "getReturnFields",
+      "normalize",
+      "getDocuments",
+      "dialect"
+    ],
+    "docstring": "Search for documents within a specific radius (distance) from the query embedding,\nwith optional filter expression to narrow down results.\n@param query The text query to create an embedding from\n@param radius The radius (maximum distance) to search within (0.0 to 1.0)\n@param filterExpression Optional filter expression to narrow down results\n@return A list of documents that fall within the specified radius and match the\nfilter",
+    "file_path": "vector-stores/spring-ai-redis-store/src/main/java/org/springframework/ai/vectorstore/redis/RedisVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.redis.RedisVectorStore.searchByRange",
+    "kind": "method",
+    "name": "searchByRange",
+    "repo_name": "spring-ai",
+    "signature": "(String query, double radius, @Nullable String filterExpression)",
+    "start_line": 1144,
+    "uuid": "34c29ac7-62a6-5735-b96c-35e117cfc36c"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "set in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java",
+      "get in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java"
+    ],
+    "dependencies": [
+      "builder",
+      "build",
+      "FilterExpressionBuilder",
+      "similarityThreshold",
+      "similaritySearch",
+      "eq",
+      "searchByRange"
+    ],
+    "docstring": "Finds documents that are semantically similar to the query and optionally filtered\nby context hash.\n@param query the query text to search for\n@param contextHash optional context hash for filtering (null means no filtering)\n@return list of similar documents, potentially empty",
+    "file_path": "vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java",
+    "fqn": "org.springframework.ai.vectorstore.redis.cache.semantic.DefaultSemanticCache.findSimilarDocuments",
+    "kind": "method",
+    "name": "findSimilarDocuments",
+    "repo_name": "spring-ai",
+    "signature": "(String query, @Nullable String contextHash)",
+    "start_line": 387,
+    "uuid": "bad959b1-927e-5b9a-9ecd-575cde83d30f"
+  },
+  {
+    "caller_count": 279,
+    "caller_samples": [
+      "similaritySearch in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStoreRetriever.java",
+      "similaritySearch in vector-stores/spring-ai-azure-store/src/main/java/org/springframework/ai/vectorstore/azure/AzureVectorStore.java",
+      "similaritySearch in vector-stores/spring-ai-mongodb-atlas-store/src/main/java/org/springframework/ai/vectorstore/mongodb/atlas/MongoDBAtlasVectorStore.java"
+    ],
+    "dependencies": [
+      "build",
+      "builder",
+      "similaritySearch"
+    ],
+    "docstring": "",
+    "file_path": "vector-stores/spring-ai-mongodb-atlas-store/src/main/java/org/springframework/ai/vectorstore/mongodb/atlas/MongoDBAtlasVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.mongodb.atlas.MongoDBAtlasVectorStore.similaritySearch",
+    "kind": "method",
+    "name": "similaritySearch",
+    "repo_name": "spring-ai",
+    "signature": "(String query)",
+    "start_line": 298,
+    "uuid": "ce3b66ba-3104-5c6d-9eac-864728434cff"
+  },
+  {
+    "caller_count": 4,
+    "caller_samples": [
+      "similaritySearch in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java",
+      "shouldPreserveMetadataIntegerNumberTypesInSearchResults in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java",
+      "performSimilaritySearch in vector-stores/spring-ai-milvus-store/src/test/java/org/springframework/ai/vectorstore/milvus/MilvusVectorStoreTest.java"
+    ],
+    "dependencies": [],
+    "docstring": "Perform the actual similarity search operation.\n@param request the search request\n@return the list of documents that match the query request conditions",
+    "file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/observation/AbstractObservationVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.observation.AbstractObservationVectorStore.doSimilaritySearch",
+    "kind": "method",
+    "name": "doSimilaritySearch",
+    "repo_name": "spring-ai",
+    "signature": "(SearchRequest request)",
+    "start_line": 205,
+    "uuid": "a4e7dbaa-e695-5831-89f4-5063365d0a8a"
+  },
+  {
+    "caller_count": 6,
+    "caller_samples": [
+      "set in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/chat/cache/semantic/SemanticCache.java",
+      "adviseCall in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/chat/cache/semantic/SemanticCacheAdvisor.java",
+      "adviseStream in vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/chat/cache/semantic/SemanticCacheAdvisor.java"
+    ],
+    "dependencies": [
+      "deleteCollection",
+      "build",
+      "put",
+      "add",
+      "get",
+      "findSimilarDocuments",
+      "getResults",
+      "builder"
+    ],
+    "docstring": "",
+    "file_path": "vector-stores/spring-ai-redis-semantic-cache/src/main/java/org/springframework/ai/vectorstore/redis/cache/semantic/DefaultSemanticCache.java",
+    "fqn": "org.springframework.ai.vectorstore.redis.cache.semantic.DefaultSemanticCache.set",
+    "kind": "method",
+    "name": "set",
+    "repo_name": "spring-ai",
+    "signature": "(String query, ChatResponse response, @Nullable String contextHash)",
+    "start_line": 302,
+    "uuid": "9d0e176f-91a6-5629-ba7d-f1fc1dd500ae"
+  },
+  {
+    "caller_count": 279,
+    "caller_samples": [
+      "similaritySearch in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStoreRetriever.java",
+      "similaritySearch in vector-stores/spring-ai-azure-store/src/main/java/org/springframework/ai/vectorstore/azure/AzureVectorStore.java",
+      "similaritySearch in vector-stores/spring-ai-mongodb-atlas-store/src/main/java/org/springframework/ai/vectorstore/mongodb/atlas/MongoDBAtlasVectorStore.java"
+    ],
+    "dependencies": [
+      "builder",
+      "similaritySearch"
+    ],
+    "docstring": "Retrieves documents by query embedding similarity using the default\n{@link SearchRequest}'s search criteria.\n@param query Text to use for embedding similarity comparison.\n@return Returns a list of documents that have embeddings similar to the query text\nembedding.",
+    "file_path": "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/VectorStoreRetriever.java",
+    "fqn": "org.springframework.ai.vectorstore.VectorStoreRetriever.similaritySearch",
+    "kind": "method",
+    "name": "similaritySearch",
+    "repo_name": "spring-ai",
+    "signature": "(String query)",
+    "start_line": 54,
+    "uuid": "8998c2d8-dd6c-52ef-b57c-beb6a19cff46"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "build in vector-stores/spring-ai-qdrant-store/src/main/java/org/springframework/ai/vectorstore/qdrant/QdrantVectorStore.java"
+    ],
+    "dependencies": [],
+    "docstring": "Qdrant vectorStore implementation. This store supports creating, updating, deleting,\nand similarity searching of documents in a Qdrant collection.\n<p>\nThe store uses Qdrant's vector search functionality to persist and query vector\nembeddings along with their associated document content and metadata. The\nimplementation leverages Qdrant's HNSW (Hierarchical Navigable Small World) algorithm\nfor efficient k-NN search operations.\n</p>\n<p>\nFeatures:\n</p>\n<ul>\n<li>Automatic schema initialization with configurable collection creation</li>\n<li>Support for cosine similarity distance metric</li>\n<li>Metadata filtering using Qdrant's filter expressions</li>\n<li>Configurable similarity thresholds for search results</li>\n<li>Batch processing support with configurable strategies</li>\n<li>Observation and metrics support through Micrometer</li>\n</ul>\n<p>\nBasic usage example:\n</p>\n<pre>{@code\nQdrantVectorStore vectorStore = QdrantVectorStore.builder(qdrantClient)\n.embeddingModel(embeddingModel)\n.initializeSchema(true)\n.build();\n// Add documents\nvectorStore.add(List.of(\nnew Document(\"content1\", Map.of(\"key1\", \"value1\")),\nnew Document(\"content2\", Map.of(\"key2\", \"value2\"))\n));\n// Search with filters\nList<Document> results = vectorStore.similaritySearch(\nSearchRequest.query(\"search text\")\n.withTopK(5)\n.withSimilarityThreshold(0.7)\n.withFilterExpression(\"key1 == 'value1'\")\n);\n}</pre>\n<p>\nAdvanced configuration example:\n</p>\n<pre>{@code\nQdrantVectorStore vectorStore = QdrantVectorStore.builder(qdrantClient, embeddingModel)\n.collectionName(\"custom-collection\")\n.initializeSchema(true)\n.batchingStrategy(new TokenCountBatchingStrategy())\n.observationRegistry(observationRegistry)\n.customObservationConvention(customConvention)\n.build();\n}</pre>\n<p>\nRequirements:\n</p>\n<ul>\n<li>Running Qdrant instance accessible via gRPC</li>\n<li>Collection with vector size matching the embedding model dimensions</li>\n</ul>\n@author Anush Shetty\n@author Christian Tzolov\n@author Eddú Meléndez\n@author Josh Long\n@author Soby Chacko\n@author Thomas Vitale\n@author chabinhwang\n@since 1.0.0",
+    "file_path": "vector-stores/spring-ai-qdrant-store/src/main/java/org/springframework/ai/vectorstore/qdrant/QdrantVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.qdrant.QdrantVectorStore",
+    "kind": "class",
+    "name": "QdrantVectorStore",
+    "repo_name": "spring-ai",
+    "signature": "",
+    "start_line": 130,
+    "type_usage_count": 35,
+    "type_usage_samples": [
+      "<module> in auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-qdrant/src/main/java/org/springframework/ai/vectorstore/qdrant/autoconfigure/QdrantVectorStoreAutoConfiguration.java",
+      "QdrantVectorStoreAutoConfiguration in auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-qdrant/src/main/java/org/springframework/ai/vectorstore/qdrant/autoconfigure/QdrantVectorStoreAutoConfiguration.java",
+      "vectorStore in auto-configurations/vector-stores/spring-ai-autoconfigure-vector-store-qdrant/src/main/java/org/springframework/ai/vectorstore/qdrant/autoconfigure/QdrantVectorStoreAutoConfiguration.java"
+    ],
+    "uuid": "227fa9a9-e8c3-51f9-b7df-031211ec263b"
+  },
+  {
+    "caller_count": 10,
+    "caller_samples": [
+      "retrieve in spring-ai-rag/src/main/java/org/springframework/ai/rag/retrieval/search/VectorStoreDocumentRetriever.java",
+      "from in spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/SearchRequest.java",
+      "createFrom in spring-ai-vector-store/src/test/java/org/springframework/ai/vectorstore/filter/SearchRequestTests.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "spring-ai-rag/src/main/java/org/springframework/ai/rag/retrieval/search/VectorStoreDocumentRetriever.java",
+    "fqn": "org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever.similarityThreshold",
+    "kind": "method",
+    "name": "similarityThreshold",
+    "repo_name": "spring-ai",
+    "signature": "(Double similarityThreshold)",
+    "start_line": 148,
+    "uuid": "098b2b6d-dffa-5958-9dbc-2bc56070deb5"
+  },
+  {
+    "caller_count": 2,
+    "caller_samples": [
+      "searchWithFilters in vector-stores/spring-ai-opensearch-store/src/test/java/org/springframework/ai/vectorstore/opensearch/OpenSearchVectorStoreIT.java",
+      "addAndSearchTest in vector-stores/spring-ai-opensearch-store/src/test/java/org/springframework/ai/vectorstore/opensearch/OpenSearchVectorStoreWithOllamaIT.java"
+    ],
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "vector-stores/spring-ai-opensearch-store/src/main/java/org/springframework/ai/vectorstore/opensearch/OpenSearchVectorStore.java",
+    "fqn": "org.springframework.ai.vectorstore.opensearch.OpenSearchVectorStore.withSimilarityFunction",
+    "kind": "method",
+    "name": "withSimilarityFunction",
+    "repo_name": "spring-ai",
+    "signature": "(String similarityFunction)",
+    "start_line": 222,
+    "uuid": "2525f8f3-3a28-5169-ad4a-feb74284d931"
+  }
+]

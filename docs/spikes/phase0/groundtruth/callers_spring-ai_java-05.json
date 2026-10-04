@@ -1,0 +1,89 @@
+{
+  "calls": [
+    {
+      "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+      "kind": "method",
+      "name": "call",
+      "rel_type": "CALLS",
+      "repo_name": "spring-ai",
+      "signature": "(String message)",
+      "start_line": 32,
+      "target_file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+      "target_fqn": "org.springframework.ai.chat.model.ChatModel.call",
+      "target_name": "call",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(Prompt prompt)",
+      "target_start_line": 45
+    },
+    {
+      "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+      "kind": "method",
+      "name": "call",
+      "rel_type": "CALLS",
+      "repo_name": "spring-ai",
+      "signature": "(Message... messages)",
+      "start_line": 38,
+      "target_file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+      "target_fqn": "org.springframework.ai.chat.model.ChatModel.call",
+      "target_name": "call",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(Prompt prompt)",
+      "target_start_line": 45
+    }
+  ],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "ChatModel.call",
+    "targets": [
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+        "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+        "kind": "method",
+        "name": "call",
+        "repo_name": "spring-ai",
+        "start_line": 32,
+        "uuid": "fa86553d-b54e-599b-bfb1-58916b188e04"
+      },
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+        "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+        "kind": "method",
+        "name": "call",
+        "repo_name": "spring-ai",
+        "start_line": 38,
+        "uuid": "b634d754-53de-5ac8-bb78-98eb165b0e70"
+      },
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+        "fqn": "org.springframework.ai.chat.model.ChatModel.call",
+        "kind": "method",
+        "name": "call",
+        "repo_name": "spring-ai",
+        "start_line": 45,
+        "uuid": "8e279a1d-1fc9-5c0b-9edd-cd695a0c4c12"
+      }
+    ],
+    "tier": "fqn_suffix",
+    "total_targets": 3,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}

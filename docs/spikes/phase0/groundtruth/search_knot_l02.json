@@ -1,0 +1,161 @@
+[
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "extract_k8s_references in src/pipeline/parser/languages/kubernetes.rs"
+    ],
+    "dependencies": [
+      "yaml_str",
+      "yaml_seq"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/kubernetes.rs",
+    "fqn": "knot::pipeline::parser::languages::kubernetes::push_container_image_refs",
+    "kind": "rust_function",
+    "name": "push_container_image_refs",
+    "repo_name": "knot",
+    "signature": "(\n    template_spec: &serde_yaml::Value,\n    intents: &mut Vec<ReferenceIntent>,\n)",
+    "start_line": 199,
+    "uuid": "c7d92b2c-856b-51e5-82c9-95f756fc59a9"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "tests/testing_files/web/test_angular.html",
+    "fqn": ".container",
+    "kind": "html_class",
+    "name": "container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 17,
+    "uuid": "6e4f3b8a-9479-4de8-aaae-d3d8c29f9797"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "tests/testing_files/web/test_styles.css",
+    "fqn": ".container",
+    "kind": "css_class",
+    "name": "container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 36,
+    "uuid": "f7445a17-303d-5f28-a84d-b6d6679ae92f"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "tests/testing_files/csharp/Domain/Models.cs",
+    "fqn": "MyApp.Domain.Container",
+    "kind": "csharp_class",
+    "name": "Container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 28,
+    "type_usage_count": 4,
+    "type_usage_samples": [
+      "Container in tests/fixtures/perf_baseline_repo/sample.rs",
+      "main in tests/fixtures/perf_baseline_repo/sample.rs",
+      "Container in tests/testing_files/rust/sample.rs"
+    ],
+    "uuid": "04cd64c3-7474-5905-b8f0-3960d16429a1"
+  },
+  {
+    "caller_count": 1,
+    "caller_samples": [
+      "extract_single_k8s_resource in src/pipeline/parser/languages/kubernetes.rs"
+    ],
+    "dependencies": [
+      "push_ingress_backend_refs",
+      "push_volume_refs",
+      "push_container_image_refs",
+      "push_selector_refs",
+      "yaml_path"
+    ],
+    "docstring": "",
+    "file_path": "src/pipeline/parser/languages/kubernetes.rs",
+    "fqn": "knot::pipeline::parser::languages::kubernetes::extract_k8s_references",
+    "kind": "rust_function",
+    "name": "extract_k8s_references",
+    "repo_name": "knot",
+    "signature": "(yaml: &serde_yaml::Value, intents: &mut Vec<ReferenceIntent>)",
+    "start_line": 271,
+    "uuid": "1084a042-cab0-5c29-9bc0-da8d7af7e8b1"
+  },
+  {
+    "dependencies": [],
+    "docstring": "",
+    "file_path": "tests/testing_files/web/test_styles.scss",
+    "fqn": ".container",
+    "kind": "css_class",
+    "name": "container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 70,
+    "uuid": "f72d9c0b-c9a9-5d6d-a447-19361fb568cf"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Generic struct with trait bounds",
+    "file_path": "tests/testing_files/rust/sample.rs",
+    "fqn": "__fixture::tests::testing_files::rust::sample::Container",
+    "kind": "rust_struct",
+    "name": "Container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 102,
+    "type_usage_count": 4,
+    "type_usage_samples": [
+      "Container in tests/fixtures/perf_baseline_repo/sample.rs",
+      "main in tests/fixtures/perf_baseline_repo/sample.rs",
+      "Container in tests/testing_files/rust/sample.rs"
+    ],
+    "uuid": "7c4a06f7-3004-51ba-ae9d-b22eceed54cf"
+  },
+  {
+    "dependencies": [],
+    "docstring": "Generic struct with trait bounds",
+    "file_path": "tests/fixtures/perf_baseline_repo/sample.rs",
+    "fqn": "__fixture::tests::fixtures::perf_baseline_repo::sample::Container",
+    "kind": "rust_struct",
+    "name": "Container",
+    "repo_name": "knot",
+    "signature": "",
+    "start_line": 102,
+    "type_usage_count": 4,
+    "type_usage_samples": [
+      "Container in tests/fixtures/perf_baseline_repo/sample.rs",
+      "main in tests/fixtures/perf_baseline_repo/sample.rs",
+      "Container in tests/testing_files/rust/sample.rs"
+    ],
+    "uuid": "5ab5dc52-bd33-5c47-99ee-84fda847d2aa"
+  },
+  {
+    "dependencies": [
+      "build_server_details"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::tests::test_build_server_details_has_instructions",
+    "kind": "rust_function",
+    "name": "test_build_server_details_has_instructions",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 239,
+    "uuid": "f028f170-14ce-5079-bdde-ee92edb820e6"
+  },
+  {
+    "dependencies": [
+      "build_server_details"
+    ],
+    "docstring": "",
+    "file_path": "src/mcp_handler.rs",
+    "fqn": "knot::mcp_handler::tests::test_build_server_details_has_version",
+    "kind": "rust_function",
+    "name": "test_build_server_details_has_version",
+    "repo_name": "knot",
+    "signature": "()",
+    "start_line": 193,
+    "uuid": "d0e34e59-a959-5a2f-b206-124262aacea3"
+  }
+]

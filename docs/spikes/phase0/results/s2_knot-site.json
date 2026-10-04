@@ -1,0 +1,381 @@
+{
+  "counts": {
+    "chunks": 10,
+    "col_null_rate": 0.2914473684210526,
+    "entities": 1520,
+    "file_vectors": 6,
+    "files_scanned": 109,
+    "files_with_entities": 75,
+    "skipped_no_embed_text": 0,
+    "tier1_files": 6
+  },
+  "determinism": {
+    "batching_differing_records": {
+      "f32_b64": 0,
+      "f32_dec": 0,
+      "i8fx_b64": 0,
+      "i8pv_b64": 0,
+      "nov": 0
+    },
+    "batching_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "batching_max_abs_diff": 0.0,
+    "id_mismatches": {
+      "f32_b64": 275,
+      "f32_dec": 275,
+      "i8fx_b64": 275,
+      "i8pv_b64": 275,
+      "nov": 275
+    },
+    "rerun_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "threads_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    }
+  },
+  "git": {
+    "churn": {
+      "append": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 2
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 0
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 1,
+          "pack_delta_kib": 1
+        }
+      },
+      "prepend": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 26
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 24
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 32
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 30
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 8
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 7
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 7
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 15,
+          "pack_delta_kib": 8
+        }
+      }
+    },
+    "pack_kib": {
+      "f32_b64": 2433,
+      "f32_b64-monolith": 2426,
+      "f32_dec": 2981,
+      "f32_dec-monolith": 2933,
+      "i8fx_b64": 657,
+      "i8fx_b64-monolith": 647,
+      "i8pv_b64": 708,
+      "i8pv_b64-monolith": 693,
+      "source": 2779
+    },
+    "ratio_vs_source": {
+      "f32_b64": 0.8755,
+      "f32_b64-monolith": 0.873,
+      "f32_dec": 1.0727,
+      "f32_dec-monolith": 1.0554,
+      "i8fx_b64": 0.2364,
+      "i8fx_b64-monolith": 0.2328,
+      "i8pv_b64": 0.2548,
+      "i8pv_b64-monolith": 0.2494
+    }
+  },
+  "load_ms": {
+    "binary_cache": 16.841537,
+    "f32_b64": 58.781760000000006,
+    "f32_dec": 209.76437,
+    "i8fx_b64": 24.420621,
+    "i8pv_b64": 25.305461,
+    "nov": 7.673801
+  },
+  "model": {
+    "dim": 384,
+    "name": "AllMiniLML6V2",
+    "symmetric": true
+  },
+  "norms": {
+    "max": 1.0000005792888191,
+    "mean": 1.0000000077924704,
+    "min": 0.9999994504808656,
+    "normalized": false
+  },
+  "parity_with_qdrant": {
+    "ambiguous_ids": 1,
+    "compared": 156,
+    "found": 156,
+    "max_abs_diff": 8.940696716308594e-8,
+    "mean_cosine": 1.0
+  },
+  "quality": {
+    "queries": [
+      {
+        "expected": [
+          "src/toolcore/format.ts"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "s01",
+        "overlap10_vs_knot": 0.4,
+        "query": "format tool output as JSON within a token budget"
+      },
+      {
+        "expected": [
+          "src/state/consentStore.ts",
+          "src/components/ConsentModal.tsx"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "s02",
+        "overlap10_vs_knot": 0.3,
+        "query": "ask the user for consent before running a tool"
+      },
+      {
+        "expected": [
+          "src/state/router.ts"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "s03",
+        "overlap10_vs_knot": 0.7,
+        "query": "hash based client side routing"
+      },
+      {
+        "expected": [
+          "src/webmcp/invocationLog.ts"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "s04",
+        "overlap10_vs_knot": 0.6,
+        "query": "log every webmcp tool invocation"
+      },
+      {
+        "expected": [
+          "src/webmcp/registry.ts",
+          "src/webmcp/useWebMcp.ts"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "id": "s05",
+        "overlap10_vs_knot": 0.2,
+        "query": "register tools with the browser model context"
+      }
+    ],
+    "summary": {
+      "knot_search": 1.0,
+      "spike_f32": 0.8,
+      "spike_i8fx": 0.8,
+      "spike_i8pv": 0.8
+    }
+  },
+  "quantization": {
+    "i8fx": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 1.0,
+      "same_top1": 1.0
+    },
+    "i8pv": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 1.0,
+      "same_top1": 1.0
+    }
+  },
+  "query": {
+    "embed_ms": {
+      "max": 5.568234,
+      "n": 5,
+      "p50": 3.734183,
+      "p95": 5.568234
+    },
+    "scan_ms": {
+      "max": 8.753133,
+      "n": 100,
+      "p50": 7.269396,
+      "p95": 8.419702
+    }
+  },
+  "repo": "knot-site",
+  "root": "/tmp/knot-rag-spike/work/knot-site",
+  "schema": "knot-rag-spike/s2/v1",
+  "sizes": {
+    "source": {
+      "gzip": 2835170,
+      "raw": 3276282
+    },
+    "variants": {
+      "f32_b64": {
+        "bytes_per_entity": 2261.5279947916665,
+        "gzip": 2490419,
+        "raw": 3473707,
+        "shards": 81
+      },
+      "f32_dec": {
+        "bytes_per_entity": 4913.406901041667,
+        "gzip": 3050485,
+        "raw": 7546993,
+        "shards": 81
+      },
+      "i8fx_b64": {
+        "bytes_per_entity": 725.5279947916666,
+        "gzip": 668666,
+        "raw": 1114411,
+        "shards": 81
+      },
+      "i8pv_b64": {
+        "bytes_per_entity": 741.3977864583334,
+        "gzip": 718862,
+        "raw": 1138787,
+        "shards": 81
+      },
+      "nov": {
+        "bytes_per_entity": 206.52799479166663,
+        "gzip": 93987,
+        "raw": 317227,
+        "shards": 81
+      }
+    }
+  },
+  "snapshot_fingerprint": "567823fe8e62982ce9cb912aa9853591e51e5ad5156864a083cfa0b0c561031b",
+  "tier1": {
+    "queries": [],
+    "size_increase_pct": 230.3523628307942,
+    "summary": {
+      "hit1": 0.0,
+      "hit5": 0.0,
+      "hit5_mixed": 0.0
+    }
+  },
+  "timings_ms": {
+    "embed_chunks": 706,
+    "embed_entities": 38173,
+    "entities_per_s": 39.818720037723,
+    "parse": 651,
+    "prepare": 18
+  }
+}

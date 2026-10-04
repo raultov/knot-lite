@@ -1,0 +1,413 @@
+{
+  "counts": {
+    "chunks": 572,
+    "col_null_rate": 0.14206921413121845,
+    "entities": 27740,
+    "file_vectors": 114,
+    "files_scanned": 4219,
+    "files_with_entities": 2490,
+    "skipped_no_embed_text": 0,
+    "tier1_files": 114
+  },
+  "determinism": {
+    "batching_differing_records": {
+      "f32_b64": 0,
+      "f32_dec": 0,
+      "i8fx_b64": 0,
+      "i8pv_b64": 0,
+      "nov": 0
+    },
+    "batching_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "batching_max_abs_diff": 0.0,
+    "id_mismatches": {
+      "f32_b64": 1,
+      "f32_dec": 1,
+      "i8fx_b64": 1,
+      "i8pv_b64": 1,
+      "nov": 1
+    },
+    "rerun_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    },
+    "threads_identical": {
+      "f32_b64": false,
+      "f32_dec": false,
+      "i8fx_b64": false,
+      "i8pv_b64": false,
+      "nov": false
+    }
+  },
+  "git": {
+    "churn": {
+      "append": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 2,
+          "pack_delta_kib": 3
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 90,
+          "pack_delta_kib": 4
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 2,
+          "pack_delta_kib": 3
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 90,
+          "pack_delta_kib": 6
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 2,
+          "pack_delta_kib": 2
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 90,
+          "pack_delta_kib": 2
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 2,
+          "pack_delta_kib": 2
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 90,
+          "pack_delta_kib": 2
+        }
+      },
+      "prepend": {
+        "f32_b64": {
+          "files_changed": 1,
+          "lines_changed": 27,
+          "pack_delta_kib": 45
+        },
+        "f32_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 115,
+          "pack_delta_kib": 46
+        },
+        "f32_dec": {
+          "files_changed": 1,
+          "lines_changed": 27,
+          "pack_delta_kib": 55
+        },
+        "f32_dec-monolith": {
+          "files_changed": 1,
+          "lines_changed": 115,
+          "pack_delta_kib": 59
+        },
+        "i8fx_b64": {
+          "files_changed": 1,
+          "lines_changed": 27,
+          "pack_delta_kib": 14
+        },
+        "i8fx_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 115,
+          "pack_delta_kib": 13
+        },
+        "i8pv_b64": {
+          "files_changed": 1,
+          "lines_changed": 27,
+          "pack_delta_kib": 14
+        },
+        "i8pv_b64-monolith": {
+          "files_changed": 1,
+          "lines_changed": 115,
+          "pack_delta_kib": 14
+        }
+      }
+    },
+    "pack_kib": {
+      "f32_b64": 45712,
+      "f32_b64-monolith": 45385,
+      "f32_dec": 56519,
+      "f32_dec-monolith": 54915,
+      "i8fx_b64": 12929,
+      "i8fx_b64-monolith": 12410,
+      "i8pv_b64": 13783,
+      "i8pv_b64-monolith": 13236,
+      "source": 53359
+    },
+    "ratio_vs_source": {
+      "f32_b64": 0.8567,
+      "f32_b64-monolith": 0.8506,
+      "f32_dec": 1.0592,
+      "f32_dec-monolith": 1.0292,
+      "i8fx_b64": 0.2423,
+      "i8fx_b64-monolith": 0.2326,
+      "i8pv_b64": 0.2583,
+      "i8pv_b64-monolith": 0.2481
+    }
+  },
+  "load_ms": {
+    "binary_cache": 349.741054,
+    "f32_b64": 1141.557424,
+    "f32_dec": 4039.106442,
+    "i8fx_b64": 507.09006199999993,
+    "i8pv_b64": 516.013604,
+    "nov": 177.530097
+  },
+  "model": {
+    "dim": 384,
+    "name": "AllMiniLML6V2",
+    "symmetric": true
+  },
+  "norms": {
+    "max": 1.0000005911532264,
+    "mean": 1.000000002868704,
+    "min": 0.9999993934366408,
+    "normalized": false
+  },
+  "parity_with_qdrant": {
+    "ambiguous_ids": 0,
+    "compared": 195,
+    "found": 195,
+    "max_abs_diff": 0.0,
+    "mean_cosine": 1.0
+  },
+  "quality": {
+    "queries": [
+      {
+        "expected": [
+          "spring-ai-model/src/main/java/org/springframework/ai/chat/model/ChatModel.java",
+          "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "j01",
+        "overlap10_vs_knot": 0.4,
+        "query": "call the chat model with a prompt"
+      },
+      {
+        "expected": [
+          "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": false,
+          "spike_i8fx": false,
+          "spike_i8pv": false
+        },
+        "id": "j02",
+        "overlap10_vs_knot": 0.2,
+        "query": "store documents and search them by similarity"
+      },
+      {
+        "expected": [
+          "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "j03",
+        "overlap10_vs_knot": 0.4,
+        "query": "split documents into token sized chunks"
+      },
+      {
+        "expected": [
+          "spring-ai-retry/src/main/java/org/springframework/ai/retry/"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "j04",
+        "overlap10_vs_knot": 0.5,
+        "query": "retry transient errors when calling an AI provider"
+      },
+      {
+        "expected": [
+          "spring-ai-model/src/main/java/org/springframework/ai/tool/method/"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "j05",
+        "overlap10_vs_knot": 0.4,
+        "query": "expose a java method as a tool the model can call"
+      },
+      {
+        "expected": [
+          "spring-ai-model/src/main/java/org/springframework/ai/model/ModelOptionsUtils.java"
+        ],
+        "hit10": {
+          "knot_search": true,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "hit5": {
+          "knot_search": false,
+          "spike_f32": true,
+          "spike_i8fx": true,
+          "spike_i8pv": true
+        },
+        "id": "j06",
+        "overlap10_vs_knot": 0.4,
+        "query": "merge runtime options with default model options"
+      }
+    ],
+    "summary": {
+      "knot_search": 0.8333333333333334,
+      "spike_f32": 0.8333333333333334,
+      "spike_i8fx": 0.8333333333333334,
+      "spike_i8pv": 0.8333333333333334
+    }
+  },
+  "quantization": {
+    "i8fx": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 0.95,
+      "same_top1": 0.8333333333333334
+    },
+    "i8pv": {
+      "clip_rate": 0.0,
+      "overlap_at_10": 1.0,
+      "same_top1": 1.0
+    }
+  },
+  "query": {
+    "embed_ms": {
+      "max": 6.075651,
+      "n": 6,
+      "p50": 4.460559,
+      "p95": 6.075651
+    },
+    "scan_ms": {
+      "max": 144.433034,
+      "n": 120,
+      "p50": 134.340541,
+      "p95": 138.842919
+    }
+  },
+  "repo": "spring-ai",
+  "root": "/tmp/knot-rag-spike/work/spring-ai",
+  "schema": "knot-rag-spike/s2/v1",
+  "sizes": {
+    "source": {
+      "gzip": 62619654,
+      "raw": 91692493
+    },
+    "variants": {
+      "f32_b64": {
+        "bytes_per_entity": 2327.49159220432,
+        "gzip": 46575208,
+        "raw": 66161276,
+        "shards": 2604
+      },
+      "f32_dec": {
+        "bytes_per_entity": 4978.047069584183,
+        "gzip": 57611688,
+        "raw": 141505966,
+        "shards": 2604
+      },
+      "i8fx_b64": {
+        "bytes_per_entity": 791.49159220432,
+        "gzip": 12935357,
+        "raw": 22498940,
+        "shards": 2604
+      },
+      "i8pv_b64": {
+        "bytes_per_entity": 807.3801801167945,
+        "gzip": 13782013,
+        "raw": 22950589,
+        "shards": 2604
+      },
+      "nov": {
+        "bytes_per_entity": 272.49159220432,
+        "gzip": 2180547,
+        "raw": 7745846,
+        "shards": 2604
+      }
+    }
+  },
+  "snapshot_fingerprint": "c4d9728f8e14a5724bc8cfa81138f307c4bbb3c63caf943e9128f2c5f050bf68",
+  "tier1": {
+    "queries": [
+      {
+        "hit1": false,
+        "hit5": true,
+        "hit5_mixed": true,
+        "id": "l10"
+      },
+      {
+        "hit1": true,
+        "hit5": true,
+        "hit5_mixed": false,
+        "id": "l11"
+      }
+    ],
+    "size_increase_pct": 154.32666445223603,
+    "summary": {
+      "hit1": 0.5,
+      "hit5": 1.0,
+      "hit5_mixed": 0.5
+    }
+  },
+  "timings_ms": {
+    "embed_chunks": 28985,
+    "embed_entities": 1247993,
+    "entities_per_s": 22.22768877710051,
+    "parse": 9114,
+    "prepare": 1364
+  }
+}

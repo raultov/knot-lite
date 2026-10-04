@@ -1,0 +1,71 @@
+{
+  "calls": [],
+  "declared_unused": [],
+  "extends": [],
+  "implements": [],
+  "imports_script": [],
+  "imports_stylesheet": [],
+  "imports_vmod": [],
+  "includes": [],
+  "macro_calls": [],
+  "overridden_by": [
+    {
+      "file_path": "models/spring-ai-google-genai/src/main/java/org/springframework/ai/google/genai/schema/GoogleGenAiToolCallingManager.java",
+      "kind": "method",
+      "name": "executeToolCalls",
+      "rel_type": null,
+      "repo_name": "spring-ai",
+      "signature": "(Prompt prompt, ChatResponse chatResponse)",
+      "start_line": 95,
+      "target_file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java",
+      "target_fqn": "org.springframework.ai.model.tool.ToolCallingManager.executeToolCalls",
+      "target_name": "executeToolCalls",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(Prompt prompt, ChatResponse chatResponse)",
+      "target_start_line": 41
+    },
+    {
+      "file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java",
+      "kind": "method",
+      "name": "executeToolCalls",
+      "rel_type": null,
+      "repo_name": "spring-ai",
+      "signature": "(Prompt prompt, ChatResponse chatResponse)",
+      "start_line": 178,
+      "target_file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java",
+      "target_fqn": "org.springframework.ai.model.tool.ToolCallingManager.executeToolCalls",
+      "target_name": "executeToolCalls",
+      "target_repo_name": "spring-ai",
+      "target_signature": "(Prompt prompt, ChatResponse chatResponse)",
+      "target_start_line": 41
+    }
+  ],
+  "overrides": [],
+  "references": [],
+  "references_dom": [],
+  "resolution": {
+    "fuzzy": false,
+    "hidden_kinds": [],
+    "hidden_non_code": 0,
+    "kind_filter": "any",
+    "query": "ToolCallingManager.executeToolCalls",
+    "targets": [
+      {
+        "file_path": "spring-ai-model/src/main/java/org/springframework/ai/model/tool/ToolCallingManager.java",
+        "fqn": "org.springframework.ai.model.tool.ToolCallingManager.executeToolCalls",
+        "kind": "method",
+        "name": "executeToolCalls",
+        "repo_name": "spring-ai",
+        "start_line": 41,
+        "uuid": "dd30dd04-5ff3-55a9-a43d-64f2ff57718a"
+      }
+    ],
+    "tier": "fqn_suffix",
+    "total_targets": 1,
+    "truncated": false
+  },
+  "uses_acl": [],
+  "uses_backend": [],
+  "uses_css_class": [],
+  "uses_probe": []
+}
