@@ -23,28 +23,34 @@
 
 # clippy::too_many_arguments (default: 7)
 # Measured curve: 4 -> 45 | 5 -> 19 | 6 -> 6 | 7 -> 0
+# knot-lite measured curve (Phase 1, 2026-10-04): 3 -> 12 | 4 -> 6 | 5 -> 0
 # The repo's real maximum is 7, so the distribution is narrow. 4 is
 # disproportionate, 6 barely helps. 5 is the useful point.
 too-many-arguments-threshold = 5
 
 # clippy::type_complexity (default: 250)
 # Measured curve: 150 -> 10 | 200 -> 1 | 250 -> 0
+# knot-lite measured curve (Phase 1, 2026-10-04): 100 -> 10 | 150 -> 6 | 200 -> 0
 # 200 costs a single violation and already improves on the default.
-# Later target: 150.
+# Later target: 150 — NOT yet applied: the knot-lite measurement at 150 is 6
+# violations, and this file only ever tightens to a value with 0 violations.
 type-complexity-threshold = 200
 
 # clippy::excessive_nesting (default: 0, which disables the lint)
 # The lint is warn-by-default; the zero threshold is what silences it,
 # so setting a value here activates it without touching Cargo.toml.
 # Measured curve: 3 -> 519 | 4 -> 220 | 5 -> 77 | 6 -> 26
-# 6 is the only manageable entry point. Later target: 5.
-excessive-nesting-threshold = 6
+# knot-lite measured curve (Phase 1, 2026-10-04): 4 -> 0 | 5 -> 0 | 6 -> 0
+# 6 is the only manageable entry point for knot. Later target: 5 — applied for
+# knot-lite (0 violations at 5; the code nests at most 4 deep).
+excessive-nesting-threshold = 5
 
 # --- Enabled via [lints.clippy] in Cargo.toml ---
 
 # clippy::too_many_lines (pedantic, default: 100)
 # Measured curve (functions exceeding T, production + tests, clippy 0.1.97):
 #   50 -> 103 | 80 -> 17 | 100 -> 0
+# knot-lite measured curve (Phase 1, 2026-10-04): 50 -> 1 | 80 -> 0 | 100 -> 0
 # Threshold matches clippy's own default. After the 2026-09 refactor pass
 # no function exceeds 100 lines: the previous backlog (worst offender 421)
 # was split into helpers instead of suppressed, and the blanket
@@ -54,6 +60,7 @@ too-many-lines-threshold = 100
 # clippy::cognitive_complexity (nursery, default: 25)
 # Measured curve (clippy 0.1.97, after 2026-09 refactor pass):
 #   15 -> 28 | 20 -> 8 | 25 -> 6 | 30 -> 4 | 40 -> 2
+# knot-lite measured curve (Phase 1, 2026-10-04): 10 -> 2 | 15 -> 0 | 20 -> 0
 #
 # NOTE: tracing macros inflate the score by +7 per macro call because the
 # `tracing/log` feature is enabled transitively (axum → tower/log → tracing/log) via
