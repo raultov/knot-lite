@@ -60,6 +60,19 @@ impl SearchParams {
             path,
         }
     }
+
+    /// Map from the `search_hybrid_context` tool arguments (`repo_name` is
+    /// stripped by `parse_args` before this runs).
+    pub fn from_tool(
+        tool: crate::mcp_tools::search_hybrid_context::SearchHybridContextTool,
+    ) -> Self {
+        Self {
+            query: tool.query,
+            max_results: tool.max_results,
+            kinds: tool.kinds,
+            path: tool.path,
+        }
+    }
 }
 
 impl CallersParams {
@@ -75,6 +88,15 @@ impl CallersParams {
             kinds,
         }
     }
+
+    /// Map from the `find_callers` tool arguments.
+    pub fn from_tool(tool: crate::mcp_tools::find_callers::FindCallersTool) -> Self {
+        Self {
+            entity_name: tool.entity_name,
+            max_targets: tool.max_targets,
+            kinds: tool.kinds,
+        }
+    }
 }
 
 impl ExploreParams {
@@ -85,12 +107,25 @@ impl ExploreParams {
             include_markup,
         }
     }
+
+    /// Map from the `explore_file` tool arguments.
+    pub fn from_tool(tool: crate::mcp_tools::explore_file::ExploreFileTool) -> Self {
+        Self {
+            file_path: tool.file_path,
+            include_markup: tool.include_markup.unwrap_or(false),
+        }
+    }
 }
 
 impl FilesParams {
     /// Map from the CLI `files` subcommand.
     pub fn from_cli(path: Option<String>) -> Self {
         Self { path }
+    }
+
+    /// Map from the `list_files` tool arguments.
+    pub fn from_tool(tool: crate::mcp_tools::list_files::ListFilesTool) -> Self {
+        Self { path: tool.path }
     }
 }
 
