@@ -1438,3 +1438,154 @@ exceptions reported.)*
 - Pre-Phase-1 change (2026-10-04, human decision P1-D16): root `Makefile` `test` target changed from
   `cargo test --lib --all-features` to `cargo test --all-features`, plus a new non-gate `test-lib`
   target. Verified: `make check` green on the spike crate (89 lib tests, 3 binaries, doctests, dupes 0).
+
+### P1.0
+
+- The `.gitignore` deviation above is the Phase 0 carry-over (content as specified in P1.0).
+- Commit on `master`: `f0e10c8 Phase 0: feasibility spikes (S1 LSP graph, S2 file-based vectors) and results`
+  (172 files). Branch `phase-1` created; `git status` clean.
+- `git status --short` before the commit listed 0 entries under `target/`, `.knot/`, `.idea/`, `results/raw/`.
+
+### P1.1
+
+- `grep -rn "knot-rag" Makefile clippy.toml dupes.toml` → no matches.
+- `cargo dupes --path . report`: `Total code units analyzed: 0`, no path containing `docs/spikes/`.
+  Proof the exclusion works: `cargo dupes --path docs/spikes/phase0 report` analyses 211 units
+  (the same tree the root gate must skip).
+- `make check CRATE_DIR=docs/spikes/phase0` green after the rename rebuild: 89 lib tests,
+  3 binaries, doctests, dupes 0 groups / 6,037 lines.
+- **Deviation (plan bug, fixed conservatively per ground rule 8):** the planned
+  `exclude = ["tests/", "benches/", "tests.rs", "docs/spikes/"]` broke the spike's own gate.
+  cargo-dupes 0.2.1 `is_excluded` (`dupes-core-0.2.1/src/scanner.rs`) is a plain substring match
+  on the full walked path, and the spike reads the SAME `dupes.toml` through its
+  `docs/spikes/phase0/dupes.toml -> ../../../dupes.toml` symlink. A bare `docs/spikes/` matches
+  the spike's own walked paths (`docs/spikes/phase0/...`) and emptied its scan
+  (`Error: No source files found in docs/spikes/phase0`, make target `dupes` exit 2).
+  Fix: `exclude = ["tests/", "benches/", "tests.rs", "/docs/spikes/"]` (leading slash).
+  Verified matrix (probe in `/tmp/opencode/dupes-probe`, identical files under `src/` and
+  `docs/spikes/phase0/src/`):
+
+  | pattern | `--path .` (root gate) | `--path docs/spikes/phase0` (spike gate) |
+  |---|---|---|
+  | `docs/spikes/` | 1 unit (spike excluded) | `No source files found` (BROKEN) |
+  | `/docs/spikes/` | 1 unit (spike excluded) | 1 unit (analysed) — OK |
+
+  Also verified `/docs/spikes/` excludes for `--path .`, `--path ./` and `--path <abs>`.
+  The plan-provided comment is kept; two NOTE lines document the leading slash.
+  No threshold changed; `tests/`, `benches/`, `tests.rs` kept as-is.
+
+### P1.2
+
+- Lint-table byte-identity check (diff empty):
+  `awk '/^\[lints\.rust\]/,/allow_attributes_without_reason/' ../knot/Cargo.toml > /tmp/knot-lite-notes/lints-knot.txt`
+  `awk '/^\[lints\.rust\]/,/allow_attributes_without_reason/' Cargo.toml > /tmp/knot-lite-notes/lints-knot-lite.txt`
+  `diff /tmp/knot-lite-notes/lints-knot.txt /tmp/knot-lite-notes/lints-knot-lite.txt` → no output.
+- `cargo build` green in 55.5 s (knot 1.11.1 + fastembed/ort/qdrant/neo4rs already cached).
+- `make check` green with `CRATE_DIR` auto-detected as `.` (fmt-check, clippy, test incl. both
+  bin targets + doctests, dupes 0).
+
+### P1.3 — verified rust-mcp-sdk 2.0.0 / rust-mcp-schema 2.0.0 / rust-mcp-macros 2.0.0 facts
+
+Sources: `~/.cargo/registry/src/index.crates.io-*/rust-mcp-{sdk,schema,macros,transport}-2.0.0`.
+Probe crate: `/tmp/knot-lite-sdk-probe` (throw-away, not committed); it compiles the P1.10 handler
+shape and prints the generated tool schema.
+
+**Module paths (deviation from the plan's §4 sketch — use these):**
+
+| Item | Path |
+|---|---|
+| `ServerHandler`, `McpServerOptions`, `server_runtime`, `ToMcpServerHandler` | `rust_mcp_sdk::mcp_server::*` |
+| `McpServer`, `RequestContext`, `ServerDetails`, `StdioTransport`, `TransportOptions`, `SdkResult`/`McpSdkError` | `rust_mcp_sdk::*` (root re-exports of `mcp_traits` / `rust_mcp_transport`; `McpSdkError` also at `rust_mcp_sdk::error`) |
+| schema types (`CallToolRequestParams`, `CallToolResult`, `Tool`, `ListToolsResult`, …) and `CallToolError` | `rust_mcp_sdk::schema::*` (there is no direct `rust_mcp_schema` dependency) |
+| `#[mcp_tool]`, `#[derive(JsonSchema)]` | `rust_mcp_sdk::macros::*` (there is no direct `rust_mcp_macros` dependency) |
+
+- `McpServerOptions<T>` (generic over transport) fields: `server_details: ServerDetails`,
+  `transport: T`, `handler: Arc<dyn McpServerHandler>`,
+  `message_observer: Option<Arc<dyn McpObserver<ClientMessage, ServerMessage>>>`.
+  `server_runtime::create_server<T>(options) -> Arc<ServerRuntime>`;
+  `ServerRuntime::start(self: Arc<Self>) -> SdkResult<()>`.
+- `ServerHandler` (via `#[async_trait]`):
+  `handle_list_tools_request(&self, params: Option<PaginatedRequestParams>, context: &RequestContext, runtime: Arc<dyn McpServer>) -> Result<ListToolsResult, RpcError>`;
+  `handle_call_tool_request(&self, params: CallToolRequestParams, context: &RequestContext, runtime: Arc<dyn McpServer>) -> Result<ServerResult, CallToolError>`.
+  Both match the plan. There is also `handle_call_tool_request_mrtr` (SEP-2322); the runtime calls
+  the MRTR variant whose default delegates to `handle_call_tool_request` and converts
+  `CallToolError` into a `CallToolResult` with `is_error: Some(true)`.
+- `ServerDetails { server_info: Implementation, capabilities: ServerCapabilities,
+  instructions: Option<String>, meta: Option<ResultMetaObject> }` (no `protocol_version`).
+  `Implementation { description, icons: Vec<Icon>, name, title, version, website_url }` (Default).
+  `ServerCapabilities { completions, experimental, extensions, logging, prompts, resources,
+  tools: Option<ServerCapabilitiesTools> }` (Default);
+  `ServerCapabilitiesTools { list_changed: Option<bool> }` (Default).
+- `ListToolsResult { cache_scope, meta, next_cursor, result_type: String, tools: Vec<Tool>,
+  ttl_ms: u64 }`.
+  **Deviation:** `cache_scope` is `ListToolsResultCacheScope` (`Private` | `Public`) and has **no
+  `Default`**, so the plan's `cache_scope: Default::default()` does not compile. knot-lite uses
+  `ListToolsResultCacheScope::Public` (tool lists are not user-specific).
+- `CallToolError(pub Box<dyn Error>)` — constructors `new(E)`, `unknown_tool(String)`,
+  `from_message(String)`, `invalid_arguments(tool, Option<String>)`
+  (formats `Invalid arguments for tool '<tool>': <msg>` — NOT the plan's wording; knot-lite keeps
+  its own `invalid arguments for <tool>: <e>` wording via `from_message` per §9.4).
+  `Display` writes the inner error. `From<CallToolError> for CallToolResult` sets
+  `is_error: Some(true)`, `result_type: "complete"`; `From<CallToolError> for RpcError` maps to
+  `internal_error` with the message.
+- `CallToolResult { content, is_error: Option<bool>, meta, result_type: String,
+  structured_content: Option<Value> }`; ctors `text_content(Vec<TextContent>)`,
+  `with_structured_content(serde_json::Map<String, Value>)`, `with_error(CallToolError)`.
+  `TextContent::new(text: String, annotations: Option<Annotations>, meta: Option<MetaObject>)`
+  (3 args, matches the plan).
+- `CallToolRequestParams { arguments: Option<Map>, input_responses: Option<InputResponses>,
+  meta: RequestMetaObject, name: String, request_state: Option<String> }` — `meta` is required
+  (wire `_meta`). `RequestMetaObject::new(protocol_version: impl Into<String>, client_capabilities:
+  ClientCapabilities)`; wire keys `io.modelcontextprotocol/protocolVersion` and
+  `io.modelcontextprotocol/clientCapabilities` both required. `CallToolRequestParams::new(name, meta)`
+  and `.with_arguments(map)` builders exist (useful for tests).
+- `#[mcp_tool]` (2.0, `execution` attribute removed) generates `tool_name() -> String`,
+  `request_params() -> CallToolRequestParams`, `tool() -> Tool`. `#[derive(JsonSchema)]`
+  (from `rust_mcp_sdk::macros`) generates `json_schema() -> serde_json::Map<String, Value>`;
+  field attributes `#[json_schema(description, min_length, max_length, minimum, maximum, default)]`
+  all supported (verified in the probe output below). `Option<T>` is not required and widens the
+  type to `["X", "null"]`. `JsonSchema` + `serde::Deserialize` derive together (verified).
+- Stdio framing: newline-delimited JSON on stdin/stdout;
+  `DEFAULT_MAX_LINE_LENGTH = 16 * 1024 * 1024`; `TransportOptions::default()`
+  (`timeout`, `max_line_length`, `channel_capacity`).
+- `McpSdkError::rpc_error_message(&self) -> Option<&String>` exists (use it in the MCP binary).
+
+**Probe output (trimmed)** — `Probe { name: String (min 1, max 10), count: Option<i64>
+(minimum 1, maximum 100, default 5), flag: Option<bool> }`:
+
+```json
+"inputSchema": {
+  "type": "object",
+  "properties": {
+    "count": { "default": 5, "description": "A count", "maximum": 100, "minimum": 1, "type": ["integer", "null"] },
+    "flag":  { "description": "Optional flag", "type": ["boolean", "null"] },
+    "name":  { "description": "A name", "maxLength": 10, "minLength": 1, "type": "string" }
+  },
+  "required": ["name"]
+}
+```
+`Probe::tool_name()` → `"probe"` (a `String`). Annotations serialize as
+`destructiveHint/idempotentHint/openWorldHint/readOnlyHint`.
+
+**Wire behaviour (live probe, `--serve` + piped requests) — decisions for P1.12:**
+
+1. `server/discover` (with `_meta`) → JSON-RPC result with `capabilities`, `instructions`,
+   `supportedVersions: ["2026-07-28"]`, `cacheScope`, `ttlMs`, `resultType`.
+   **Deviation:** `DiscoverResult` has **no top-level `serverInfo` field**; the server identity is
+   stamped into `result._meta["io.modelcontextprotocol/serverInfo"]`
+   (name/version/title/description). P1.12 assertion 1 must read
+   `result._meta["io.modelcontextprotocol/serverInfo"].name == "knot-lite"`.
+2. `tools/list` → `result.tools` as expected; `cacheScope` serializes the chosen enum variant
+   (`"public"`), `ttlMs: 0`, `resultType: "complete"`.
+3. `tools/call` of an **unknown tool** (valid `_meta`) → JSON-RPC **result** with
+   `isError: true` and content text `Unknown tool: <name>` (NOT a JSON-RPC error). P1.12
+   assertion 6 asserts the `isError` variant.
+4. A request **without `_meta`** (or without `protocolVersion`) does **not** produce the planned
+   "JSON-RPC `error` member with a recorded code" and is not dropped: the typed request fails to
+   deserialize and the message falls through to the SDK's `CustomRequest` variant, answered with
+   **`error.code = -32601`, `message = "No handler is implemented for custom requests."`**.
+   The optional P1.12 negative test asserts that (deviation from §8/P1.12).
+   (Truly malformed JSON *is* silently dropped by the transport — `mcp_stream.rs` continues —
+   but any well-formed JSON-RPC object with a `method` gets an answer.)
+5. Responses are emitted in arrival order (fast failures answered first) — P1.12 must collect by
+   `id`, as planned.
