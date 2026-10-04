@@ -5,6 +5,8 @@
 > Every table below is rendered by `summarize` from the JSON artefacts in `docs/spikes/phase0/results/`;
 > the narrative is the executing agent's. Cells are traceable to JSON fields (footnote under each table).
 
+> **Naming (2026-10-04):** from Phase 1 on the product is called **knot-lite** (crate, binaries, `.knot-lite/` index, `KNOT_LITE_*`). This report keeps the original knot-rag naming.
+
 ---
 
 ## 1. Summary and verdict
