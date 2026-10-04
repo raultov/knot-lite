@@ -1,7 +1,7 @@
-# Clippy thresholds for knot-rag.
+# Clippy thresholds for knot-lite.
 #
 # Inherited verbatim from knot on 2026-10-03 (knot v1.11.1). The measured
-# curves quoted below are knot's, not knot-rag's: re-measure them on knot-rag's
+# curves quoted below are knot's, not knot-lite's: re-measure them on knot-lite's
 # own code at the end of Phase 1 and only ever TIGHTEN (never loosen) a value.
 #
 # This file lives at the repository root on purpose: clippy searches parent
@@ -17,7 +17,7 @@
 #   too_many_lines        pedantic    allow  -> needs [lints.clippy]
 #   cognitive_complexity  nursery     allow  -> needs [lints.clippy]
 #
-# The last two are enabled in Cargo.toml's [lints.clippy] section (every knot-rag crate copies knot's [lints.clippy] table verbatim).
+# The last two are enabled in Cargo.toml's [lints.clippy] section (every knot-lite crate copies knot's [lints.clippy] table verbatim).
 
 # --- Active by default (complexity group) ---
 

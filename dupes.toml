@@ -1,14 +1,15 @@
-# Duplication thresholds for knot-rag (cargo-dupes 0.2.1).
+# Duplication thresholds for knot-lite (cargo-dupes 0.2.1).
 #
 # Inherited from knot on 2026-10-03 (analysis scope + exclusions kept
-# verbatim). knot's ratchet counts encoded knot's own backlog; knot-rag
+# verbatim). knot's ratchet counts encoded knot's own backlog; knot-lite
 # starts with none, so the ratchet starts at ZERO and may only stay there.
 #
 # IMPORTANT: cargo-dupes reads this file ONLY from the analysed directory
 # (no parent lookup) and `cargo dupes check` silently passes when no
 # dupes.toml is found. Every crate that is not at the repository root must
 # therefore carry a symlink to this file (docs/spikes/phase0/dupes.toml ->
-# ../../../dupes.toml); the Makefile refuses to run the gate without it.
+# ../../../dupes.toml, the spike's own gate); the Makefile refuses to run the
+# gate without it.
 #
 # NOTE: cargo-dupes normalizes the AST (identifiers become positional
 # placeholders and literal VALUES are erased, though their types are kept).
@@ -48,7 +49,19 @@ similarity_threshold = 0.8
 # Patterns are plain substring matches on the path; the trailing slash on
 # "tests/" and "benches/" keeps them from matching unrelated files.
 exclude_tests = true
-exclude = ["tests/", "benches/", "tests.rs"]
+# docs/spikes/ holds throw-away spike crates with their own [workspace]. cargo-dupes
+# walks the whole tree from --path (it only skips `target` and hidden directories), so
+# without this exclusion the root gate would analyse the spikes and flag spike <-> src
+# duplicates whenever spike code is ported. Spikes are gated separately with
+# `make check CRATE_DIR=docs/spikes/phase0` (they carry a dupes.toml symlink).
+# NOTE: plain substring match on the path; forward slashes (gate runs on Linux/macOS).
+# NOTE: the leading slash is what keeps the spike's own gate analysable. The spike
+# reads this same file through its dupes.toml symlink, and its walked paths
+# ("docs/spikes/phase0/...") would match a bare "docs/spikes/" substring, emptying
+# the spike's scan ("No source files found"). "/docs/spikes/" matches the root gate's
+# walked paths ("./docs/spikes/..." and "/abs/.../docs/spikes/...") but not the
+# spike's own relative paths. (Phase 1 deviation, see PLAN_PHASE1_SKELETON.md App. D.)
+exclude = ["tests/", "benches/", "tests.rs", "/docs/spikes/"]
 
 # --- CI thresholds (consumed by `cargo dupes check`) ---
 #

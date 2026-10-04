@@ -1,8 +1,9 @@
 .PHONY: all fmt fmt-check clippy test test-lib dupes dupes-cleanup check check-all e2e build install help
 
-# Crate the quality gates operate on. Until Phase 1 creates the knot-rag root
-# crate, the only Rust code is the Phase 0 spike crate (a standalone
-# [workspace]). Override explicitly with `make check CRATE_DIR=<dir>`.
+# Crate the quality gates operate on. The knot-lite root crate exists as of
+# Phase 1, so the default is the repository root. The Phase 0 spike crate (a
+# standalone [workspace]) is still gated with
+# `make check CRATE_DIR=docs/spikes/phase0`.
 CRATE_DIR ?= $(if $(wildcard Cargo.toml),.,docs/spikes/phase0)
 MANIFEST  := --manifest-path $(CRATE_DIR)/Cargo.toml
 
@@ -65,12 +66,12 @@ endif
 CARGO_HOME ?= $(HOME)/.cargo
 DESTDIR ?= $(CARGO_HOME)/bin
 
-# knot-rag binaries (created in Phase 1). The Phase 0 spike binaries are
+# knot-lite binaries (created in Phase 1). The Phase 0 spike binaries are
 # measurement tools and are deliberately not installable.
-BINS := knot-rag knot-rag-mcp
+BINS := knot-lite knot-lite-mcp
 
 install: build
-	@test "$(CRATE_DIR)" = "." || (echo "install: no knot-rag binaries before Phase 1 (CRATE_DIR=$(CRATE_DIR))" && exit 1)
+	@test "$(CRATE_DIR)" = "." || (echo "install: no knot-lite binaries before Phase 1 (CRATE_DIR=$(CRATE_DIR))" && exit 1)
 	@mkdir -p "$(DESTDIR)"
 	@for b in $(BINS); do cp -f "target/release/$$b$(EXT)" "$(DESTDIR)/$$b$(EXT)"; done
 	@echo "Installed binaries to $(DESTDIR):"
