@@ -80,6 +80,14 @@ fn unavailable(cfg: &Config, tool: &str) -> QueryUnavailable {
             manifest,
             error,
         },
+        // Interim mapping until the error rework (P2.8) adds a dedicated variant.
+        IndexState::Incomplete => QueryUnavailable::Invalid {
+            tool,
+            repo,
+            manifest,
+            error: "an interrupted `knot-lite index` run left the index incomplete; re-run `knot-lite index`"
+                .to_string(),
+        },
     }
 }
 

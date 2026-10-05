@@ -31,6 +31,16 @@ pub const LOCK_FILE_NAMES: &[&str] = &[
 /// Directories never entered by the scan (Phase 1: index dirs and git metadata).
 pub const RESERVED_DIRS: &[&str] = &[".git", ".knot", ".knot-lite"];
 
+/// Build-output directories never entered by any walker (P2-D9, Phase 0's
+/// deny-list). They only matter outside git work trees, where `.gitignore`
+/// is not honoured.
+pub const BUILD_OUTPUT_DIRS: &[&str] = &["node_modules", "target", "dist"];
+
+/// Whether a single path component names a reserved or build-output directory.
+pub fn is_excluded_dir_name(name: &str) -> bool {
+    RESERVED_DIRS.contains(&name) || BUILD_OUTPUT_DIRS.contains(&name)
+}
+
 /// Key used for files that have no recognisable extension at all.
 pub const NO_EXTENSION_KEY: &str = "(no extension)";
 
@@ -83,7 +93,7 @@ pub fn scan_repository(root: &Path) -> anyhow::Result<ScanResult> {
         .collect();
 
     let mut files = Vec::new();
-    for entry in walk(root_str) {
+    for entry in walk_repository(root_str) {
         let class = classify(entry.as_path(), &parsed);
         let relative = knot::pipeline::files::to_repo_relative(entry.as_path(), root);
         files.push((relative, class));
@@ -93,8 +103,9 @@ pub fn scan_repository(root: &Path) -> anyhow::Result<ScanResult> {
 }
 
 /// Walk `root` with the same ignore settings as knot's `discover_files`,
-/// additionally skipping [`RESERVED_DIRS`] and non-regular files.
-fn walk(root_str: &str) -> Vec<PathBuf> {
+/// additionally skipping [`RESERVED_DIRS`], [`BUILD_OUTPUT_DIRS`] and
+/// non-regular files.
+pub(crate) fn walk_repository(root_str: &str) -> Vec<PathBuf> {
     ignore::WalkBuilder::new(root_str)
         .hidden(false)
         .git_ignore(true)
@@ -103,7 +114,7 @@ fn walk(root_str: &str) -> Vec<PathBuf> {
         .filter_entry(|entry| {
             !(entry.depth() > 0
                 && entry.file_type().is_some_and(|t| t.is_dir())
-                && RESERVED_DIRS.contains(&entry.file_name().to_string_lossy().as_ref()))
+                && is_excluded_dir_name(entry.file_name().to_string_lossy().as_ref()))
         })
         .build()
         .filter_map(|entry| match entry {
@@ -140,7 +151,7 @@ fn classify(path: &Path, parsed: &HashSet<PathBuf>) -> FileClass {
     }
 }
 
-fn is_lock_file(path: &Path) -> bool {
+pub(crate) fn is_lock_file(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
         .is_some_and(|name| LOCK_FILE_NAMES.contains(&name))
@@ -285,6 +296,42 @@ mod tests {
             class_of(files, ".gitignore").is_some(),
             ".gitignore is walked"
         );
+    }
+
+    #[test]
+    fn build_output_dirs_are_never_walked() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        for rel in [
+            "node_modules/a.js",
+            "target/b.rs",
+            "dist/c.js",
+            "src/d.rs",
+            "src/nested/target/e.rs",
+        ] {
+            let path = tmp.path().join(rel);
+            fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+            fs::write(&path, "x\n").expect("write");
+        }
+        let scan = scan_repository(tmp.path()).expect("scan");
+        let names: Vec<&str> = scan.files.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(names, vec!["src/d.rs"]);
+    }
+
+    #[test]
+    fn excluded_dir_names_cover_reserved_and_build_output() {
+        for name in [
+            ".git",
+            ".knot",
+            ".knot-lite",
+            "node_modules",
+            "target",
+            "dist",
+        ] {
+            assert!(is_excluded_dir_name(name), "{name}");
+        }
+        for name in ["src", "targets", "dist.rs", ".github"] {
+            assert!(!is_excluded_dir_name(name), "{name}");
+        }
     }
 
     #[test]
