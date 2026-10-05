@@ -4,6 +4,9 @@
 //! wrappers in `mcp_tools`, a transport-independent `mcp_handler`
 //! (`tools()` + `dispatch()`), and minimal binaries.
 
+#[cfg(test)]
+mod measure;
+
 pub mod capability;
 pub mod cli_tools;
 pub mod config;

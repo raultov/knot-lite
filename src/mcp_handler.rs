@@ -394,7 +394,10 @@ mod tests {
             .expect("1");
         assert_eq!(services.index.loads(), 1);
 
-        // Re-index
+        // Re-index after editing a file
+        let path = cfg.repo_path.join("src/lib.rs");
+        let body = std::fs::read_to_string(&path).expect("read");
+        std::fs::write(&path, format!("{body}\n// edit")).expect("edit");
         let mut fake = crate::embed::fake::FakeEmbedder::new(16);
         crate::index::build::build_index(
             &cfg,

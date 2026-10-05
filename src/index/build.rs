@@ -465,7 +465,7 @@ fn collect_records(
 
 /// Normalise paths to `/` and sort entities so the resolver input does not
 /// depend on thread completion order (risk R4).
-fn normalise_and_sort(entities: &mut [ParsedEntity]) {
+pub(crate) fn normalise_and_sort(entities: &mut [ParsedEntity]) {
     for entity in entities.iter_mut() {
         if entity.file_path.contains('\\') {
             entity.file_path = entity.file_path.replace('\\', "/");
