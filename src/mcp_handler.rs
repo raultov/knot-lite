@@ -298,6 +298,121 @@ mod tests {
         );
     }
 
+    fn indexed_handler() -> (
+        tempfile::TempDir,
+        Config,
+        KnotLiteMcpHandler,
+        Arc<QueryServices>,
+    ) {
+        let (tmp, cfg) = crate::index::build::test_support::fixture();
+        let mut fake = crate::embed::fake::FakeEmbedder::new(16);
+        crate::index::build::build_index(
+            &cfg,
+            &mut fake,
+            &crate::index::build::test_support::opts(),
+            &mut |_| {},
+        )
+        .expect("build");
+        let services = Arc::new(QueryServices::with_factory(Arc::new(|_model| {
+            Ok(Box::new(crate::embed::fake::FakeEmbedder::new(16))
+                as Box<dyn crate::embed::EmbedBatch + Send>)
+        })));
+        let handler = KnotLiteMcpHandler::with_services(cfg.clone(), Arc::clone(&services));
+        (tmp, cfg, handler, services)
+    }
+
+    #[tokio::test]
+    async fn dispatch_search_returns_structured_content() {
+        let (_tmp, _cfg, handler, _services) = indexed_handler();
+        let mut args = serde_json::Map::new();
+        args.insert("query".to_string(), serde_json::json!("target"));
+        let result = handler
+            .dispatch(call_params("search_hybrid_context", args))
+            .await
+            .expect("search");
+        assert_ne!(result.is_error, Some(true));
+        let rust_mcp_sdk::schema::ContentBlock::TextContent(text) = &result.content[0] else {
+            panic!("expected text content");
+        };
+        assert!(
+            text.text.starts_with("## knot-lite search"),
+            "{}",
+            text.text
+        );
+        let structured = result.structured_content.expect("structured content");
+        assert_eq!(
+            structured.get("schema").and_then(|v| v.as_str()),
+            Some("knot-lite/search/v1")
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_callers_lists_fixture_callers() {
+        let (_tmp, _cfg, handler, _services) = indexed_handler();
+        let mut args = serde_json::Map::new();
+        args.insert("entity_name".to_string(), serde_json::json!("target"));
+        let result = handler
+            .dispatch(call_params("find_callers", args))
+            .await
+            .expect("callers");
+        assert_ne!(result.is_error, Some(true));
+        let structured = result.structured_content.expect("structured content");
+        assert_eq!(
+            structured.get("schema").and_then(|v| v.as_str()),
+            Some("knot-lite/callers/v1")
+        );
+        let count = structured["targets"][0]["caller_count"].as_u64().unwrap();
+        assert_eq!(count, 3);
+    }
+
+    #[tokio::test]
+    async fn dispatch_reuses_loaded_index() {
+        let (_tmp, _cfg, handler, services) = indexed_handler();
+        let mut args1 = serde_json::Map::new();
+        args1.insert("entity_name".to_string(), serde_json::json!("target"));
+        handler
+            .dispatch(call_params("find_callers", args1))
+            .await
+            .expect("1");
+        let mut args2 = serde_json::Map::new();
+        args2.insert("query".to_string(), serde_json::json!("target"));
+        handler
+            .dispatch(call_params("search_hybrid_context", args2))
+            .await
+            .expect("2");
+        assert_eq!(services.index.loads(), 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_reloads_after_reindex() {
+        let (_tmp, cfg, handler, services) = indexed_handler();
+        let mut args1 = serde_json::Map::new();
+        args1.insert("entity_name".to_string(), serde_json::json!("target"));
+        handler
+            .dispatch(call_params("find_callers", args1))
+            .await
+            .expect("1");
+        assert_eq!(services.index.loads(), 1);
+
+        // Re-index
+        let mut fake = crate::embed::fake::FakeEmbedder::new(16);
+        crate::index::build::build_index(
+            &cfg,
+            &mut fake,
+            &crate::index::build::test_support::opts(),
+            &mut |_| {},
+        )
+        .expect("rebuild");
+
+        let mut args2 = serde_json::Map::new();
+        args2.insert("entity_name".to_string(), serde_json::json!("target"));
+        handler
+            .dispatch(call_params("find_callers", args2))
+            .await
+            .expect("2");
+        assert_eq!(services.index.loads(), 2);
+    }
+
     #[tokio::test]
     async fn query_dispatch_reports_not_indexed() {
         let (_tmp, handler) = tempdir_handler();

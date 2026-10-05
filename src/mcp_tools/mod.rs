@@ -7,7 +7,7 @@
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::config::Config;
+use crate::config::{Config, OutputFormat};
 use crate::mcp_handler::KnotLiteMcpHandler;
 use crate::models::repo_scope::check_repo_scope;
 use crate::query::session::QueryServices;
@@ -18,6 +18,13 @@ pub mod find_callers;
 pub mod list_files;
 pub mod search_hybrid_context;
 pub mod status;
+
+/// Specification for executing a query tool inside MCP.
+pub(crate) struct QueryToolSpec<T, P> {
+    pub to_params: fn(T) -> P,
+    pub run: fn(&Config, &QueryServices, &P) -> anyhow::Result<Value>,
+    pub format: fn(&Value, OutputFormat) -> String,
+}
 
 /// Deserialize tool arguments after validating and removing `repo_name`
 /// (knot accepts arrays for it; the typed struct only models the string form).
@@ -40,32 +47,33 @@ pub(crate) fn query_tool<T, P>(
     tool: &str,
     params: CallToolRequestParams,
     handler: &KnotLiteMcpHandler,
-    to_params: impl FnOnce(T) -> P,
-    run: impl FnOnce(&Config, &QueryServices, &P) -> anyhow::Result<Value>,
+    spec: QueryToolSpec<T, P>,
 ) -> Result<CallToolResult, CallToolError>
 where
     T: DeserializeOwned,
 {
     let cfg = handler.config()?.clone();
     let args = parse_args::<T>(tool, &params, &cfg.repo_name)?;
-    match run(&cfg, &handler.services, &to_params(args)) {
-        // Interim: the JSON document as text; P2.13 renders markdown + structured content.
-        Ok(json) => Ok(CallToolResult::text_content(vec![TextContent::new(
-            serde_json::to_string_pretty(&json).unwrap_or_default(),
-            None,
-            None,
-        )])),
+    match (spec.run)(&cfg, &handler.services, &(spec.to_params)(args)) {
+        Ok(json) => {
+            let markdown = (spec.format)(&json, OutputFormat::Markdown);
+            let mut result =
+                CallToolResult::text_content(vec![TextContent::new(markdown, None, None)]);
+            if let Value::Object(obj) = json {
+                result = result.with_structured_content(obj);
+            }
+            Ok(result)
+        }
         Err(e) => Err(CallToolError::from_message(format!("{e:#}"))),
     }
 }
 
 /// Generates the delegating `handle` method of one query tool.
 ///
-/// The logic lives once, in [`query_tool`]; a tool only wires its input type
-/// and its `cli_tools::run_*` runner. Defining the body once (here) instead of
-/// four times keeps `cargo dupes` at zero without hiding anything.
+/// The logic lives once, in [`query_tool` philosophy]; a tool only wires its
+/// input type, its `cli_tools::run_*` runner, and its formatter.
 macro_rules! impl_query_tool_handle {
-    ($tool:ty, $name:literal, $params:ty, $run:path) => {
+    ($tool:ty, $name:literal, $params:ty, $run:path, $format:path) => {
         impl $tool {
             /// Handle a tool call by delegating to the shared query machinery.
             pub async fn handle(
@@ -77,8 +85,11 @@ macro_rules! impl_query_tool_handle {
                     $name,
                     params,
                     handler,
-                    <$params>::from_tool,
-                    $run,
+                    $crate::mcp_tools::QueryToolSpec {
+                        to_params: <$params>::from_tool,
+                        run: $run,
+                        format: $format,
+                    },
                 )
             }
         }
@@ -147,6 +158,35 @@ mod tests {
     fn all_tools_have_descriptions() {
         for tool in all_tools() {
             assert!(tool.description.as_deref().is_some_and(|d| !d.is_empty()));
+        }
+    }
+
+    #[test]
+    fn descriptions_contain_phase2_keywords() {
+        assert!(
+            tool_named("search_hybrid_context")
+                .description
+                .unwrap()
+                .contains("no keyword channel")
+        );
+        assert!(
+            tool_named("find_callers")
+                .description
+                .unwrap()
+                .contains("heuristic")
+        );
+        for name in [
+            "search_hybrid_context",
+            "find_callers",
+            "explore_file",
+            "list_files",
+        ] {
+            assert!(
+                tool_named(name)
+                    .description
+                    .unwrap()
+                    .contains("knot-lite index")
+            );
         }
     }
 
@@ -279,8 +319,11 @@ mod tests {
             "find_callers",
             params,
             &handler,
-            crate::models::params::CallersParams::from_tool,
-            crate::cli_tools::run_find_callers,
+            QueryToolSpec {
+                to_params: crate::models::params::CallersParams::from_tool,
+                run: crate::cli_tools::run_find_callers,
+                format: crate::cli_tools::format_callers_output,
+            },
         )
         .unwrap_err();
         let text = err.to_string();

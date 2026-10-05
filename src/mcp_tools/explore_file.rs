@@ -9,10 +9,7 @@ use crate::models::params::ExploreParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "explore_file",
     title = "File anatomy inspection",
-    description = "Read-only file anatomy inspection. Use this to list all classes, methods, and properties within a specific source file without reading its entire contents. \
-                   Requires a knot-lite index; call `status` to check. \
-                   \n\nUsage: use AFTER identifying an interesting file via 'search_hybrid_context' to understand its structure, or before modifying a file to see its available methods. Do NOT use this for searching across multiple files. \
-                   \n\nBehaviour & Return: read-only operation. Returns a Markdown outline of the file's entities (classes, methods, functions, properties) with line numbers, grouped by type, plus the source lines where each entity is declared.",
+    description = "Read-only anatomy of one file from this repository's knot-lite index: every entity knot parsed in it (types, callables, documentation sections, config keys) with line ranges, signatures and incoming-reference counts, grouped by family. Markup attribute tokens (html_class, html_id) are summarised unless include_markup is true. Files knot cannot parse show their line-window chunks. Requires a knot-lite index (built with `knot-lite index`); call `status` to check. \n\nPath handling: pass a repo-relative path; absolute paths inside the repository and './' prefixes are normalised. A unique suffix match is accepted (e.g. 'parser/mod.rs'); several matches are returned as candidates.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -44,5 +41,6 @@ impl_query_tool_handle!(
     ExploreFileTool,
     "explore_file",
     ExploreParams,
-    crate::cli_tools::run_explore_file
+    crate::cli_tools::run_explore_file,
+    crate::cli_tools::format_explore_output
 );

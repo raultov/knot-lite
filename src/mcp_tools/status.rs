@@ -12,7 +12,7 @@ use crate::mcp_tools::parse_args;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "status",
     title = "Repository capability matrix",
-    description = "Read-only capability matrix of the repository served by this knot-lite instance: for each language, the file count, whether a parser exists, whether its language server is installed, the resulting tier (3 = parser + language server, 2 = parser only, heuristic graph, 1 = files only, 0 = excluded) and the index state. Call this FIRST. Returns a Markdown table plus the same data as structured JSON (schema knot-lite/status/v1).",
+    description = "Read-only capability matrix of the repository served by this knot-lite instance: for each language, the file count, whether a parser exists, whether its language server is installed, the resulting tier (3 = parser + language server, 2 = parser only, heuristic graph, 1 = files only, 0 = excluded) and the index state (components, counts, embedding model and freshness against the working tree). Call this FIRST. Returns a Markdown table plus the same data as structured JSON (schema knot-lite/status/v1).",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,

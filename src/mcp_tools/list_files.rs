@@ -9,9 +9,7 @@ use crate::models::params::FilesParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "list_files",
     title = "List indexed files",
-    description = "Read-only listing of the files this repository's index carries, with entity counts and deterministic order. \
-                   Requires a knot-lite index; call `status` to check. \
-                   \n\nUsage: optional 'path' narrows to a directory prefix or glob. Omit to list every indexed file.",
+    description = "Read-only listing of the files in this repository's knot-lite index with per-file entity and chunk counts, in path order. 'path' narrows the listing to a repo-relative directory prefix matched on a path boundary ('src/api' never matches 'src/api-notes.md'); glob patterns are rejected in this version. At most 2000 files are listed and the reply states the exact total. Requires a knot-lite index (built with `knot-lite index`); call `status` to check.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -39,5 +37,6 @@ impl_query_tool_handle!(
     ListFilesTool,
     "list_files",
     FilesParams,
-    crate::cli_tools::run_list_files
+    crate::cli_tools::run_list_files,
+    crate::cli_tools::format_files_output
 );

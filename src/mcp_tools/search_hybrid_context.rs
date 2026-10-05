@@ -9,14 +9,7 @@ use crate::models::params::SearchParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "search_hybrid_context",
     title = "Semantic search",
-    description = "Read-only semantic search over this repository's index. Finds code entities by meaning (e.g. 'user authentication', 'API error handling') instead of exact keywords. \
-                   Requires a knot-lite index; call `status` to check. \
-                   \n\nUsage: use for initial exploration and when you do not know the exact names of the entities involved. \
-                   \n\nRanking contract: results are kind-aware — function/method/class/struct definitions outrank markdown docs, test files, config properties and build-dependency entities for natural-language queries; callers and helpers appear as context attached to a definition, never as substitutes. \
-                   The shared entry point of the highest-ranked helpers outranks those helpers themselves. \
-                   \n\nRecall contract: entity embeds carry identifier tokens and the tokenized call names of the entity's body, so a paraphrase of what a definition does still surfaces it. \
-                   Entities whose identifier shares a word with the query enter the candidate pool by token match alone. \
-                   \n\nResult bound: 'max_results' is clamped to 100. There is no pagination; narrow the scope with 'kinds' and 'path' when the bound is not enough.",
+    description = "Read-only semantic search over this repository's knot-lite index. The query is embedded with the index's model and every indexed record is ranked by cosine similarity: code entities parsed by knot (functions, methods, types, documentation sections, …) and line-window chunks of files knot cannot parse (scripts, Makefiles, YAML, …). Pure vector ranking: unlike knot, there is no keyword channel, no kind-aware re-ranking and no graph boost. Requires a knot-lite index (built with `knot-lite index`); call `status` to check. \n\nUsage: initial exploration when you do not know the names involved; follow up with explore_file and find_callers. \n\nFilters: 'kinds' accepts exact kinds or the aliases definition, callable, class/type, docs, config, plus 'chunk' and 'file' for the line-window records; 'path' is a repo-relative directory prefix matched on a path boundary (glob patterns are rejected in this version). \n\nResult bound: 'max_results' is clamped to 100; there is no pagination.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -48,14 +41,14 @@ pub struct SearchHybridContextTool {
     pub repo_name: Option<String>,
     /// Optional entity-kind filter.
     #[json_schema(
-        description = "Optional entity-kind filter: exact kinds ('rust_function', 'markdown_section', ...) or aliases ('definition', 'callable', 'class', 'type'). Comma-separated for multiple values.",
+        description = "Optional kind filter: exact kinds ('rust_function', 'markdown_section', 'chunk', 'file') or aliases ('definition', 'callable', 'class', 'type', 'docs', 'config'). Comma-separated.",
         min_length = 1,
         max_length = 255
     )]
     pub kinds: Option<String>,
     /// Optional repo-relative path filter.
     #[json_schema(
-        description = "Optional path filter: repo-relative directory prefix ('src/api', matched on a path boundary) or glob ('src/**/*_test.rs').",
+        description = "Optional repo-relative directory prefix ('src/api'), matched on a path boundary. Glob patterns are not supported in this version.",
         min_length = 1,
         max_length = 500
     )]
@@ -66,5 +59,6 @@ impl_query_tool_handle!(
     SearchHybridContextTool,
     "search_hybrid_context",
     SearchParams,
-    crate::cli_tools::run_search_hybrid_context
+    crate::cli_tools::run_search_hybrid_context,
+    crate::cli_tools::format_search_output
 );

@@ -3,6 +3,7 @@
 //!
 //! Cross-platform: spawns the built binary directly (no shell, no Python).
 
+use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
@@ -128,8 +129,6 @@ fn stop(child: &mut Child) {
 }
 
 fn assert_discover(discover: &Value) {
-    // Identity lives in `_meta[".../serverInfo"]` (P1.3: DiscoverResult has no
-    // top-level `serverInfo` field).
     let server_info = discover
         .get("_meta")
         .and_then(|m| m.get("io.modelcontextprotocol/serverInfo"))
@@ -225,9 +224,6 @@ fn mcp_stdio_protocol_session() {
             r#"{"entity_name":"foo","repo_name":"other"}"#,
         ),
         call(6, "nope", "{}"),
-        // Negative test (P1.3 recorded behaviour): a request without `_meta` is
-        // not a typed request and falls through to the custom-request handler,
-        // answered with JSON-RPC error -32601.
         request(7, "tools/list", "{}"),
     ];
     for request in &requests {
@@ -242,7 +238,6 @@ fn mcp_stdio_protocol_session() {
     assert_tools_list(&result_of(&responses["2"]));
     assert_status(&result_of(&responses["3"]));
 
-    // Queries fail as tool errors (P1-D12), never as protocol errors.
     assert!(error_text(&result_of(&responses["4"])).contains("has no index"));
     assert!(error_text(&result_of(&responses["5"])).contains("not served here"));
     assert_eq!(
@@ -250,8 +245,155 @@ fn mcp_stdio_protocol_session() {
         "Unknown tool: nope"
     );
 
-    // Request without `_meta`: JSON-RPC error -32601 (custom-request fallback).
     let no_meta = &responses["7"];
     let error = no_meta.get("error").expect("JSON-RPC error member");
     assert_eq!(error.get("code").and_then(Value::as_i64), Some(-32601));
+}
+
+#[test]
+fn mcp_stdio_indexed_session() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    knot_lite::index::fixture::write_fixture_repo(tmp.path()).expect("fixture");
+    let common_args = knot_lite::config::CommonArgs {
+        repo_path: Some(tmp.path().to_string_lossy().into_owned()),
+        repo_name: None,
+    };
+    let cfg = knot_lite::config::resolve(
+        &common_args,
+        false,
+        &knot_lite::config::ResolveInputs {
+            env: &|_| None,
+            dotenv: &BTreeMap::new(),
+            cwd: tmp.path(),
+            temp_dir: tmp.path(),
+        },
+    )
+    .expect("resolve");
+    let mut fake = knot_lite::embed::fake::FakeEmbedder::new(16);
+    knot_lite::index::build::build_index(
+        &cfg,
+        &mut fake,
+        &knot_lite::index::build::BuildOptions::default(),
+        &mut |_| {},
+    )
+    .expect("build");
+
+    let (mut child, rx, _isolation) = spawn_server(tmp.path());
+    let mut stdin = child.stdin.take().expect("child stdin");
+
+    let requests = vec![
+        call(1, "status", "{}"),
+        call(2, "find_callers", r#"{"entity_name":"target"}"#),
+        call(3, "explore_file", r#"{"file_path":"src/lib.rs"}"#),
+        call(4, "list_files", "{}"),
+        call(5, "list_files", r#"{"path":"src/**"}"#),
+        call(6, "search_hybrid_context", r#"{"query":"target"}"#),
+    ];
+    for req in &requests {
+        writeln!(stdin, "{req}").expect("write request");
+    }
+    stdin.flush().expect("flush requests");
+
+    let responses = collect_responses(&rx, &[1, 2, 3, 4, 5, 6]);
+    stop(&mut child);
+
+    let status_res = result_of(&responses["1"]);
+    assert_ne!(
+        status_res.get("isError").and_then(Value::as_bool),
+        Some(true)
+    );
+    let status_struct = status_res
+        .get("structuredContent")
+        .expect("structuredContent");
+    assert_eq!(
+        status_struct
+            .get("index")
+            .and_then(|v| v.get("state"))
+            .and_then(Value::as_str),
+        Some("present")
+    );
+    assert_eq!(
+        status_struct
+            .get("index")
+            .and_then(|v| v.get("details"))
+            .and_then(|v| v.get("model"))
+            .and_then(Value::as_str),
+        Some("knot-lite-fake-sha256")
+    );
+    assert_eq!(
+        status_struct
+            .get("index")
+            .and_then(|v| v.get("details"))
+            .and_then(|v| v.get("freshness"))
+            .and_then(|v| v.get("state"))
+            .and_then(Value::as_str),
+        Some("fresh")
+    );
+
+    let callers_res = result_of(&responses["2"]);
+    assert_ne!(
+        callers_res.get("isError").and_then(Value::as_bool),
+        Some(true)
+    );
+    let callers_struct = callers_res
+        .get("structuredContent")
+        .expect("structuredContent");
+    let caller_count = callers_struct["targets"][0]["caller_count"]
+        .as_u64()
+        .expect("caller_count");
+    assert!(caller_count >= 3, "target has >= 3 callers");
+
+    let explore_res = result_of(&responses["3"]);
+    assert_ne!(
+        explore_res.get("isError").and_then(Value::as_bool),
+        Some(true)
+    );
+    let explore_struct = explore_res
+        .get("structuredContent")
+        .expect("structuredContent");
+    assert_eq!(
+        explore_struct.get("resolution").and_then(Value::as_str),
+        Some("exact")
+    );
+    assert!(
+        explore_struct
+            .get("entities")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            >= 3
+    );
+
+    let files_res = result_of(&responses["4"]);
+    assert_ne!(
+        files_res.get("isError").and_then(Value::as_bool),
+        Some(true)
+    );
+    let files_struct = files_res
+        .get("structuredContent")
+        .expect("structuredContent");
+    let total = files_struct
+        .get("total")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    assert!(total >= 6, "total files >= 6");
+    let file_paths: Vec<&str> = files_struct
+        .get("files")
+        .and_then(Value::as_array)
+        .expect("files array")
+        .iter()
+        .filter_map(|f| f.get("path").and_then(Value::as_str))
+        .collect();
+    assert!(
+        !file_paths.iter().any(|p| p.starts_with("target/")),
+        "target/ must not be indexed"
+    );
+
+    let glob_res = result_of(&responses["5"]);
+    let glob_err = error_text(&glob_res);
+    assert!(glob_err.contains("glob"), "{glob_err}");
+
+    let search_res = result_of(&responses["6"]);
+    let search_err = error_text(&search_res);
+    assert!(search_err.contains("knot-lite-fake-sha256"), "{search_err}");
+    assert!(search_err.contains("cannot be loaded"), "{search_err}");
 }

@@ -9,15 +9,7 @@ use crate::models::params::CallersParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "find_callers",
     title = "Find callers (reverse dependencies)",
-    description = "Read-only reverse dependency lookup. Use this to find all code that references, calls, extends, or implements a specific entity. \
-                   Answers 'who uses this code?' by querying the call graph. Differs from search tools by providing exact dependency tracking. \
-                   Requires a knot-lite index; call `status` to check. \
-                   \n\nUsage: use for impact analysis before refactoring or to detect dead code. Do NOT use this for semantic feature discovery — use 'search_hybrid_context' instead. \
-                   \n\nMatching is precedence-based: exact FQN (containing '.' or '::') → FQN suffix (`Type.member`) → exact name → signature prefix (`accept(List`) → name prefix (queries under 4 characters) → fuzzy substring (queries of 4+ characters). \
-                   The first tier that matches wins, so an exact name never returns fuzzy noise. Pass a qualified name (`Namespace.Type.Member`) to disambiguate homonyms. \
-                   \n\nBehaviour & Return: read-only graph traversal with no side effects. Returns Markdown grouped by relationship type (Calls, Extends, Implements, References, Overridden by, Overrides) with exact file paths and line numbers. \
-                   Each caller entry includes: name, kind, file_path:line_number, and signature. When multiple targets exist, results are grouped by target entity. \
-                   \n\nTruncation & completeness: targets are capped by 'max_targets' (default 25, max 500). When more targets match than fit the cap, the response states 'Truncated — N targets matched; showing the first M by FQN'.",
+    description = "Read-only reverse dependency lookup over this repository's knot-lite index: which code references, calls, extends or implements an entity. Edges are pre-computed at index time by knot's heuristic resolver (provenance 'heuristic'; knot-lite's Phase 0 measured about 93 % precision and 86 % recall on Rust); language servers are not used yet. Requires a knot-lite index (built with `knot-lite index`); call `status` to check. \n\nTarget matching is precedence-based and stops at the first tier with a match: exact FQN → FQN suffix ('Type.member' or 'module::name'; '.' and '::' are interchangeable) → exact name. Name-prefix and fuzzy matching are not available in this version. Documentation and config/build kinds are excluded from target resolution by default; pass kinds='all' to include them, or an explicit kind list. \n\nCallers are reported at container granularity (the innermost function, method or type that encloses the reference), grouped by relationship type; references from inside the target itself are counted, not listed. 'max_targets' (default 25, max 500) bounds homonym fan-out and truncation is reported.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -60,5 +52,6 @@ impl_query_tool_handle!(
     FindCallersTool,
     "find_callers",
     CallersParams,
-    crate::cli_tools::run_find_callers
+    crate::cli_tools::run_find_callers,
+    crate::cli_tools::format_callers_output
 );
