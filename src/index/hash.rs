@@ -19,6 +19,13 @@ pub(crate) fn finish_hex(hasher: Sha256) -> String {
     hex_lower(hasher.finalize().as_slice())
 }
 
+/// SHA-256 of `bytes` as 64 lower-case hex characters.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    finish_hex(hasher)
+}
+
 /// First 16 hex characters (64 bits) of a full hex digest.
 pub(crate) fn short16(mut full_hex: String) -> String {
     full_hex.truncate(16);
@@ -35,22 +42,16 @@ mod tests {
         assert_eq!(hex_lower(&[]), "");
     }
 
-    fn sha256_of(bytes: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-        finish_hex(hasher)
-    }
-
     #[test]
-    fn finish_hex_matches_known_vector() {
+    fn sha256_hex_matches_known_vector() {
         assert_eq!(
-            sha256_of(b"abc"),
+            sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
     }
 
     #[test]
     fn short16_keeps_the_first_sixteen_characters() {
-        assert_eq!(short16(sha256_of(b"abc")), "ba7816bf8f01cfea");
+        assert_eq!(short16(sha256_hex(b"abc")), "ba7816bf8f01cfea");
     }
 }

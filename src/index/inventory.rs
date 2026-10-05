@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use super::hash::{finish_hex, short16};
+use super::record_io::{WriteOutcome, read_jsonl, write_jsonl_if_changed};
 use super::select::Selection;
 
 /// One inventoried file.
@@ -120,6 +121,16 @@ pub fn diff(old: &Inventory, new: &Inventory) -> InventoryDiff {
     result
 }
 
+/// Store `inventory` as `inventory.jsonl` (skipped when the bytes are unchanged).
+pub fn write_inventory(path: &Path, inventory: &Inventory) -> anyhow::Result<WriteOutcome> {
+    write_jsonl_if_changed(path, &inventory.entries)
+}
+
+/// Read a stored inventory (sorted and deduplicated on load).
+pub fn read_inventory(path: &Path) -> anyhow::Result<Inventory> {
+    Ok(Inventory::new(read_jsonl(path)?))
+}
+
 /// Streaming SHA-256 of a file: the first 16 hex characters and the size.
 pub fn file_sha16(path: &Path) -> anyhow::Result<(String, u64)> {
     let mut file =
@@ -196,6 +207,26 @@ mod tests {
         assert!(!result.is_fresh());
         assert!(diff(&old, &old).is_fresh());
         assert!(diff(&Inventory::default(), &Inventory::default()).is_fresh());
+    }
+
+    #[test]
+    fn inventory_round_trips() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("inventory.jsonl");
+        let stored = inventory(&[("src/b.rs", "bb"), ("a.sh", "aa")]);
+        assert_eq!(
+            write_inventory(&path, &stored).expect("write"),
+            WriteOutcome::Written
+        );
+        assert_eq!(
+            write_inventory(&path, &stored).expect("rewrite"),
+            WriteOutcome::Unchanged
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read"),
+            "{\"rel\":\"a.sh\",\"sha\":\"aa\",\"bytes\":1}\n{\"rel\":\"src/b.rs\",\"sha\":\"bb\",\"bytes\":1}\n"
+        );
+        assert_eq!(read_inventory(&path).expect("read"), stored);
     }
 
     #[test]

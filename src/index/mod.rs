@@ -2,12 +2,15 @@
 //! selection, inventory and the record writers.
 
 pub mod chunk;
+pub mod edges;
+pub mod encode;
 mod hash;
 pub mod inventory;
 pub mod layout;
 pub mod manifest;
 pub mod record_io;
 pub mod select;
+pub mod shard;
 
 pub use layout::{CommitMode, INDEX_DIR, IndexLayout, MANIFEST_FILE, MANIFEST_SCHEMA_V1};
 pub use manifest::{IndexState, Manifest, ManifestHeader, read_index_state};
