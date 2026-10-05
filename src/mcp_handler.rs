@@ -20,6 +20,7 @@ use crate::mcp_tools::find_callers::FindCallersTool;
 use crate::mcp_tools::list_files::ListFilesTool;
 use crate::mcp_tools::search_hybrid_context::SearchHybridContextTool;
 use crate::mcp_tools::status::StatusTool;
+use crate::query::session::QueryServices;
 
 /// Refusal message for every tool call in dry-run mode.
 pub const DRY_RUN_MESSAGE: &str = "Server is running in dry-run mode. The repository is not opened. This mode is used for protocol validation and quality checks only.";
@@ -40,14 +41,24 @@ pub struct KnotLiteMcpHandler {
     pub config: Option<Arc<Config>>,
     /// Whether to answer without opening the repository.
     pub dry_run: bool,
+    /// The cached index and query embedder, shared by every request (P2-D14).
+    pub services: Arc<QueryServices>,
 }
 
 impl KnotLiteMcpHandler {
-    /// A handler serving one repository.
+    /// A handler serving one repository, with knot's real embedder (loaded
+    /// lazily, on the first search).
     pub fn new(config: Config) -> Self {
+        let services = Arc::new(QueryServices::real(&config.embed));
+        Self::with_services(config, services)
+    }
+
+    /// A handler serving one repository with explicit query services (tests).
+    pub fn with_services(config: Config, services: Arc<QueryServices>) -> Self {
         Self {
             config: Some(Arc::new(config)),
             dry_run: false,
+            services,
         }
     }
 
@@ -56,6 +67,9 @@ impl KnotLiteMcpHandler {
         Self {
             config: None,
             dry_run: true,
+            services: Arc::new(QueryServices::with_factory(Arc::new(|_model: &str| {
+                anyhow::bail!("dry-run mode never embeds")
+            }))),
         }
     }
 

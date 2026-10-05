@@ -3,7 +3,10 @@
 pub mod query;
 pub mod status;
 
-pub use query::{run_explore_file, run_find_callers, run_list_files, run_search_hybrid_context};
+pub use query::{
+    format_search_output, run_explore_file, run_find_callers, run_list_files,
+    run_search_hybrid_context,
+};
 pub use status::{format_status_output, run_status, run_status_with};
 
 use anyhow::Result;
@@ -13,10 +16,12 @@ use crate::error::{CLI_EXIT_QUERY_UNAVAILABLE, QueryUnavailable};
 use crate::models::cli_args::{Cli, Commands};
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
 use crate::models::repo_scope::check_repo_scope_str;
+use crate::query::session::QueryServices;
 
 /// Run one CLI command and return its rendered output (printed by the binary).
 pub fn run_cli(cli: Cli) -> Result<String> {
     let cfg = Config::load_cli(&cli.common)?;
+    let services = QueryServices::real(&cfg.embed);
     match cli.command {
         Commands::Status { output } => {
             let report = run_status(&cfg)?;
@@ -32,8 +37,8 @@ pub fn run_cli(cli: Cli) -> Result<String> {
         } => {
             check_scope(&cfg, repo.as_deref())?;
             let params = SearchParams::from_cli(query, max_results, kinds, path);
-            let value = run_search_hybrid_context(&cfg, &params)?;
-            Ok(render_query(value, output))
+            let value = run_search_hybrid_context(&cfg, &services, &params)?;
+            Ok(format_search_output(&value, output))
         }
         Commands::Callers {
             entity_name,
@@ -44,7 +49,7 @@ pub fn run_cli(cli: Cli) -> Result<String> {
         } => {
             check_scope(&cfg, repo.as_deref())?;
             let params = CallersParams::from_cli(entity_name, max_targets, kinds);
-            let value = run_find_callers(&cfg, &params)?;
+            let value = run_find_callers(&cfg, &services, &params)?;
             Ok(render_query(value, output))
         }
         Commands::Explore {
@@ -55,13 +60,13 @@ pub fn run_cli(cli: Cli) -> Result<String> {
         } => {
             check_scope(&cfg, repo.as_deref())?;
             let params = ExploreParams::from_cli(file_path, include_markup);
-            let value = run_explore_file(&cfg, &params)?;
+            let value = run_explore_file(&cfg, &services, &params)?;
             Ok(render_query(value, output))
         }
         Commands::Files { path, repo, output } => {
             check_scope(&cfg, repo.as_deref())?;
             let params = FilesParams::from_cli(path);
-            let value = run_list_files(&cfg, &params)?;
+            let value = run_list_files(&cfg, &services, &params)?;
             Ok(render_query(value, output))
         }
     }
@@ -80,12 +85,8 @@ fn check_scope(cfg: &Config, repo: Option<&str>) -> Result<()> {
     check_repo_scope_str(repo, &cfg.repo_name).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-/// Render a query result.
-///
-/// Phase 1 never reaches this: every query answers [`QueryUnavailable`] and the
-/// CLI exits with code 2. The `--output` flag of the query subcommands is
-/// accepted for compatibility but unused until Phase 3/4 define the query
-/// result formats.
+/// Render a query result (interim: `find_callers`, `explore_file` and
+/// `list_files` print JSON until P2.10 / P2.11 give them real formatters).
 fn render_query(value: serde_json::Value, _output: OutputFormat) -> String {
     serde_json::to_string_pretty(&value).unwrap_or_default()
 }

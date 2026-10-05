@@ -13,6 +13,7 @@ use crate::capability::tier::build_report;
 use crate::config::{Config, OutputFormat};
 use crate::index::layout::IndexLayout;
 use crate::index::manifest::read_index_state;
+use crate::query::render::{str_at, u64_at};
 
 /// Build the `knot-lite/status/v1` report against the real environment.
 pub fn run_status(cfg: &Config) -> Result<serde_json::Value> {
@@ -219,18 +220,6 @@ fn languages_of(report: &serde_json::Value) -> Vec<serde_json::Value> {
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default()
-}
-
-fn str_at<'a>(value: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
-    keys.iter()
-        .try_fold(value, |acc, key| acc.get(key))
-        .and_then(|v| v.as_str())
-}
-
-fn u64_at(value: &serde_json::Value, keys: &[&str]) -> Option<u64> {
-    keys.iter()
-        .try_fold(value, |acc, key| acc.get(key))
-        .and_then(|v| v.as_u64())
 }
 
 #[cfg(test)]

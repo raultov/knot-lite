@@ -1,4 +1,7 @@
-//! Query-time services shared by the CLI and the MCP server: the cached
-//! in-memory index and the cached query embedder.
+//! Query-time machinery shared by the CLI and the MCP server: cached
+//! services, parameter filters, the renderer and the query bodies.
 
+pub mod filters;
+pub mod render;
+pub mod search;
 pub mod session;

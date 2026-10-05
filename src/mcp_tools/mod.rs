@@ -8,9 +8,9 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::error::QueryUnavailable;
 use crate::mcp_handler::KnotLiteMcpHandler;
 use crate::models::repo_scope::check_repo_scope;
+use crate::query::session::QueryServices;
 use rust_mcp_sdk::schema::{CallToolError, CallToolRequestParams, CallToolResult, TextContent};
 
 pub mod explore_file;
@@ -41,21 +41,21 @@ pub(crate) fn query_tool<T, P>(
     params: CallToolRequestParams,
     handler: &KnotLiteMcpHandler,
     to_params: impl FnOnce(T) -> P,
-    run: impl FnOnce(&Config, &P) -> Result<Value, QueryUnavailable>,
+    run: impl FnOnce(&Config, &QueryServices, &P) -> anyhow::Result<Value>,
 ) -> Result<CallToolResult, CallToolError>
 where
     T: DeserializeOwned,
 {
     let cfg = handler.config()?.clone();
     let args = parse_args::<T>(tool, &params, &cfg.repo_name)?;
-    match run(&cfg, &to_params(args)) {
-        // Unreachable in Phase 1 (queries always answer unavailable) but correct.
+    match run(&cfg, &handler.services, &to_params(args)) {
+        // Interim: the JSON document as text; P2.13 renders markdown + structured content.
         Ok(json) => Ok(CallToolResult::text_content(vec![TextContent::new(
             serde_json::to_string_pretty(&json).unwrap_or_default(),
             None,
             None,
         )])),
-        Err(e) => Err(CallToolError::from_message(e.to_string())),
+        Err(e) => Err(CallToolError::from_message(format!("{e:#}"))),
     }
 }
 

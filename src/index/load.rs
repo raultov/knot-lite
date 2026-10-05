@@ -58,6 +58,9 @@ impl Matrix {
 
     /// The vector of `row`.
     pub fn row(&self, row: usize) -> Option<&[f32]> {
+        if row >= self.rows() {
+            return None;
+        }
         let start = row.checked_mul(self.dim)?;
         self.data.get(start..start.checked_add(self.dim)?)
     }
@@ -552,5 +555,7 @@ mod tests {
         assert_eq!(matrix.row(2), None);
         assert_eq!(matrix.row(usize::MAX), None);
         assert_eq!(matrix.rows(), 2);
+        // A zero-dimension matrix has no rows either (`0..0` is a valid range).
+        assert_eq!(Matrix::default().row(0), None);
     }
 }
