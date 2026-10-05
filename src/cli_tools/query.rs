@@ -5,11 +5,11 @@
 //! cannot answer surfaces as a [`QueryUnavailable`] inside the `anyhow::Error`
 //! (CLI exit code 2, MCP `isError`); everything else is a plain error.
 //!
-//! `find_callers`, `explore_file` and `list_files` are interim stubs until
-//! P2.10 / P2.11 replace their bodies.
+//! `explore_file` and `list_files` are interim stubs until P2.11 replaces
+//! their bodies.
 
 use anyhow::Context as _;
-use knot::cli_tools::kinds::parse_kinds;
+use knot::cli_tools::kinds::{KindFilter, parse_kinds};
 use serde_json::Value;
 
 use crate::config::{Config, OutputFormat};
@@ -17,6 +17,7 @@ use crate::error::{IndexUnavailable, QueryUnavailable};
 use crate::index::layout::IndexLayout;
 use crate::index::load::{LoadedIndex, load_index};
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
+use crate::query::callers::{DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP, callers_doc, callers_response};
 use crate::query::filters::{PathPrefix, clamp_i64};
 use crate::query::render::render;
 use crate::query::search::{
@@ -25,6 +26,7 @@ use crate::query::search::{
 use crate::query::session::QueryServices;
 
 const SEARCH_TOOL: &str = "search_hybrid_context";
+const CALLERS_TOOL: &str = "find_callers";
 
 /// Wrap an [`IndexUnavailable`] as the caller-facing error of `tool`.
 fn unavailable_error(reason: IndexUnavailable, tool: &str, cfg: &Config) -> anyhow::Error {
@@ -78,13 +80,29 @@ pub fn format_search_output(value: &Value, format: OutputFormat) -> String {
     render(&search_doc(value, format), value, format)
 }
 
-/// `find_callers` — reverse references (interim stub until P2.10).
+/// `find_callers` — who references an entity (heuristic edges, container granularity).
 pub fn run_find_callers(
     cfg: &Config,
-    _services: &QueryServices,
-    _params: &CallersParams,
+    services: &QueryServices,
+    params: &CallersParams,
 ) -> anyhow::Result<Value> {
-    Err(not_yet(cfg, "find_callers"))
+    let max_targets = clamp_i64(params.max_targets, DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP);
+    let filter = KindFilter::parse(params.kinds.as_deref());
+    with_index(cfg, services, CALLERS_TOOL, |index| {
+        let response = callers_response(
+            index,
+            &cfg.repo_name,
+            &params.entity_name,
+            max_targets,
+            &filter,
+        );
+        serde_json::to_value(response).context("failed to serialize the callers response")
+    })
+}
+
+/// Render a `knot-lite/callers/v1` document.
+pub fn format_callers_output(value: &Value, format: OutputFormat) -> String {
+    render(&callers_doc(value, format), value, format)
 }
 
 /// `explore_file` — entities declared in one file (interim stub until P2.11).
@@ -406,20 +424,10 @@ mod tests {
         assert_eq!(services.embedder.inits(), 1);
     }
 
-    /// The three interim stubs still diagnose the index.
+    /// The two interim stubs still diagnose the index.
     fn stub_errors(cfg: &Config) -> Vec<anyhow::Error> {
         let services = services();
         vec![
-            run_find_callers(
-                cfg,
-                &services,
-                &CallersParams {
-                    entity_name: "foo".to_owned(),
-                    max_targets: None,
-                    kinds: None,
-                },
-            )
-            .unwrap_err(),
             run_explore_file(
                 cfg,
                 &services,
@@ -438,10 +446,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let cfg = config_for(tmp.path().to_path_buf());
         let errors = stub_errors(&cfg);
-        for (error, tool) in errors
-            .iter()
-            .zip(["find_callers", "explore_file", "list_files"])
-        {
+        for (error, tool) in errors.iter().zip(["explore_file", "list_files"]) {
             let text = error.to_string();
             assert!(
                 matches!(unavailable_of(error), QueryUnavailable::NotIndexed { .. }),
@@ -481,5 +486,68 @@ mod tests {
             );
             assert!(text.contains("knot-lite/manifest/v1"), "{text}");
         }
+    }
+
+    fn callers(name: &str) -> CallersParams {
+        CallersParams {
+            entity_name: name.to_owned(),
+            max_targets: None,
+            kinds: None,
+        }
+    }
+
+    #[test]
+    fn callers_runner_answers_over_the_fixture_index() {
+        let (_tmp, cfg) = indexed();
+        let value = run_find_callers(&cfg, &services(), &callers("target")).expect("callers");
+        assert_eq!(value["schema"], "knot-lite/callers/v1");
+        assert_eq!(value["targets"][0]["caller_count"], 3);
+        let table = format_callers_output(&value, OutputFormat::Table);
+        assert!(
+            table.starts_with("knot-lite callers — repository 'demo'"),
+            "{table}"
+        );
+        assert!(table.contains("REL") && table.contains("helper"), "{table}");
+        let markdown = format_callers_output(&value, OutputFormat::Markdown);
+        assert!(markdown.starts_with("## knot-lite callers"), "{markdown}");
+        assert!(markdown.contains("### rust_function target"), "{markdown}");
+    }
+
+    #[test]
+    fn callers_runner_clamps_max_targets_and_honours_kinds() {
+        let (_tmp, cfg) = indexed();
+        let mut params = callers("Install");
+        let hidden = run_find_callers(&cfg, &services(), &params).expect("callers");
+        assert_eq!(
+            hidden["resolution"]["targets_total"], 0,
+            "docs are hidden by default"
+        );
+        params.kinds = Some("all".to_owned());
+        params.max_targets = Some(0);
+        let shown = run_find_callers(&cfg, &services(), &params).expect("callers");
+        assert_eq!(shown["resolution"]["targets_total"], 1);
+        assert_eq!(shown["resolution"]["kind_filter"], "any");
+        assert_eq!(
+            shown["targets"].as_array().expect("targets").len(),
+            1,
+            "0 is clamped to 1"
+        );
+    }
+
+    #[test]
+    fn callers_runner_on_absent_index_is_not_indexed() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cfg = config_for(tmp.path().to_path_buf());
+        let error = run_find_callers(&cfg, &services(), &callers("x")).expect_err("absent");
+        assert!(matches!(
+            unavailable_of(&error),
+            QueryUnavailable::NotIndexed { .. }
+        ));
+        assert!(
+            error
+                .to_string()
+                .starts_with("find_callers: knot-lite has no index"),
+            "{error}"
+        );
     }
 }

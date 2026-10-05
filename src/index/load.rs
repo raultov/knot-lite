@@ -136,8 +136,20 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
     let started = Instant::now();
     let manifest = read_valid_manifest(layout)?;
     let dim = usize::try_from(manifest.embedding.dim).unwrap_or(usize::MAX);
-
     let (records, matrix) = load_records(layout, dim)?;
+    let edges = load_edges(layout)?;
+    Ok(assemble(manifest, records, matrix, edges, started))
+}
+
+/// Derive the lookup maps, the incoming-edge map and the containers from the
+/// raw records and edges (shared by the loader and the test builder).
+fn assemble(
+    manifest: Manifest,
+    records: Vec<LoadedRecord>,
+    matrix: Matrix,
+    edges: Vec<EdgeLine>,
+    started: Instant,
+) -> LoadedIndex {
     let mut by_id = HashMap::with_capacity(records.len());
     let mut by_file: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
@@ -151,14 +163,14 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
                 .push(index);
         }
     }
-    let incoming = load_incoming(layout, &by_id)?;
+    let incoming = incoming_map(edges, &by_id);
     let containers = ContainerTable::from_records(
         records
             .iter()
             .enumerate()
             .map(|(index, record)| (index, record.file.as_str(), &record.line)),
     );
-    Ok(LoadedIndex {
+    LoadedIndex {
         stamp: stamp_of(&manifest),
         manifest,
         records,
@@ -169,7 +181,7 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
         matrix,
         containers,
         load_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-    })
+    }
 }
 
 /// Read every shard (sorted by file) and decode its vectors into the matrix.
@@ -225,26 +237,30 @@ fn decode_into(
     Ok(Some(row))
 }
 
-/// Read every edge shard into `dst → sorted (src, rel)`. Edges with an unknown
-/// endpoint are ignored (and counted in a debug log).
-fn load_incoming(
-    layout: &IndexLayout,
-    by_id: &HashMap<String, usize>,
-) -> Result<IncomingMap, IndexUnavailable> {
+/// Read every edge shard.
+fn load_edges(layout: &IndexLayout) -> Result<Vec<EdgeLine>, IndexUnavailable> {
+    let mut edges = Vec::new();
+    for path in list_files(&layout.edges, EDGES_DIR)? {
+        let shard: Vec<EdgeLine> =
+            read_jsonl(&path).map_err(|error| corrupt(layout, &path, &format!("{error:#}")))?;
+        edges.extend(shard);
+    }
+    Ok(edges)
+}
+
+/// `dst → sorted (src, rel)`. Edges with an unknown endpoint are ignored (and
+/// counted in a debug log).
+fn incoming_map(edges: Vec<EdgeLine>, by_id: &HashMap<String, usize>) -> IncomingMap {
     let mut incoming = IncomingMap::new();
     let mut ignored = 0usize;
-    for path in list_files(&layout.edges, EDGES_DIR)? {
-        let edges: Vec<EdgeLine> =
-            read_jsonl(&path).map_err(|error| corrupt(layout, &path, &format!("{error:#}")))?;
-        for edge in edges {
-            if by_id.contains_key(&edge.src) && by_id.contains_key(&edge.dst) {
-                incoming
-                    .entry(edge.dst)
-                    .or_default()
-                    .push((edge.src, edge.rel));
-            } else {
-                ignored += 1;
-            }
+    for edge in edges {
+        if by_id.contains_key(&edge.src) && by_id.contains_key(&edge.dst) {
+            incoming
+                .entry(edge.dst)
+                .or_default()
+                .push((edge.src, edge.rel));
+        } else {
+            ignored += 1;
         }
     }
     for callers in incoming.values_mut() {
@@ -254,7 +270,7 @@ fn load_incoming(
     if ignored > 0 {
         tracing::debug!(ignored, "ignored edges with an unknown endpoint");
     }
-    Ok(incoming)
+    incoming
 }
 
 fn list_files(base: &Path, dir_name: &str) -> Result<Vec<std::path::PathBuf>, IndexUnavailable> {
@@ -278,6 +294,73 @@ fn corrupt_file(dir_name: &str, file: &str, error: &str) -> IndexUnavailable {
     IndexUnavailable::Corrupt {
         path: format!("{INDEX_DIR}/{dir_name}/{file}.jsonl"),
         error: one_line(error),
+    }
+}
+
+/// Builders for hand-made indexes in tests of the query tools.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+    use crate::index::manifest::test_support::sample_manifest;
+
+    /// An entity record with the given identity and a distinct hash.
+    pub(crate) fn entity(
+        id: &str,
+        kind: &str,
+        name: &str,
+        fqn: &str,
+        (l0, l1): (usize, usize),
+    ) -> ShardLine {
+        ShardLine {
+            id: id.to_owned(),
+            kind: kind.to_owned(),
+            name: name.to_owned(),
+            fqn: fqn.to_owned(),
+            lang: "rust".to_owned(),
+            l0,
+            l1,
+            col: None,
+            sig: Some("()".to_owned()),
+            h: id.to_owned(),
+            q: None,
+            s: None,
+        }
+    }
+
+    /// An index assembled from `(file, record)` pairs and `(src, dst, rel)`
+    /// edges, without touching the disk (no vectors).
+    pub(crate) fn synthetic_index(
+        records: Vec<(&str, ShardLine)>,
+        edges: &[(&str, &str, &str)],
+    ) -> LoadedIndex {
+        let mut records: Vec<LoadedRecord> = records
+            .into_iter()
+            .map(|(file, line)| LoadedRecord {
+                file: file.to_owned(),
+                line,
+                row: None,
+            })
+            .collect();
+        records.sort_by(|a, b| {
+            a.file
+                .cmp(&b.file)
+                .then_with(|| a.line.sort_key().cmp(&b.line.sort_key()))
+        });
+        let edges = edges
+            .iter()
+            .map(|(src, dst, rel)| EdgeLine {
+                src: (*src).to_owned(),
+                dst: (*dst).to_owned(),
+                rel: (*rel).to_owned(),
+            })
+            .collect();
+        assemble(
+            sample_manifest(),
+            records,
+            Matrix::default(),
+            edges,
+            Instant::now(),
+        )
     }
 }
 

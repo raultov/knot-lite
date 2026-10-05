@@ -4,8 +4,8 @@ pub mod query;
 pub mod status;
 
 pub use query::{
-    format_search_output, run_explore_file, run_find_callers, run_list_files,
-    run_search_hybrid_context,
+    format_callers_output, format_search_output, run_explore_file, run_find_callers,
+    run_list_files, run_search_hybrid_context,
 };
 pub use status::{format_status_output, run_status, run_status_with};
 
@@ -50,7 +50,7 @@ pub fn run_cli(cli: Cli) -> Result<String> {
             check_scope(&cfg, repo.as_deref())?;
             let params = CallersParams::from_cli(entity_name, max_targets, kinds);
             let value = run_find_callers(&cfg, &services, &params)?;
-            Ok(render_query(value, output))
+            Ok(format_callers_output(&value, output))
         }
         Commands::Explore {
             file_path,
