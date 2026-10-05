@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 
-use super::chunk::{MAX_TIER1_BYTES, is_tier1_name};
+use super::chunk::is_tier1_candidate;
 use super::layout::is_reserved_rel;
-use crate::capability::scan::{is_lock_file, walk_repository};
+use crate::capability::scan::walk_repository;
 
 /// The files one index run considers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub struct Selection {
     /// Repo-relative (`/`-separated) paths of `parse`, same order.
     pub parse_rel: Vec<String>,
     /// `(rel, absolute)` of tier-1 candidates: not in `parse`, accepted by
-    /// [`is_tier1_name`], not a lock file and at most [`MAX_TIER1_BYTES`].
+    /// [`is_tier1_candidate`].
     /// Sorted by `rel`.
     pub tier1_candidates: Vec<(String, PathBuf)>,
 }
@@ -58,15 +58,10 @@ fn relative(path: &Path, root: &Path) -> String {
     knot::pipeline::files::to_repo_relative(path, root).replace('\\', "/")
 }
 
-fn is_tier1_candidate(path: &Path) -> bool {
-    is_tier1_name(path)
-        && !is_lock_file(path)
-        && std::fs::metadata(path).is_ok_and(|meta| meta.len() <= MAX_TIER1_BYTES)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::chunk::MAX_TIER1_BYTES;
     use std::fs;
     use std::process::Command;
 
