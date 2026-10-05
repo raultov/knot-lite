@@ -2,6 +2,6 @@
 **/target/
 docs/spikes/phase0/results/raw/
 .knot/
+.knot-lite/
 .idea/
-docs/PLAN-*
-
+docs/PLAN_*
