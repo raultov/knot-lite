@@ -7,6 +7,7 @@
 pub mod capability;
 pub mod cli_tools;
 pub mod config;
+pub mod embed;
 pub mod error;
 pub mod index;
 pub mod mcp_handler;

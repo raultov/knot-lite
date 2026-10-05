@@ -270,12 +270,7 @@ mod tests {
     #[test]
     fn query_tool_not_indexed_message() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let cfg = Config {
-            repo_name: "demo".to_string(),
-            repo_path: tmp.path().to_path_buf(),
-            lsp_overrides: crate::config::LspOverrides::default(),
-            dry_run: false,
-        };
+        let cfg = crate::config::test_support::config_for(tmp.path().to_path_buf());
         let handler = KnotLiteMcpHandler::new(cfg);
         let mut args = serde_json::Map::new();
         args.insert("entity_name".to_string(), json!("foo"));

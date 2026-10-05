@@ -94,17 +94,7 @@ fn unavailable(cfg: &Config, tool: &str) -> QueryUnavailable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::LspOverrides;
-    use std::path::PathBuf;
-
-    fn config_for(root: PathBuf) -> Config {
-        Config {
-            repo_name: "demo".to_string(),
-            repo_path: root,
-            lsp_overrides: LspOverrides::default(),
-            dry_run: false,
-        }
-    }
+    use crate::config::test_support::config_for;
 
     /// All four runners must answer with the same variant shape.
     fn all_unavailable(cfg: &Config) -> Vec<QueryUnavailable> {

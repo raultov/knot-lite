@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use crate::embed::settings::{EmbedSettings, resolve_embed_settings};
+
 /// Fallback repository name when the path has no final component (knot's fallback).
 pub const UNNAMED_REPO: &str = "unnamed-repo";
 
@@ -62,6 +64,21 @@ pub struct Config {
     pub lsp_overrides: LspOverrides,
     /// Whether the server answers without opening a repository (MCP only).
     pub dry_run: bool,
+    /// Embedding model and cache directory (P2-D11); the model name is not validated here.
+    pub embed: EmbedSettings,
+}
+
+/// Everything [`resolve`] reads besides the CLI arguments, injected so the
+/// resolver stays pure.
+pub struct ResolveInputs<'a> {
+    /// Process-environment lookup.
+    pub env: &'a dyn Fn(&str) -> Option<String>,
+    /// Key/values read from the knot-lite `.env` file.
+    pub dotenv: &'a BTreeMap<String, String>,
+    /// Current working directory (the default repository path).
+    pub cwd: &'a Path,
+    /// System temporary directory (last-resort embedding cache location).
+    pub temp_dir: &'a Path,
 }
 
 impl Config {
@@ -85,23 +102,34 @@ fn load(args: &CommonArgs, dry_run: bool) -> Result<Config> {
         .as_deref()
         .map_or_else(BTreeMap::new, read_dotenv);
     let cwd = std::env::current_dir().context("failed to read the current working directory")?;
-    resolve(args, dry_run, &env, &dotenv, &cwd)
+    let temp_dir = std::env::temp_dir();
+    resolve(
+        args,
+        dry_run,
+        &ResolveInputs {
+            env: &env,
+            dotenv: &dotenv,
+            cwd: &cwd,
+            temp_dir: &temp_dir,
+        },
+    )
 }
 
 /// Resolve the effective configuration.
 ///
-/// `env` is the process-environment lookup; `dotenv` holds the key/values read
-/// from the knot-lite `.env` file. `args` already contains the CLI flags merged
-/// with the process environment (clap's `env` attribute), so `repo_path` and
-/// `repo_name` fall back to `dotenv` only when `args` is `None`. The keys clap
-/// does not see (`KNOT_LITE_LSP_*`) use [`lookup`]: process env, then `.env`.
-pub fn resolve(
-    args: &CommonArgs,
-    dry_run: bool,
-    env: &dyn Fn(&str) -> Option<String>,
-    dotenv: &BTreeMap<String, String>,
-    cwd: &Path,
-) -> Result<Config> {
+/// `inputs.env` is the process-environment lookup; `inputs.dotenv` holds the
+/// key/values read from the knot-lite `.env` file. `args` already contains the
+/// CLI flags merged with the process environment (clap's `env` attribute), so
+/// `repo_path` and `repo_name` fall back to `dotenv` only when `args` is
+/// `None`. The keys clap does not see (`KNOT_LITE_LSP_*`, the embedding keys)
+/// use `lookup`: process env, then `.env`.
+pub fn resolve(args: &CommonArgs, dry_run: bool, inputs: &ResolveInputs<'_>) -> Result<Config> {
+    let ResolveInputs {
+        env,
+        dotenv,
+        cwd,
+        temp_dir,
+    } = *inputs;
     let lookup = |key: &str| -> Option<String> { env(key).or_else(|| dotenv.get(key).cloned()) };
 
     let path_choice = args
@@ -125,6 +153,7 @@ pub fn resolve(
             java: lookup("KNOT_LITE_LSP_JAVA"),
         },
         dry_run,
+        embed: resolve_embed_settings(&lookup, temp_dir),
     })
 }
 
@@ -215,9 +244,53 @@ pub fn read_dotenv(path: &Path) -> BTreeMap<String, String> {
     map
 }
 
+/// Shared fixtures for tests that need a [`Config`] without resolving one.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::path::PathBuf;
+
+    use super::{Config, LspOverrides};
+    use crate::embed::settings::EmbedSettings;
+
+    /// A non-dry-run config named `demo` rooted at `root`.
+    pub(crate) fn config_for(root: PathBuf) -> Config {
+        Config {
+            repo_name: "demo".to_string(),
+            repo_path: root,
+            lsp_overrides: LspOverrides::default(),
+            dry_run: false,
+            embed: EmbedSettings {
+                model: "AllMiniLML6V2".to_string(),
+                cache_dir: std::env::temp_dir().join("knot-lite-test-fastembed"),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Resolve with a map-backed environment, a fixed temp dir and no `.env`.
+    fn resolve_with(
+        args: &CommonArgs,
+        dry_run: bool,
+        env: &[(&str, &str)],
+        dotenv: &BTreeMap<String, String>,
+        cwd: &Path,
+    ) -> Result<Config> {
+        let env = env_of(env);
+        resolve(
+            args,
+            dry_run,
+            &ResolveInputs {
+                env: &env,
+                dotenv,
+                cwd,
+                temp_dir: Path::new("/tmp"),
+            },
+        )
+    }
 
     /// Environment lookup backed by a map, never by the process environment.
     fn env_of(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
@@ -286,14 +359,8 @@ mod tests {
     #[test]
     fn resolve_uses_cwd_when_nothing_given() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let cfg = resolve(
-            &empty_args(),
-            false,
-            &env_of(&[]),
-            &BTreeMap::new(),
-            tmp.path(),
-        )
-        .expect("resolve");
+        let cfg =
+            resolve_with(&empty_args(), false, &[], &BTreeMap::new(), tmp.path()).expect("resolve");
         assert_eq!(
             cfg.repo_path,
             std::fs::canonicalize(tmp.path()).expect("canon")
@@ -304,8 +371,7 @@ mod tests {
     fn resolve_dotenv_used_when_args_and_env_absent() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let dotenv = dotenv_of(&[("KNOT_LITE_REPO_NAME", "from-dotenv")]);
-        let cfg =
-            resolve(&empty_args(), false, &env_of(&[]), &dotenv, tmp.path()).expect("resolve");
+        let cfg = resolve_with(&empty_args(), false, &[], &dotenv, tmp.path()).expect("resolve");
         assert_eq!(cfg.repo_name, "from-dotenv");
     }
 
@@ -316,8 +382,8 @@ mod tests {
             ("KNOT_LITE_LSP_RUST", "dotenv-rust"),
             ("KNOT_LITE_LSP_TS", "dotenv-ts"),
         ]);
-        let env = env_of(&[("KNOT_LITE_LSP_RUST", "env-rust")]);
-        let cfg = resolve(&empty_args(), false, &env, &dotenv, tmp.path()).expect("resolve");
+        let env = [("KNOT_LITE_LSP_RUST", "env-rust")];
+        let cfg = resolve_with(&empty_args(), false, &env, &dotenv, tmp.path()).expect("resolve");
         assert_eq!(cfg.lsp_overrides.rust.as_deref(), Some("env-rust"));
         assert_eq!(cfg.lsp_overrides.ts.as_deref(), Some("dotenv-ts"));
         assert_eq!(cfg.lsp_overrides.java, None);
@@ -332,7 +398,7 @@ mod tests {
             repo_name: None,
         };
         let dotenv = dotenv_of(&[("KNOT_LITE_REPO_PATH", tmp.path().to_string_lossy().as_ref())]);
-        let cfg = resolve(&args, false, &env_of(&[]), &dotenv, tmp.path()).expect("resolve");
+        let cfg = resolve_with(&args, false, &[], &dotenv, tmp.path()).expect("resolve");
         assert_eq!(
             cfg.repo_path,
             std::fs::canonicalize(wanted.path()).expect("canon")
@@ -341,13 +407,13 @@ mod tests {
 
     #[test]
     fn resolve_errors_on_missing_path() {
-        let err = resolve(
+        let err = resolve_with(
             &CommonArgs {
                 repo_path: Some("/definitely/not/a/real/path".to_string()),
                 repo_name: None,
             },
             false,
-            &env_of(&[]),
+            &[],
             &BTreeMap::new(),
             Path::new("/"),
         )
@@ -357,13 +423,13 @@ mod tests {
 
     #[test]
     fn resolve_dry_run_tolerates_missing_path() {
-        let cfg = resolve(
+        let cfg = resolve_with(
             &CommonArgs {
                 repo_path: Some("/definitely/not/a/real/path".to_string()),
                 repo_name: None,
             },
             true,
-            &env_of(&[]),
+            &[],
             &BTreeMap::new(),
             Path::new("/"),
         )
@@ -374,14 +440,8 @@ mod tests {
     #[test]
     fn repo_name_defaults_to_dir_name() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let cfg = resolve(
-            &empty_args(),
-            false,
-            &env_of(&[]),
-            &BTreeMap::new(),
-            tmp.path(),
-        )
-        .expect("resolve");
+        let cfg =
+            resolve_with(&empty_args(), false, &[], &BTreeMap::new(), tmp.path()).expect("resolve");
         let dir_name = tmp
             .path()
             .file_name()
@@ -398,9 +458,29 @@ mod tests {
             repo_path: None,
             repo_name: Some("explicit".to_string()),
         };
-        let cfg =
-            resolve(&args, false, &env_of(&[]), &BTreeMap::new(), tmp.path()).expect("resolve");
+        let cfg = resolve_with(&args, false, &[], &BTreeMap::new(), tmp.path()).expect("resolve");
         assert_eq!(cfg.repo_name, "explicit");
+    }
+
+    #[test]
+    fn resolve_fills_embed_settings_from_dotenv() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dotenv = dotenv_of(&[
+            ("KNOT_LITE_EMBED_MODEL", "BGEBaseENV15"),
+            ("KNOT_LITE_FASTEMBED_CACHE_DIR", "/models"),
+        ]);
+        let cfg = resolve_with(&empty_args(), false, &[], &dotenv, tmp.path()).expect("resolve");
+        assert_eq!(cfg.embed.model, "BGEBaseENV15");
+        assert_eq!(cfg.embed.cache_dir, PathBuf::from("/models"));
+    }
+
+    #[test]
+    fn resolve_embed_defaults_use_knots_model_and_the_injected_temp_dir() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cfg =
+            resolve_with(&empty_args(), false, &[], &BTreeMap::new(), tmp.path()).expect("resolve");
+        assert_eq!(cfg.embed.model, "AllMiniLML6V2");
+        assert_eq!(cfg.embed.cache_dir, Path::new("/tmp/knot-lite-fastembed"));
     }
 
     #[test]

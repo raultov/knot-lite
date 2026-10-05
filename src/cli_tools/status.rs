@@ -245,12 +245,7 @@ mod tests {
         std::fs::write(tmp.path().join("src/lib.rs"), "pub fn f() {}\n").expect("write rs");
         std::fs::write(tmp.path().join("run.sh"), "echo hi\n").expect("write sh");
         std::fs::write(tmp.path().join("img.png"), [0x89u8, 0x50, 0x00, 0x01]).expect("write png");
-        let cfg = Config {
-            repo_name: "demo".to_string(),
-            repo_path: tmp.path().to_path_buf(),
-            lsp_overrides: crate::config::LspOverrides::default(),
-            dry_run: false,
-        };
+        let cfg = crate::config::test_support::config_for(tmp.path().to_path_buf());
         (tmp, cfg)
     }
 

@@ -283,12 +283,7 @@ mod tests {
     use super::*;
 
     fn cfg() -> Config {
-        Config {
-            repo_path: std::path::PathBuf::from("/tmp/repo"),
-            repo_name: "repo".to_string(),
-            lsp_overrides: crate::config::LspOverrides::default(),
-            dry_run: false,
-        }
+        crate::config::test_support::config_for(std::path::PathBuf::from("/tmp/repo"))
     }
 
     fn found() -> LspStatus {
