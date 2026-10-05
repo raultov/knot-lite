@@ -4,14 +4,14 @@ pub mod query;
 pub mod status;
 
 pub use query::{
-    format_callers_output, format_search_output, run_explore_file, run_find_callers,
-    run_list_files, run_search_hybrid_context,
+    format_callers_output, format_explore_output, format_files_output, format_search_output,
+    run_explore_file, run_find_callers, run_list_files, run_search_hybrid_context,
 };
 pub use status::{format_status_output, run_status, run_status_with};
 
 use anyhow::Result;
 
-use crate::config::{Config, OutputFormat};
+use crate::config::Config;
 use crate::error::{CLI_EXIT_QUERY_UNAVAILABLE, QueryUnavailable};
 use crate::models::cli_args::{Cli, Commands};
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
@@ -61,13 +61,13 @@ pub fn run_cli(cli: Cli) -> Result<String> {
             check_scope(&cfg, repo.as_deref())?;
             let params = ExploreParams::from_cli(file_path, include_markup);
             let value = run_explore_file(&cfg, &services, &params)?;
-            Ok(render_query(value, output))
+            Ok(format_explore_output(&value, output))
         }
         Commands::Files { path, repo, output } => {
             check_scope(&cfg, repo.as_deref())?;
             let params = FilesParams::from_cli(path);
             let value = run_list_files(&cfg, &services, &params)?;
-            Ok(render_query(value, output))
+            Ok(format_files_output(&value, output))
         }
     }
 }
@@ -85,16 +85,10 @@ fn check_scope(cfg: &Config, repo: Option<&str>) -> Result<()> {
     check_repo_scope_str(repo, &cfg.repo_name).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-/// Render a query result (interim: `find_callers`, `explore_file` and
-/// `list_files` print JSON until P2.10 / P2.11 give them real formatters).
-fn render_query(value: serde_json::Value, _output: OutputFormat) -> String {
-    serde_json::to_string_pretty(&value).unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::CommonArgs;
+    use crate::config::{CommonArgs, OutputFormat};
 
     fn cli_for(tmp: &tempfile::TempDir, command: Commands) -> Cli {
         Cli {

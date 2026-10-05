@@ -4,20 +4,20 @@
 //! so the CLI and the MCP wrapper share one calling convention. An index that
 //! cannot answer surfaces as a [`QueryUnavailable`] inside the `anyhow::Error`
 //! (CLI exit code 2, MCP `isError`); everything else is a plain error.
-//!
-//! `explore_file` and `list_files` are interim stubs until P2.11 replaces
-//! their bodies.
 
 use anyhow::Context as _;
 use knot::cli_tools::kinds::{KindFilter, parse_kinds};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::config::{Config, OutputFormat};
-use crate::error::{IndexUnavailable, QueryUnavailable};
+use crate::error::IndexUnavailable;
 use crate::index::layout::IndexLayout;
-use crate::index::load::{LoadedIndex, load_index};
+use crate::index::load::LoadedIndex;
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
 use crate::query::callers::{DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP, callers_doc, callers_response};
+use crate::query::explore::{explore_doc, explore_response};
+use crate::query::files::{files_doc, files_response};
 use crate::query::filters::{PathPrefix, clamp_i64};
 use crate::query::render::render;
 use crate::query::search::{
@@ -27,6 +27,8 @@ use crate::query::session::QueryServices;
 
 const SEARCH_TOOL: &str = "search_hybrid_context";
 const CALLERS_TOOL: &str = "find_callers";
+const EXPLORE_TOOL: &str = "explore_file";
+const FILES_TOOL: &str = "list_files";
 
 /// Wrap an [`IndexUnavailable`] as the caller-facing error of `tool`.
 fn unavailable_error(reason: IndexUnavailable, tool: &str, cfg: &Config) -> anyhow::Error {
@@ -47,6 +49,12 @@ fn with_index<T>(
         .get(&layout)
         .map_err(|reason| unavailable_error(reason, tool, cfg))?;
     body(&index)
+}
+
+/// Serialise a typed response into the JSON document the formatters read.
+fn to_json(response: &impl Serialize, tool: &str) -> anyhow::Result<Value> {
+    serde_json::to_value(response)
+        .with_context(|| format!("failed to serialize the {tool} response"))
 }
 
 /// `search_hybrid_context` — cosine top-k over entities and tier-1 records.
@@ -71,7 +79,7 @@ pub fn run_search_hybrid_context(
             path: path.as_ref(),
         };
         let response = search_index(index, &cfg.repo_name, &request, &query_vector);
-        serde_json::to_value(response).context("failed to serialize the search response")
+        to_json(&response, SEARCH_TOOL)
     })
 }
 
@@ -96,7 +104,7 @@ pub fn run_find_callers(
             max_targets,
             &filter,
         );
-        serde_json::to_value(response).context("failed to serialize the callers response")
+        to_json(&response, CALLERS_TOOL)
     })
 }
 
@@ -105,36 +113,46 @@ pub fn format_callers_output(value: &Value, format: OutputFormat) -> String {
     render(&callers_doc(value, format), value, format)
 }
 
-/// `explore_file` — entities declared in one file (interim stub until P2.11).
+/// `explore_file` — the entities of one file, grouped by kind family.
 pub fn run_explore_file(
     cfg: &Config,
-    _services: &QueryServices,
-    _params: &ExploreParams,
+    services: &QueryServices,
+    params: &ExploreParams,
 ) -> anyhow::Result<Value> {
-    Err(not_yet(cfg, "explore_file"))
+    with_index(cfg, services, EXPLORE_TOOL, |index| {
+        let response = explore_response(
+            index,
+            &cfg.repo_name,
+            &cfg.repo_path,
+            &params.file_path,
+            params.include_markup,
+        );
+        to_json(&response, EXPLORE_TOOL)
+    })
 }
 
-/// `list_files` — files in the index (interim stub until P2.11).
+/// Render a `knot-lite/explore/v1` document.
+pub fn format_explore_output(value: &Value, format: OutputFormat) -> String {
+    render(&explore_doc(value, format), value, format)
+}
+
+/// `list_files` — the files in the index, optionally under a directory prefix.
 pub fn run_list_files(
     cfg: &Config,
-    _services: &QueryServices,
-    _params: &FilesParams,
+    services: &QueryServices,
+    params: &FilesParams,
 ) -> anyhow::Result<Value> {
-    Err(not_yet(cfg, "list_files"))
+    let prefix = PathPrefix::parse(FILES_TOOL, params.path.as_deref().unwrap_or(""))
+        .map_err(|message| anyhow::anyhow!(message))?;
+    with_index(cfg, services, FILES_TOOL, |index| {
+        let response = files_response(index, &cfg.repo_name, prefix.as_ref());
+        to_json(&response, FILES_TOOL)
+    })
 }
 
-/// Diagnose why a not-yet-implemented `tool` cannot answer: the loader's
-/// reason when the index is unusable; a loadable index cannot answer yet either.
-fn not_yet(cfg: &Config, tool: &str) -> anyhow::Error {
-    match load_index(&IndexLayout::for_repo(&cfg.repo_path)) {
-        Err(reason) => unavailable_error(reason, tool, cfg),
-        Ok(_) => anyhow::Error::new(QueryUnavailable::Invalid {
-            tool: tool.to_owned(),
-            repo: cfg.repo_name.clone(),
-            manifest: IndexLayout::manifest_rel(),
-            error: "this knot-lite build cannot answer this query yet".to_owned(),
-        }),
-    }
+/// Render a `knot-lite/files/v1` document.
+pub fn format_files_output(value: &Value, format: OutputFormat) -> String {
+    render(&files_doc(value, format), value, format)
 }
 
 #[cfg(test)]
@@ -142,6 +160,7 @@ mod tests {
     use super::*;
     use crate::config::test_support::config_for;
     use crate::embed::fake::FakeEmbedder;
+    use crate::error::QueryUnavailable;
     use crate::index::build::test_support::{DIM, fixture, run};
     use crate::query::session::EmbedderFactory;
     use std::sync::Arc;
@@ -424,32 +443,44 @@ mod tests {
         assert_eq!(services.embedder.inits(), 1);
     }
 
-    /// The two interim stubs still diagnose the index.
-    fn stub_errors(cfg: &Config) -> Vec<anyhow::Error> {
+    fn explore_params(file: &str) -> ExploreParams {
+        ExploreParams {
+            file_path: file.to_owned(),
+            include_markup: false,
+        }
+    }
+
+    /// Every runner, so one test can assert the same diagnosis for all of them.
+    fn all_runner_errors(cfg: &Config) -> Vec<(&'static str, anyhow::Error)> {
         let services = services();
         vec![
-            run_explore_file(
-                cfg,
-                &services,
-                &ExploreParams {
-                    file_path: "src/lib.rs".to_owned(),
-                    include_markup: false,
-                },
-            )
-            .unwrap_err(),
-            run_list_files(cfg, &services, &FilesParams::default()).unwrap_err(),
+            (
+                SEARCH_TOOL,
+                run_search_hybrid_context(cfg, &services, &search("x")).unwrap_err(),
+            ),
+            (
+                CALLERS_TOOL,
+                run_find_callers(cfg, &services, &callers("x")).unwrap_err(),
+            ),
+            (
+                EXPLORE_TOOL,
+                run_explore_file(cfg, &services, &explore_params("src/lib.rs")).unwrap_err(),
+            ),
+            (
+                FILES_TOOL,
+                run_list_files(cfg, &services, &FilesParams::default()).unwrap_err(),
+            ),
         ]
     }
 
     #[test]
-    fn stubs_report_not_indexed_on_an_empty_repo() {
+    fn every_tool_reports_not_indexed_on_an_empty_repo() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let cfg = config_for(tmp.path().to_path_buf());
-        let errors = stub_errors(&cfg);
-        for (error, tool) in errors.iter().zip(["explore_file", "list_files"]) {
+        for (tool, error) in all_runner_errors(&cfg) {
             let text = error.to_string();
             assert!(
-                matches!(unavailable_of(error), QueryUnavailable::NotIndexed { .. }),
+                matches!(unavailable_of(&error), QueryUnavailable::NotIndexed { .. }),
                 "{text}"
             );
             assert!(text.starts_with(&format!("{tool}: ")), "{text}");
@@ -458,14 +489,14 @@ mod tests {
     }
 
     #[test]
-    fn stubs_report_incomplete_and_unsupported_states() {
+    fn every_tool_reports_incomplete_and_unsupported_states() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let cfg = config_for(tmp.path().to_path_buf());
         let dir = tmp.path().join(".knot-lite");
         std::fs::create_dir_all(&dir).expect("mkdir");
 
         std::fs::write(dir.join("manifest.prev.toml"), "x = 1\n").expect("write");
-        for error in stub_errors(&cfg) {
+        for (_, error) in all_runner_errors(&cfg) {
             assert!(
                 matches!(unavailable_of(&error), QueryUnavailable::Incomplete { .. }),
                 "{error}"
@@ -478,7 +509,7 @@ mod tests {
             "schema = \"knot-lite/manifest/v2\"\nknot_lite_version = \"9.9.9\"\n",
         )
         .expect("write");
-        for error in stub_errors(&cfg) {
+        for (_, error) in all_runner_errors(&cfg) {
             let text = error.to_string();
             assert!(
                 matches!(unavailable_of(&error), QueryUnavailable::Unsupported { .. }),
@@ -486,6 +517,91 @@ mod tests {
             );
             assert!(text.contains("knot-lite/manifest/v1"), "{text}");
         }
+    }
+
+    #[test]
+    fn explore_runner_resolves_paths_and_renders() {
+        let (tmp, cfg) = indexed();
+        let by_suffix =
+            run_explore_file(&cfg, &services(), &explore_params("util.rs")).expect("explore");
+        assert_eq!(by_suffix["file"], "src/util.rs");
+        assert_eq!(by_suffix["resolution"], "suffix");
+        let absolute = tmp.path().join("src/lib.rs").to_string_lossy().into_owned();
+        let by_path =
+            run_explore_file(&cfg, &services(), &explore_params(&absolute)).expect("explore");
+        assert_eq!(by_path["file"], "src/lib.rs");
+
+        let table = format_explore_output(&by_path, OutputFormat::Table);
+        assert!(
+            table.starts_with("knot-lite explore — repository 'demo'"),
+            "{table}"
+        );
+        assert!(
+            table.contains("SIGNATURE") && table.contains("target"),
+            "{table}"
+        );
+        let markdown = format_explore_output(&by_path, OutputFormat::Markdown);
+        assert!(markdown.starts_with("## knot-lite explore"), "{markdown}");
+        assert!(markdown.contains("### callables (2)"), "{markdown}");
+        let missing =
+            run_explore_file(&cfg, &services(), &explore_params("nope.rs")).expect("explore");
+        assert_eq!(missing["resolution"], "not_found");
+    }
+
+    #[test]
+    fn files_runner_lists_filters_and_rejects_globs() {
+        let (_tmp, cfg) = indexed();
+        let all = run_list_files(&cfg, &services(), &FilesParams::default()).expect("files");
+        assert_eq!(all["total"], 7);
+        let src = run_list_files(
+            &cfg,
+            &services(),
+            &FilesParams {
+                path: Some("src".to_owned()),
+            },
+        )
+        .expect("files");
+        assert_eq!(src["total"], 2);
+        assert_eq!(src["path"], "src");
+
+        let error = run_list_files(
+            &cfg,
+            &services(),
+            &FilesParams {
+                path: Some("src/**/*.rs".to_owned()),
+            },
+        )
+        .expect_err("glob");
+        assert!(
+            error.downcast_ref::<QueryUnavailable>().is_none(),
+            "a plain error"
+        );
+        assert!(
+            error
+                .to_string()
+                .starts_with("list_files: glob patterns are not supported"),
+            "{error}"
+        );
+
+        let table = format_files_output(&src, OutputFormat::Table);
+        assert!(
+            table.contains("PATH") && table.contains("src/lib.rs"),
+            "{table}"
+        );
+        let markdown = format_files_output(&src, OutputFormat::Markdown);
+        assert!(
+            markdown.contains("| PATH | LANGUAGE | ENTITIES | CHUNKS |"),
+            "{markdown}"
+        );
+        let empty = run_list_files(
+            &cfg,
+            &services(),
+            &FilesParams {
+                path: Some("nope".to_owned()),
+            },
+        )
+        .expect("files");
+        assert!(format_files_output(&empty, OutputFormat::Markdown).contains("_No results._"));
     }
 
     fn callers(name: &str) -> CallersParams {

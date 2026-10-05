@@ -2,6 +2,8 @@
 //! services, parameter filters, the renderer and the query bodies.
 
 pub mod callers;
+pub mod explore;
+pub mod files;
 pub mod filters;
 pub mod render;
 pub mod search;
