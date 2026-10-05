@@ -9,6 +9,7 @@ pub mod cli_tools;
 pub mod config;
 pub mod embed;
 pub mod error;
+pub mod graph;
 pub mod index;
 pub mod mcp_handler;
 pub mod mcp_tools;

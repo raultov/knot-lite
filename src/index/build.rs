@@ -5,7 +5,7 @@
 //! `<repo>/.knot-lite/` (P2-D6, P2-D13). The embedder is injected so the
 //! pipeline is testable without a model (P2-D4).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -13,8 +13,10 @@ use anyhow::{Context as _, bail};
 use knot::models::ParsedEntity;
 use knot::pipeline::parser::{ParseConfig, parse_files_stream};
 use serde::Serialize;
+use uuid::Uuid;
 
 use super::chunk::{chunk_file, tier1_files};
+use super::edges::EdgeLine;
 use super::encode::{encode_i8pv, normalize};
 use super::inventory::{Inventory, collect_inventory, fingerprint, write_inventory};
 use super::layout::{CommitMode, INDEX_DIR, IndexLayout, MANIFEST_SCHEMA_V1, apply_commit_mode};
@@ -29,6 +31,7 @@ use super::shard::{ShardLine, chunk_id, sort_lines, text_hash};
 use crate::capability::languages::label_for;
 use crate::config::Config;
 use crate::embed::{EmbedBatch, EmbeddingSpec};
+use crate::graph::heuristic::{ResolverMetrics, resolve_edges};
 
 /// Schema id of the [`BuildReport`] document.
 pub const INDEX_RUN_SCHEMA_V1: &str = "knot-lite/index-run/v1";
@@ -159,6 +162,8 @@ pub struct BuildReport {
     pub vectors: VectorStats,
     /// What happened to the shard files.
     pub files: FileStats,
+    /// Counters of knot's reference resolver.
+    pub resolver: ResolverMetrics,
     /// Per-stage timings.
     pub timings_ms: IndexTimings,
     /// Non-fatal problems found during the run.
@@ -176,6 +181,7 @@ struct PendingRecord {
 
 #[derive(Default)]
 struct RecordStats {
+    records: usize,
     files_with_entities: usize,
     tier1_files: usize,
     entities: usize,
@@ -226,6 +232,10 @@ pub fn build_index(
     let mut records = collect_records(cfg, &selection, &mut entities)?;
     timings.prepare = elapsed_ms(stage);
 
+    progress(ProgressEvent::Stage { name: "resolve" });
+    let resolved = resolve_edges(&entities);
+    timings.resolve = resolved.resolve_ms;
+
     progress(ProgressEvent::Stage { name: "embed" });
     let stage = Instant::now();
     let (reuse, reuse_warnings) =
@@ -238,8 +248,12 @@ pub fn build_index(
 
     progress(ProgressEvent::Stage { name: "write" });
     let stage = Instant::now();
-    let record_count = records.pending.len();
     let shards = write_shards(&dir.layout, records.pending)?;
+    let entity_files: HashMap<Uuid, &str> = entities
+        .iter()
+        .map(|entity| (entity.uuid, entity.file_path.as_str()))
+        .collect();
+    let edges = write_edges(&dir.layout, &resolved.edges, &entity_files)?;
     write_inventory(&dir.layout.inventory, &inventory)?;
     timings.write = elapsed_ms(stage);
     timings.total = elapsed_ms(started);
@@ -250,13 +264,7 @@ pub fn build_index(
         ManifestParts {
             spec: &spec,
             source_fingerprint: fingerprint(&inventory),
-            counts: index_counts(
-                &selection,
-                &inventory,
-                &records.stats,
-                record_count,
-                &shards,
-            ),
+            counts: index_counts(&selection, &inventory, &records.stats, &shards, &edges),
             timings,
         },
     );
@@ -266,7 +274,36 @@ pub fn build_index(
         total_ms: manifest.timings_ms.total,
     });
 
-    Ok(BuildReport {
+    Ok(assemble_report(
+        cfg,
+        dir,
+        manifest,
+        StageResults {
+            spec,
+            vectors,
+            shards,
+            edges,
+            resolver: resolved.metrics,
+        },
+    ))
+}
+
+/// What the stages produced, beyond what the manifest already holds.
+struct StageResults {
+    spec: EmbeddingSpec,
+    vectors: VectorStats,
+    shards: ShardStats,
+    edges: EdgeStats,
+    resolver: ResolverMetrics,
+}
+
+fn assemble_report(
+    cfg: &Config,
+    dir: RunDir,
+    manifest: Manifest,
+    results: StageResults,
+) -> BuildReport {
+    BuildReport {
         schema: INDEX_RUN_SCHEMA_V1,
         knot_lite_version: env!("CARGO_PKG_VERSION"),
         repo: ReportRepo {
@@ -276,21 +313,24 @@ pub fn build_index(
         index_dir: INDEX_DIR,
         commit_mode: dir.commit_mode,
         embedding: ReportEmbedding {
-            model: spec.model,
-            dim: spec.dim,
-            encoding: spec.encoding,
+            model: results.spec.model,
+            dim: results.spec.dim,
+            encoding: results.spec.encoding,
         },
         counts: manifest.counts,
-        vectors,
+        vectors: results.vectors,
         files: FileStats {
-            shards_written: shards.written,
-            shards_unchanged: shards.unchanged,
-            shards_removed: shards.removed,
-            ..FileStats::default()
+            shards_written: results.shards.written,
+            shards_unchanged: results.shards.unchanged,
+            shards_removed: results.shards.removed,
+            edge_shards_written: results.edges.written,
+            edge_shards_unchanged: results.edges.unchanged,
+            edge_shards_removed: results.edges.removed,
         },
+        resolver: results.resolver,
         timings_ms: manifest.timings_ms,
         warnings: dir.warnings,
-    })
+    }
 }
 
 /// Create the index directory, settle the commit mode and move the current
@@ -419,6 +459,7 @@ fn collect_records(
     stats.chunks = tier1.chunks;
     stats.file_vectors = tier1.file_vectors;
     pending.extend(tier1.records);
+    stats.records = pending.len();
     Ok(RecordSet { pending, stats })
 }
 
@@ -629,12 +670,80 @@ fn write_shards(layout: &IndexLayout, records: Vec<PendingRecord>) -> anyhow::Re
     Ok(stats)
 }
 
+struct EdgeStats {
+    written: usize,
+    unchanged: usize,
+    removed: usize,
+    /// Distinct edge shard files that exist after the run.
+    files: usize,
+    /// Edges kept.
+    edges: usize,
+    /// Edges dropped because an endpoint is not an indexed entity.
+    dropped: usize,
+}
+
+/// Group edges by the caller's file and drop those with an endpoint that is
+/// not an entity of the index. Edges inside each group are sorted.
+fn partition_edges(
+    edges: &BTreeSet<(Uuid, Uuid, String)>,
+    entity_files: &HashMap<Uuid, &str>,
+) -> (BTreeMap<String, Vec<EdgeLine>>, usize) {
+    let mut by_file: BTreeMap<String, Vec<EdgeLine>> = BTreeMap::new();
+    let mut dropped = 0;
+    for (src, dst, rel) in edges {
+        match (entity_files.get(src), entity_files.contains_key(dst)) {
+            (Some(file), true) => by_file
+                .entry((*file).to_owned())
+                .or_default()
+                .push(EdgeLine {
+                    src: src.to_string(),
+                    dst: dst.to_string(),
+                    rel: rel.clone(),
+                }),
+            _ => dropped += 1,
+        }
+    }
+    for group in by_file.values_mut() {
+        group.sort();
+    }
+    (by_file, dropped)
+}
+
+/// Write one edge shard per caller file; delete the shards of files that no
+/// longer have edges.
+fn write_edges(
+    layout: &IndexLayout,
+    edges: &BTreeSet<(Uuid, Uuid, String)>,
+    entity_files: &HashMap<Uuid, &str>,
+) -> anyhow::Result<EdgeStats> {
+    let (by_file, dropped) = partition_edges(edges, entity_files);
+    let mut stats = EdgeStats {
+        written: 0,
+        unchanged: 0,
+        removed: 0,
+        files: by_file.len(),
+        edges: edges.len() - dropped,
+        dropped,
+    };
+    let mut kept = BTreeSet::new();
+    for (file, lines) in &by_file {
+        let path = layout.edges_for(file)?;
+        match write_jsonl_if_changed(&path, lines)? {
+            WriteOutcome::Written => stats.written += 1,
+            WriteOutcome::Unchanged => stats.unchanged += 1,
+        }
+        kept.insert(path);
+    }
+    stats.removed = remove_orphans(&layout.edges, &kept)?;
+    Ok(stats)
+}
+
 fn index_counts(
     selection: &Selection,
     inventory: &Inventory,
     stats: &RecordStats,
-    record_count: usize,
     shards: &ShardStats,
+    edges: &EdgeStats,
 ) -> IndexCounts {
     IndexCounts {
         files_inventoried: count(inventory.entries.len()),
@@ -645,11 +754,11 @@ fn index_counts(
         entities_without_vector: count(stats.entities_without_vector),
         chunks: count(stats.chunks),
         file_vectors: count(stats.file_vectors),
-        records: count(record_count),
-        edges: 0,
-        dropped_edges: 0,
+        records: count(stats.records),
+        edges: count(edges.edges),
+        dropped_edges: count(edges.dropped),
         shards: count(shards.files),
-        edge_shards: 0,
+        edge_shards: count(edges.files),
     }
 }
 
@@ -764,6 +873,7 @@ mod tests {
     use crate::embed::fake::FakeEmbedder;
     use crate::index::encode::decode_i8pv;
     use crate::index::manifest::{IndexState, read_index_state};
+    use crate::index::record_io::read_jsonl;
 
     #[test]
     fn build_writes_expected_layout() {
@@ -1065,7 +1175,10 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(stages, vec!["select", "parse", "prepare", "embed", "write"]);
+        assert_eq!(
+            stages,
+            vec!["select", "parse", "prepare", "resolve", "embed", "write"]
+        );
         assert!(matches!(events.last(), Some(ProgressEvent::Done { .. })));
         let embedded: Vec<(usize, usize)> = events
             .iter()
@@ -1160,5 +1273,155 @@ mod tests {
         let error =
             build_index(&cfg, &mut ShortEmbedder, &opts(), &mut |_| {}).expect_err("must fail");
         assert!(error.to_string().contains("expected 16"), "{error}");
+    }
+
+    /// Every edge shard as caller file → edges.
+    fn edge_shards(layout: &IndexLayout) -> BTreeMap<String, Vec<EdgeLine>> {
+        snapshot(&layout.edges)
+            .into_keys()
+            .map(|key| {
+                let rel = key.strip_suffix(".jsonl").expect("record file").to_owned();
+                let lines = read_jsonl(&layout.edges_for(&rel).expect("path")).expect("read");
+                (rel, lines)
+            })
+            .collect()
+    }
+
+    /// `file::name` of every entity id in the index.
+    fn names_by_id(layout: &IndexLayout) -> HashMap<String, String> {
+        shards(layout)
+            .into_iter()
+            .flat_map(|(file, lines)| {
+                lines
+                    .into_iter()
+                    .map(move |line| (line.id, format!("{file}::{}", line.name)))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn real_parse_resolves_fixture_calls() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let layout = IndexLayout::for_repo(tmp.path());
+        let names = names_by_id(&layout);
+        let triples: BTreeSet<(String, String, String)> = edge_shards(&layout)
+            .into_values()
+            .flatten()
+            .map(|edge| (names[&edge.src].clone(), edge.rel, names[&edge.dst].clone()))
+            .collect();
+        let calls = |src: &str, dst: &str| (src.to_owned(), "CALLS".to_owned(), dst.to_owned());
+        for expected in [
+            calls("src/lib.rs::caller", "src/lib.rs::target"),
+            calls("src/lib.rs::caller", "src/util.rs::helper"),
+            calls("src/util.rs::helper", "src/lib.rs::target"),
+            calls("src/util.rs::run", "src/lib.rs::target"),
+            calls("web/app.ts::main", "web/app.ts::greet"),
+        ] {
+            assert!(
+                triples.contains(&expected),
+                "{expected:?} missing from {triples:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn edges_are_keyed_by_caller_file() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let layout = IndexLayout::for_repo(tmp.path());
+        let entities = shards(&layout);
+        let all_ids: BTreeSet<&str> = entities.values().flatten().map(|l| l.id.as_str()).collect();
+        let edges = edge_shards(&layout);
+        assert_eq!(
+            edges.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["src/lib.rs", "src/util.rs", "web/app.ts"]
+        );
+        for (file, lines) in &edges {
+            let own: BTreeSet<&str> = entities[file].iter().map(|l| l.id.as_str()).collect();
+            let mut sorted = lines.clone();
+            sorted.sort();
+            assert_eq!(lines, &sorted, "{file} edges are stored sorted");
+            for edge in lines {
+                assert!(
+                    own.contains(edge.src.as_str()),
+                    "{file}: src {} is not its entity",
+                    edge.src
+                );
+                assert!(
+                    all_ids.contains(edge.dst.as_str()),
+                    "{file}: dangling dst {}",
+                    edge.dst
+                );
+                assert!(crate::graph::heuristic::EDGE_REL_LABELS.contains(&edge.rel.as_str()));
+            }
+        }
+    }
+
+    #[test]
+    fn build_edge_counts_match_the_edge_shards() {
+        let (tmp, cfg) = fixture();
+        let report = run(&cfg);
+        let layout = IndexLayout::for_repo(tmp.path());
+        let edges = edge_shards(&layout);
+        let total: usize = edges.values().map(Vec::len).sum();
+        assert_eq!(report.counts.edges, count(total));
+        assert_eq!(report.counts.edge_shards, count(edges.len()));
+        assert_eq!(report.counts.dropped_edges, 0);
+        assert_eq!(report.files.edge_shards_written, edges.len());
+        assert_eq!(
+            report.resolver.entities_indexed,
+            usize::try_from(report.counts.entities).expect("fits")
+        );
+        assert_eq!(
+            read_manifest(&layout.manifest).expect("manifest").counts,
+            report.counts
+        );
+    }
+
+    #[test]
+    fn dangling_edges_are_dropped_and_counted() {
+        let (a, b, ghost) = (Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3));
+        let files: HashMap<Uuid, &str> = HashMap::from([(a, "f1.rs"), (b, "f2.rs")]);
+        let calls = |src, dst| (src, dst, "CALLS".to_owned());
+        let edges: BTreeSet<_> =
+            [calls(a, b), calls(a, ghost), calls(ghost, b), calls(a, a)].into();
+
+        let (by_file, dropped) = partition_edges(&edges, &files);
+        assert_eq!(dropped, 2, "an unknown dst and an unknown src");
+        assert_eq!(by_file.keys().collect::<Vec<_>>(), vec!["f1.rs"]);
+        let kept: Vec<(&str, &str)> = by_file["f1.rs"]
+            .iter()
+            .map(|e| (e.src.as_str(), e.dst.as_str()))
+            .collect();
+        assert_eq!(kept.len(), 2, "self edges are kept: {kept:?}");
+        assert!(kept.contains(&(a.to_string().as_str(), a.to_string().as_str())));
+    }
+
+    #[test]
+    fn edge_shard_removed_with_caller_file() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        run(&cfg);
+        assert!(layout.edges_for("src/util.rs").expect("path").exists());
+
+        std::fs::remove_file(tmp.path().join("src/util.rs")).expect("remove");
+        let report = run(&cfg);
+        assert!(!layout.edges_for("src/util.rs").expect("path").exists());
+        assert_eq!(report.files.edge_shards_removed, 1);
+        let remaining: Vec<String> = edge_shards(&layout).into_keys().collect();
+        assert_eq!(remaining, vec!["src/lib.rs", "web/app.ts"]);
+    }
+
+    #[test]
+    fn edges_are_byte_identical_across_runs() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        run(&cfg);
+        let first = snapshot(&layout.edges);
+        assert!(!first.is_empty());
+        std::fs::remove_dir_all(&layout.dir).expect("remove index");
+        run(&cfg);
+        assert_eq!(snapshot(&layout.edges), first);
     }
 }
