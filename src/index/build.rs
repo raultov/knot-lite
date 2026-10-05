@@ -1,0 +1,1132 @@
+//! The index build pipeline: select → parse → prepare → tier-1 chunks → embed
+//! → shards → inventory → manifest.
+//!
+//! One run re-parses the whole repository and writes only under
+//! `<repo>/.knot-lite/` (P2-D6, P2-D13). The embedder is injected so the
+//! pipeline is testable without a model (P2-D4).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use anyhow::{Context as _, bail};
+use knot::models::ParsedEntity;
+use knot::pipeline::parser::{ParseConfig, parse_files_stream};
+use serde::Serialize;
+
+use super::chunk::{chunk_file, tier1_files};
+use super::encode::{encode_i8pv, normalize};
+use super::inventory::{Inventory, collect_inventory, fingerprint, write_inventory};
+use super::layout::{CommitMode, INDEX_DIR, IndexLayout, MANIFEST_SCHEMA_V1, apply_commit_mode};
+use super::manifest::{
+    IndexCounts, IndexTimings, KNOT_VERSION, Manifest, now_rfc3339, read_manifest,
+    write_manifest_atomic,
+};
+use super::record_io::{WriteOutcome, remove_orphans, write_jsonl_if_changed};
+use super::select::{Selection, select_files};
+use super::shard::{ShardLine, chunk_id, sort_lines, text_hash};
+use crate::capability::languages::label_for;
+use crate::config::Config;
+use crate::embed::{EmbedBatch, EmbeddingSpec};
+
+/// Schema id of the [`BuildReport`] document.
+pub const INDEX_RUN_SCHEMA_V1: &str = "knot-lite/index-run/v1";
+
+/// Passages handed to the embedder per progress step.
+pub const EMBED_SLICE: usize = 1024;
+
+/// Default number of passages per model call.
+pub const DEFAULT_BATCH_SIZE: usize = 128;
+
+/// Capacity of the parser → collector channel.
+const PARSE_CHANNEL_CAPACITY: usize = 1024;
+
+/// Knobs of one build.
+#[derive(Debug, Clone)]
+pub struct BuildOptions {
+    /// Ignore reusable vectors and embed everything.
+    pub force: bool,
+    /// `None` keeps the previous manifest's mode, else `gitignore`.
+    pub commit_mode: Option<CommitMode>,
+    /// Maximum concurrent parser tasks (values below 1 are treated as 1).
+    pub jobs: usize,
+    /// Passages per embedder call (values below 1 are treated as 1).
+    pub batch_size: usize,
+}
+
+impl Default for BuildOptions {
+    fn default() -> Self {
+        Self {
+            force: false,
+            commit_mode: None,
+            jobs: std::thread::available_parallelism().map_or(4, std::num::NonZero::get),
+            batch_size: DEFAULT_BATCH_SIZE,
+        }
+    }
+}
+
+/// What a build reports while it runs (stderr progress in the CLI).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProgressEvent {
+    /// A pipeline stage starts: `select`, `parse`, `prepare`, `embed`, `write`.
+    Stage {
+        /// Stage name.
+        name: &'static str,
+    },
+    /// Passages embedded so far, after each slice of [`EMBED_SLICE`] texts.
+    Embedded {
+        /// Passages embedded.
+        done: usize,
+        /// Passages to embed in this run.
+        total: usize,
+    },
+    /// The run finished.
+    Done {
+        /// Wall-clock milliseconds of the whole run.
+        total_ms: u64,
+    },
+}
+
+/// `repo` object of the report.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportRepo {
+    /// Repository name.
+    pub name: String,
+    /// Absolute repository path.
+    pub path: String,
+}
+
+/// `embedding` object of the report.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportEmbedding {
+    /// Canonical model name.
+    pub model: String,
+    /// Vector dimension.
+    pub dim: u32,
+    /// Wire encoding.
+    pub encoding: String,
+}
+
+/// `vectors` object of the report.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct VectorStats {
+    /// Vectors taken from the previous index.
+    pub reused: usize,
+    /// Vectors computed by the embedder in this run.
+    pub embedded: usize,
+    /// Records without embed text (no vector).
+    pub without_text: usize,
+}
+
+/// `files` object of the report.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct FileStats {
+    /// Shard files created or rewritten.
+    pub shards_written: usize,
+    /// Shard files left untouched (identical bytes).
+    pub shards_unchanged: usize,
+    /// Orphan shard files deleted.
+    pub shards_removed: usize,
+    /// Edge shard files created or rewritten.
+    pub edge_shards_written: usize,
+    /// Edge shard files left untouched.
+    pub edge_shards_unchanged: usize,
+    /// Orphan edge shard files deleted.
+    pub edge_shards_removed: usize,
+}
+
+/// The `knot-lite/index-run/v1` document (§9.1).
+#[derive(Debug, Clone, Serialize)]
+pub struct BuildReport {
+    /// [`INDEX_RUN_SCHEMA_V1`].
+    pub schema: &'static str,
+    /// knot-lite version that ran the build.
+    pub knot_lite_version: &'static str,
+    /// Repository name and path.
+    pub repo: ReportRepo,
+    /// Name of the index directory inside the repository.
+    pub index_dir: &'static str,
+    /// Effective commit mode.
+    pub commit_mode: CommitMode,
+    /// Embedding model and encoding.
+    pub embedding: ReportEmbedding,
+    /// Record counts (the same numbers as the manifest).
+    pub counts: IndexCounts,
+    /// Where the vectors came from.
+    pub vectors: VectorStats,
+    /// What happened to the shard files.
+    pub files: FileStats,
+    /// Per-stage timings.
+    pub timings_ms: IndexTimings,
+    /// Non-fatal problems found during the run.
+    pub warnings: Vec<String>,
+}
+
+/// A record waiting for its vector.
+struct PendingRecord {
+    /// Repo-relative file the record belongs to (decides its shard).
+    file: String,
+    line: ShardLine,
+    /// Embed text; empty (after trimming) means "no vector".
+    text: String,
+}
+
+#[derive(Default)]
+struct RecordStats {
+    files_with_entities: usize,
+    tier1_files: usize,
+    entities: usize,
+    entities_without_vector: usize,
+    chunks: usize,
+    file_vectors: usize,
+}
+
+struct RecordSet {
+    pending: Vec<PendingRecord>,
+    stats: RecordStats,
+}
+
+/// State prepared before the first shard is touched.
+struct RunDir {
+    layout: IndexLayout,
+    previous: Option<Manifest>,
+    commit_mode: CommitMode,
+    warnings: Vec<String>,
+}
+
+/// Build (or refresh) the index of `cfg.repo_path`. Writes only under
+/// `<repo>/.knot-lite/`.
+pub fn build_index(
+    cfg: &Config,
+    embedder: &mut dyn EmbedBatch,
+    opts: &BuildOptions,
+    progress: &mut dyn FnMut(ProgressEvent),
+) -> anyhow::Result<BuildReport> {
+    let started = Instant::now();
+    let spec = embedder.spec();
+    let dir = prepare_dir(cfg, opts)?;
+    let mut timings = IndexTimings::default();
+
+    progress(ProgressEvent::Stage { name: "select" });
+    let stage = Instant::now();
+    let selection = select_files(&cfg.repo_path)?;
+    let inventory = collect_inventory(&selection)?;
+    timings.select = elapsed_ms(stage);
+
+    progress(ProgressEvent::Stage { name: "parse" });
+    let stage = Instant::now();
+    let mut entities = parse_selection(cfg, &selection, opts.jobs)?;
+    timings.parse = elapsed_ms(stage);
+
+    progress(ProgressEvent::Stage { name: "prepare" });
+    let stage = Instant::now();
+    let mut records = collect_records(cfg, &selection, &mut entities)?;
+    timings.prepare = elapsed_ms(stage);
+
+    progress(ProgressEvent::Stage { name: "embed" });
+    let stage = Instant::now();
+    let vectors = assign_vectors(&mut records.pending, embedder, &spec, opts, progress)?;
+    timings.embed = elapsed_ms(stage);
+
+    progress(ProgressEvent::Stage { name: "write" });
+    let stage = Instant::now();
+    let record_count = records.pending.len();
+    let shards = write_shards(&dir.layout, records.pending)?;
+    write_inventory(&dir.layout.inventory, &inventory)?;
+    timings.write = elapsed_ms(stage);
+    timings.total = elapsed_ms(started);
+
+    let manifest = build_manifest(
+        cfg,
+        &dir,
+        ManifestParts {
+            spec: &spec,
+            source_fingerprint: fingerprint(&inventory),
+            counts: index_counts(
+                &selection,
+                &inventory,
+                &records.stats,
+                record_count,
+                &shards,
+            ),
+            timings,
+        },
+    );
+    write_manifest_atomic(&dir.layout.manifest, &manifest)?;
+    remove_previous_manifest(&dir.layout)?;
+    progress(ProgressEvent::Done {
+        total_ms: manifest.timings_ms.total,
+    });
+
+    Ok(BuildReport {
+        schema: INDEX_RUN_SCHEMA_V1,
+        knot_lite_version: env!("CARGO_PKG_VERSION"),
+        repo: ReportRepo {
+            name: cfg.repo_name.clone(),
+            path: cfg.repo_path.to_string_lossy().into_owned(),
+        },
+        index_dir: INDEX_DIR,
+        commit_mode: dir.commit_mode,
+        embedding: ReportEmbedding {
+            model: spec.model,
+            dim: spec.dim,
+            encoding: spec.encoding,
+        },
+        counts: manifest.counts,
+        vectors,
+        files: FileStats {
+            shards_written: shards.written,
+            shards_unchanged: shards.unchanged,
+            shards_removed: shards.removed,
+            ..FileStats::default()
+        },
+        timings_ms: manifest.timings_ms,
+        warnings: dir.warnings,
+    })
+}
+
+/// Create the index directory, settle the commit mode and move the current
+/// manifest aside (commit-mode file first, P2-D13).
+fn prepare_dir(cfg: &Config, opts: &BuildOptions) -> anyhow::Result<RunDir> {
+    let layout = IndexLayout::for_repo(&cfg.repo_path);
+    std::fs::create_dir_all(&layout.dir)
+        .with_context(|| format!("creating {}", layout.dir.display()))?;
+    let mut warnings = Vec::new();
+    let previous = read_previous_manifest(&layout, &mut warnings);
+    let commit_mode = opts
+        .commit_mode
+        .or(previous.as_ref().map(|manifest| manifest.commit_mode))
+        .unwrap_or_default();
+    apply_commit_mode(&layout, commit_mode)?;
+    if layout.manifest.exists() {
+        std::fs::rename(&layout.manifest, &layout.previous_manifest)
+            .with_context(|| format!("moving aside {}", layout.manifest.display()))?;
+    }
+    Ok(RunDir {
+        layout,
+        previous,
+        commit_mode,
+        warnings,
+    })
+}
+
+/// The manifest of the last completed run: `manifest.toml`, else the
+/// `manifest.prev.toml` left by an interrupted one. Unreadable → warning.
+fn read_previous_manifest(layout: &IndexLayout, warnings: &mut Vec<String>) -> Option<Manifest> {
+    let candidates = [&layout.manifest, &layout.previous_manifest];
+    for path in candidates.into_iter().filter(|path| path.exists()) {
+        match read_manifest(path) {
+            Ok(manifest) if manifest.schema == MANIFEST_SCHEMA_V1 => return Some(manifest),
+            Ok(manifest) => warnings.push(format!(
+                "replacing the index written with schema '{}'",
+                manifest.schema
+            )),
+            Err(error) => warnings.push(format!("ignoring the previous manifest: {error:#}")),
+        }
+    }
+    None
+}
+
+fn remove_previous_manifest(layout: &IndexLayout) -> anyhow::Result<()> {
+    match std::fs::remove_file(&layout.previous_manifest) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => {
+            Err(e).with_context(|| format!("removing {}", layout.previous_manifest.display()))
+        }
+    }
+}
+
+fn parse_selection(
+    cfg: &Config,
+    selection: &Selection,
+    jobs: usize,
+) -> anyhow::Result<Vec<ParsedEntity>> {
+    let root = cfg
+        .repo_path
+        .to_str()
+        .context("repository path is not valid UTF-8")?;
+    let parse_cfg = ParseConfig {
+        repo_root: cfg.repo_path.clone(),
+        custom_queries_path: None,
+        repo_name: cfg.repo_name.clone(),
+        include_config_files: false,
+        repo_path: Some(root.to_owned()),
+    };
+    parse_all(&selection.parse, &parse_cfg, jobs)
+}
+
+/// Run knot's streaming parser with a concurrent collector.
+///
+/// `parse_files_stream` blocks and only sends after every file is parsed; a
+/// collector draining the channel concurrently avoids the deadlock that
+/// `parse_files` hits above 1024 entities (Phase 0 T3).
+fn parse_all(
+    files: &[PathBuf],
+    cfg: &ParseConfig,
+    jobs: usize,
+) -> anyhow::Result<Vec<ParsedEntity>> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel(PARSE_CHANNEL_CAPACITY);
+    std::thread::scope(|scope| {
+        let consumer = scope.spawn(move || {
+            let mut entities = Vec::new();
+            while let Some(entity) = rx.blocking_recv() {
+                entities.push(entity);
+            }
+            entities
+        });
+        let producer = scope.spawn(move || parse_files_stream(files, cfg, tx, jobs.max(1), None));
+        producer
+            .join()
+            .map_err(|_| anyhow::anyhow!("the parse producer thread panicked"))?;
+        consumer
+            .join()
+            .map_err(|_| anyhow::anyhow!("the parse collector thread panicked"))
+    })
+}
+
+/// Turn parsed entities and tier-1 files into records awaiting vectors.
+fn collect_records(
+    cfg: &Config,
+    selection: &Selection,
+    entities: &mut [ParsedEntity],
+) -> anyhow::Result<RecordSet> {
+    normalise_and_sort(entities);
+    knot::pipeline::prepare::prepare_entities(entities);
+
+    let mut pending = entity_records(entities);
+    let entity_files: BTreeSet<String> = pending.iter().map(|r| r.file.clone()).collect();
+    let mut stats = RecordStats {
+        files_with_entities: entity_files.len(),
+        entities: pending.len(),
+        entities_without_vector: pending
+            .iter()
+            .filter(|record| record.text.trim().is_empty())
+            .count(),
+        ..RecordStats::default()
+    };
+
+    let tier1 = tier1_records(cfg, selection, &entity_files)?;
+    stats.tier1_files = tier1.files;
+    stats.chunks = tier1.chunks;
+    stats.file_vectors = tier1.file_vectors;
+    pending.extend(tier1.records);
+    Ok(RecordSet { pending, stats })
+}
+
+/// Normalise paths to `/` and sort entities so the resolver input does not
+/// depend on thread completion order (risk R4).
+fn normalise_and_sort(entities: &mut [ParsedEntity]) {
+    for entity in entities.iter_mut() {
+        if entity.file_path.contains('\\') {
+            entity.file_path = entity.file_path.replace('\\', "/");
+        }
+    }
+    entities.sort_by_cached_key(|entity| {
+        (
+            entity.file_path.clone(),
+            entity.start_line,
+            entity.end_line,
+            entity.kind.to_string(),
+            entity.name.clone(),
+            entity.uuid,
+        )
+    });
+}
+
+fn entity_records(entities: &[ParsedEntity]) -> Vec<PendingRecord> {
+    entities
+        .iter()
+        .map(|entity| PendingRecord {
+            file: entity.file_path.clone(),
+            line: ShardLine {
+                id: entity.uuid.to_string(),
+                kind: entity.kind.to_string(),
+                name: entity.name.clone(),
+                fqn: entity.fqn.clone(),
+                lang: entity.language.clone(),
+                l0: entity.start_line,
+                l1: entity.end_line,
+                col: None,
+                sig: entity.signature.clone(),
+                h: text_hash(&entity.embed_text),
+                q: None,
+                s: None,
+            },
+            text: entity.embed_text.clone(),
+        })
+        .collect()
+}
+
+struct Tier1Records {
+    records: Vec<PendingRecord>,
+    files: usize,
+    chunks: usize,
+    file_vectors: usize,
+}
+
+fn tier1_records(
+    cfg: &Config,
+    selection: &Selection,
+    files_with_entities: &BTreeSet<String>,
+) -> anyhow::Result<Tier1Records> {
+    let mut out = Tier1Records {
+        records: Vec::new(),
+        files: 0,
+        chunks: 0,
+        file_vectors: 0,
+    };
+    for file in tier1_files(selection, files_with_entities)? {
+        let lang = label_for(Path::new(&file.rel));
+        let chunks = chunk_file(&file.rel, &file.source);
+        if chunks.is_empty() {
+            continue;
+        }
+        out.files += 1;
+        for chunk in chunks {
+            if chunk.kind == super::shard::KIND_FILE {
+                out.file_vectors += 1;
+            } else {
+                out.chunks += 1;
+            }
+            out.records.push(PendingRecord {
+                line: ShardLine {
+                    id: chunk_id(&cfg.repo_name, &chunk.rel, chunk.kind, chunk.l0, chunk.l1),
+                    kind: chunk.kind.to_owned(),
+                    name: chunk.name,
+                    fqn: chunk.rel.clone(),
+                    lang: lang.to_owned(),
+                    l0: chunk.l0,
+                    l1: chunk.l1,
+                    col: None,
+                    sig: None,
+                    h: text_hash(&chunk.text),
+                    q: None,
+                    s: None,
+                },
+                file: chunk.rel,
+                text: chunk.text,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Embed every record that has text but no vector yet, in slices of
+/// [`EMBED_SLICE`] texts, then normalise and quantise (P2-D5).
+fn assign_vectors(
+    records: &mut [PendingRecord],
+    embedder: &mut dyn EmbedBatch,
+    spec: &EmbeddingSpec,
+    opts: &BuildOptions,
+    progress: &mut dyn FnMut(ProgressEvent),
+) -> anyhow::Result<VectorStats> {
+    let dim = usize::try_from(spec.dim).unwrap_or(usize::MAX);
+    let misses: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| !record.text.trim().is_empty() && !record.line.has_vector())
+        .map(|(index, _)| index)
+        .collect();
+    let without_text = records
+        .iter()
+        .filter(|record| record.text.trim().is_empty())
+        .count();
+    let reused = records
+        .iter()
+        .filter(|record| record.line.has_vector())
+        .count();
+
+    let total = misses.len();
+    let mut done = 0;
+    for slice in misses.chunks(EMBED_SLICE) {
+        let texts: Vec<String> = slice.iter().map(|&i| records[i].text.clone()).collect();
+        let vectors = embedder.embed_passages(&texts, opts.batch_size.max(1))?;
+        if vectors.len() != texts.len() {
+            bail!(
+                "the embedder returned {} vectors for {} texts",
+                vectors.len(),
+                texts.len()
+            );
+        }
+        for (&index, mut vector) in slice.iter().zip(vectors) {
+            if vector.len() != dim {
+                bail!(
+                    "the embedder returned a {}-component vector, expected {dim}",
+                    vector.len()
+                );
+            }
+            normalize(&mut vector);
+            let quantized = encode_i8pv(&vector);
+            records[index].line.q = Some(quantized.q);
+            records[index].line.s = Some(quantized.s);
+        }
+        done += slice.len();
+        progress(ProgressEvent::Embedded { done, total });
+    }
+    Ok(VectorStats {
+        reused,
+        embedded: total,
+        without_text,
+    })
+}
+
+struct ShardStats {
+    written: usize,
+    unchanged: usize,
+    removed: usize,
+    /// Distinct shard files that exist after the run.
+    files: usize,
+}
+
+/// Group records by file, sort them and write one shard per file; delete the
+/// shards of files that no longer have records.
+fn write_shards(layout: &IndexLayout, records: Vec<PendingRecord>) -> anyhow::Result<ShardStats> {
+    let mut by_file: BTreeMap<String, Vec<ShardLine>> = BTreeMap::new();
+    for record in records {
+        by_file.entry(record.file).or_default().push(record.line);
+    }
+    let mut stats = ShardStats {
+        written: 0,
+        unchanged: 0,
+        removed: 0,
+        files: by_file.len(),
+    };
+    let mut kept = BTreeSet::new();
+    for (file, mut lines) in by_file {
+        sort_lines(&mut lines);
+        let path = layout.shard_for(&file)?;
+        match write_jsonl_if_changed(&path, &lines)? {
+            WriteOutcome::Written => stats.written += 1,
+            WriteOutcome::Unchanged => stats.unchanged += 1,
+        }
+        kept.insert(path);
+    }
+    stats.removed = remove_orphans(&layout.shards, &kept)?;
+    Ok(stats)
+}
+
+fn index_counts(
+    selection: &Selection,
+    inventory: &Inventory,
+    stats: &RecordStats,
+    record_count: usize,
+    shards: &ShardStats,
+) -> IndexCounts {
+    IndexCounts {
+        files_inventoried: count(inventory.entries.len()),
+        files_parsed: count(selection.parse.len()),
+        files_with_entities: count(stats.files_with_entities),
+        tier1_files: count(stats.tier1_files),
+        entities: count(stats.entities),
+        entities_without_vector: count(stats.entities_without_vector),
+        chunks: count(stats.chunks),
+        file_vectors: count(stats.file_vectors),
+        records: count(record_count),
+        edges: 0,
+        dropped_edges: 0,
+        shards: count(shards.files),
+        edge_shards: 0,
+    }
+}
+
+/// The run-specific values of a manifest.
+struct ManifestParts<'a> {
+    spec: &'a EmbeddingSpec,
+    source_fingerprint: String,
+    counts: IndexCounts,
+    timings: IndexTimings,
+}
+
+fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manifest {
+    let now = now_rfc3339();
+    Manifest {
+        schema: MANIFEST_SCHEMA_V1.to_owned(),
+        knot_lite_version: env!("CARGO_PKG_VERSION").to_owned(),
+        knot_version: KNOT_VERSION.to_owned(),
+        repo_name: cfg.repo_name.clone(),
+        created_at: dir
+            .previous
+            .as_ref()
+            .map_or_else(|| now.clone(), |manifest| manifest.created_at.clone()),
+        updated_at: now,
+        source_fingerprint: parts.source_fingerprint,
+        commit_mode: dir.commit_mode,
+        embedding: parts.spec.clone(),
+        counts: parts.counts,
+        timings_ms: parts.timings,
+    }
+}
+
+fn count(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
+fn elapsed_ms(since: Instant) -> u64 {
+    u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::test_support::config_for;
+    use crate::embed::fake::FakeEmbedder;
+    use crate::index::encode::decode_i8pv;
+    use crate::index::fixture::write_fixture_repo;
+    use crate::index::manifest::{IndexState, read_index_state};
+    use crate::index::record_io::read_jsonl;
+
+    const DIM: usize = 16;
+
+    fn fixture() -> (tempfile::TempDir, Config) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        write_fixture_repo(tmp.path()).expect("fixture");
+        let cfg = config_for(tmp.path().to_path_buf());
+        (tmp, cfg)
+    }
+
+    fn opts() -> BuildOptions {
+        BuildOptions {
+            jobs: 2,
+            batch_size: 8,
+            ..BuildOptions::default()
+        }
+    }
+
+    fn run_with(cfg: &Config, opts: &BuildOptions) -> BuildReport {
+        let mut fake = FakeEmbedder::new(DIM);
+        build_index(cfg, &mut fake, opts, &mut |_| {}).expect("build")
+    }
+
+    fn run(cfg: &Config) -> BuildReport {
+        run_with(cfg, &opts())
+    }
+
+    /// Every file under `dir` as `/`-separated relative path → bytes.
+    fn snapshot(dir: &Path) -> BTreeMap<String, Vec<u8>> {
+        fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+            for entry in std::fs::read_dir(dir).expect("read_dir") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    walk(base, &path, out);
+                } else {
+                    let rel = path.strip_prefix(base).expect("under base");
+                    let rel = rel.to_string_lossy().replace('\\', "/");
+                    out.insert(rel, std::fs::read(&path).expect("read"));
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        walk(dir, dir, &mut out);
+        out
+    }
+
+    /// Every shard as repo-relative file → lines.
+    fn shards(layout: &IndexLayout) -> BTreeMap<String, Vec<ShardLine>> {
+        snapshot(&layout.shards)
+            .into_keys()
+            .map(|key| {
+                let rel = key.strip_suffix(".jsonl").expect("record file").to_owned();
+                let lines = read_jsonl(&layout.shard_for(&rel).expect("path")).expect("read");
+                (rel, lines)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn build_writes_expected_layout() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let layout = IndexLayout::for_repo(tmp.path());
+        for rel in [
+            "src/lib.rs",
+            "src/util.rs",
+            "web/app.ts",
+            "docs/guide.md",
+            "scripts/run.sh",
+            "Makefile",
+        ] {
+            assert!(layout.shard_for(rel).expect("path").exists(), "{rel}");
+        }
+        assert!(
+            !layout.shards.join("target").exists(),
+            "build output is never indexed"
+        );
+        assert!(layout.manifest.exists());
+        assert!(layout.inventory.exists());
+        assert!(layout.gitignore.exists());
+        assert!(!layout.previous_manifest.exists());
+        let files = snapshot(&layout.dir);
+        assert!(
+            files.keys().all(|name| !name.ends_with(".tmp")),
+            "{files:?}"
+        );
+    }
+
+    #[test]
+    fn build_indexes_the_expected_entities() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let by_file = shards(&IndexLayout::for_repo(tmp.path()));
+        let names = |file: &str| -> Vec<String> {
+            by_file[file].iter().map(|line| line.name.clone()).collect()
+        };
+        assert!(names("src/lib.rs").contains(&"target".to_owned()));
+        assert!(names("src/lib.rs").contains(&"caller".to_owned()));
+        assert!(names("src/util.rs").contains(&"helper".to_owned()));
+        assert!(names("web/app.ts").contains(&"greet".to_owned()));
+        let kinds: Vec<&str> = by_file["scripts/run.sh"]
+            .iter()
+            .map(|l| l.kind.as_str())
+            .collect();
+        assert_eq!(
+            kinds.iter().filter(|k| **k == "chunk").count(),
+            2,
+            "{kinds:?}"
+        );
+        assert_eq!(
+            kinds.iter().filter(|k| **k == "file").count(),
+            1,
+            "{kinds:?}"
+        );
+        assert_eq!(
+            by_file["scripts/run.sh"][0].lang, "other",
+            "no `.sh` row in the label table"
+        );
+        // knot parses build manifests even with config files off: Cargo.toml
+        // yields entities (language `toml`) and is therefore not tier 1.
+        let cargo_kinds: Vec<&str> = by_file["Cargo.toml"]
+            .iter()
+            .map(|l| l.kind.as_str())
+            .collect();
+        assert_eq!(cargo_kinds, vec!["cargo_package", "project_identity"]);
+        assert!(by_file["Cargo.toml"].iter().all(|line| line.lang == "toml"));
+        assert_eq!(
+            by_file.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec![
+                "Cargo.toml",
+                "Makefile",
+                "docs/guide.md",
+                "scripts/run.sh",
+                "src/lib.rs",
+                "src/util.rs",
+                "web/app.ts"
+            ],
+            "exactly the fixture files except build output"
+        );
+    }
+
+    #[test]
+    fn build_counts_match_records() {
+        let (tmp, cfg) = fixture();
+        let report = run(&cfg);
+        let layout = IndexLayout::for_repo(tmp.path());
+        let by_file = shards(&layout);
+        let records: usize = by_file.values().map(Vec::len).sum();
+        let counts = &report.counts;
+        assert_eq!(counts.records, count(records));
+        assert_eq!(
+            counts.records,
+            counts.entities + counts.chunks + counts.file_vectors
+        );
+        assert_eq!(counts.shards, count(by_file.len()));
+        assert_eq!(
+            report.vectors.embedded + report.vectors.without_text,
+            records,
+            "every record is embedded or has no text"
+        );
+        assert_eq!(report.vectors.reused, 0);
+        assert_eq!(
+            counts.files_inventoried,
+            count(snapshot_inventory_len(&layout))
+        );
+        assert_eq!(
+            read_manifest(&layout.manifest).expect("manifest").counts,
+            *counts
+        );
+    }
+
+    fn snapshot_inventory_len(layout: &IndexLayout) -> usize {
+        crate::index::inventory::read_inventory(&layout.inventory)
+            .expect("inventory")
+            .entries
+            .len()
+    }
+
+    #[test]
+    fn build_records_are_sorted_and_parse_as_shard_lines() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        for (file, lines) in shards(&IndexLayout::for_repo(tmp.path())) {
+            assert!(!lines.is_empty(), "{file}");
+            let mut sorted = lines.clone();
+            sort_lines(&mut sorted);
+            assert_eq!(lines, sorted, "{file} must be stored sorted");
+            for line in &lines {
+                assert!(line.l0 >= 1 && line.l1 >= line.l0, "{file}: {line:?}");
+                assert_eq!(line.col, None);
+            }
+        }
+    }
+
+    #[test]
+    fn build_vectors_decode_to_unit_norm() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let mut decoded = 0;
+        for lines in shards(&IndexLayout::for_repo(tmp.path())).values() {
+            for line in lines.iter().filter(|line| line.has_vector()) {
+                let vector = decode_i8pv(line.q.as_deref().expect("q"), line.s.expect("s"), DIM)
+                    .expect("decode");
+                let norm: f64 = vector
+                    .iter()
+                    .map(|x| f64::from(*x).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                assert!((norm - 1.0).abs() < 0.02, "{norm} for {line:?}");
+                decoded += 1;
+            }
+        }
+        assert!(decoded > 10, "decoded {decoded} vectors");
+    }
+
+    #[test]
+    fn build_writes_nothing_outside_index_dir() {
+        let (tmp, cfg) = fixture();
+        let before = snapshot(tmp.path());
+        run(&cfg);
+        let after = snapshot(tmp.path());
+        let outside = |files: &BTreeMap<String, Vec<u8>>| -> BTreeMap<String, Vec<u8>> {
+            files
+                .iter()
+                .filter(|(rel, _)| !rel.starts_with(".knot-lite/"))
+                .map(|(rel, bytes)| (rel.clone(), bytes.clone()))
+                .collect()
+        };
+        assert_eq!(outside(&before), outside(&after));
+        assert!(after.keys().any(|rel| rel.starts_with(".knot-lite/")));
+    }
+
+    #[test]
+    fn build_is_byte_identical_across_runs() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        run(&cfg);
+        let first = snapshot(&layout.dir);
+        std::fs::remove_dir_all(&layout.dir).expect("remove index");
+        run(&cfg);
+        let second = snapshot(&layout.dir);
+
+        assert_eq!(
+            first.keys().collect::<Vec<_>>(),
+            second.keys().collect::<Vec<_>>()
+        );
+        for (rel, bytes) in &first {
+            if rel != "manifest.toml" {
+                assert_eq!(bytes, &second[rel], "{rel} differs between runs");
+            }
+        }
+        let parse = |bytes: &[u8]| {
+            let mut manifest: Manifest =
+                toml::from_str(std::str::from_utf8(bytes).expect("utf8")).expect("manifest");
+            manifest.created_at.clear();
+            manifest.updated_at.clear();
+            manifest.timings_ms = IndexTimings::default();
+            manifest
+        };
+        assert_eq!(
+            parse(&first["manifest.toml"]),
+            parse(&second["manifest.toml"])
+        );
+    }
+
+    #[test]
+    fn second_run_leaves_shards_unchanged_and_keeps_created_at() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        let first = run(&cfg);
+        let created = read_manifest(&layout.manifest)
+            .expect("manifest")
+            .created_at;
+        let second = run(&cfg);
+        assert_eq!(second.files.shards_written, 0);
+        assert_eq!(second.files.shards_unchanged, first.files.shards_written);
+        assert_eq!(
+            read_manifest(&layout.manifest)
+                .expect("manifest")
+                .created_at,
+            created
+        );
+    }
+
+    #[test]
+    fn build_survives_more_than_1024_entities() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let source: String = (0..1100).map(|i| format!("pub fn f{i}() {{}}\n")).collect();
+        std::fs::write(tmp.path().join("many.rs"), source).expect("write");
+        let cfg = config_for(tmp.path().to_path_buf());
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut fake = FakeEmbedder::new(DIM);
+            let outcome = build_index(&cfg, &mut fake, &opts(), &mut |_| {});
+            tx.send(outcome.map(|report| report.counts.entities)).ok();
+        });
+        let entities = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("the build must not deadlock above 1024 entities")
+            .expect("build");
+        assert!(entities >= 1100, "{entities}");
+    }
+
+    #[test]
+    fn build_commit_mode_persists() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+
+        let report = run_with(
+            &cfg,
+            &BuildOptions {
+                commit_mode: Some(CommitMode::Commit),
+                ..opts()
+            },
+        );
+        assert_eq!(report.commit_mode, CommitMode::Commit);
+        assert!(layout.gitattributes.exists() && !layout.gitignore.exists());
+
+        run_with(
+            &cfg,
+            &BuildOptions {
+                commit_mode: None,
+                ..opts()
+            },
+        );
+        assert!(layout.gitattributes.exists() && !layout.gitignore.exists());
+        assert_eq!(
+            read_manifest(&layout.manifest)
+                .expect("manifest")
+                .commit_mode,
+            CommitMode::Commit
+        );
+
+        run_with(
+            &cfg,
+            &BuildOptions {
+                commit_mode: Some(CommitMode::Gitignore),
+                ..opts()
+            },
+        );
+        assert!(layout.gitignore.exists() && !layout.gitattributes.exists());
+    }
+
+    #[test]
+    fn build_progress_reports_stages_in_order() {
+        let (_tmp, cfg) = fixture();
+        let mut events = Vec::new();
+        let mut fake = FakeEmbedder::new(DIM);
+        build_index(&cfg, &mut fake, &opts(), &mut |event| events.push(event)).expect("build");
+
+        let stages: Vec<&str> = events
+            .iter()
+            .filter_map(|event| match event {
+                ProgressEvent::Stage { name } => Some(*name),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stages, vec!["select", "parse", "prepare", "embed", "write"]);
+        assert!(matches!(events.last(), Some(ProgressEvent::Done { .. })));
+        let embedded: Vec<(usize, usize)> = events
+            .iter()
+            .filter_map(|event| match event {
+                ProgressEvent::Embedded { done, total } => Some((*done, *total)),
+                _ => None,
+            })
+            .collect();
+        let (done, total) = *embedded.last().expect("at least one embed step");
+        assert_eq!(done, total);
+        assert!(embedded.windows(2).all(|pair| pair[0].0 < pair[1].0));
+    }
+
+    #[test]
+    fn build_marks_incomplete_when_interrupted() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        std::fs::create_dir_all(&layout.dir).expect("mkdir");
+        std::fs::write(
+            &layout.previous_manifest,
+            "schema = \"knot-lite/manifest/v1\"\n",
+        )
+        .expect("prev");
+        assert_eq!(read_index_state(&layout), IndexState::Incomplete);
+
+        let report = run(&cfg);
+        assert!(matches!(
+            read_index_state(&layout),
+            IndexState::Present { .. }
+        ));
+        assert!(!layout.previous_manifest.exists());
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        assert!(
+            report.warnings[0].contains("previous manifest"),
+            "{:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn build_report_serialises_the_index_run_schema() {
+        let (_tmp, cfg) = fixture();
+        let report = run(&cfg);
+        let json = serde_json::to_string(&report).expect("json");
+        let mut last = 0;
+        for key in [
+            "\"schema\":\"knot-lite/index-run/v1\"",
+            "\"knot_lite_version\"",
+            "\"repo\"",
+            "\"index_dir\":\".knot-lite\"",
+            "\"commit_mode\":\"gitignore\"",
+            "\"embedding\"",
+            "\"counts\"",
+            "\"vectors\"",
+            "\"files\"",
+            "\"timings_ms\"",
+            "\"warnings\":[]",
+        ] {
+            let at = json
+                .find(key)
+                .unwrap_or_else(|| panic!("{key} missing in {json}"));
+            assert!(at >= last, "{key} out of order in {json}");
+            last = at;
+        }
+        assert!(json.contains("\"model\":\"knot-lite-fake-sha256\""));
+    }
+
+    /// Embedder whose vectors have the wrong number of components.
+    struct ShortEmbedder;
+
+    impl EmbedBatch for ShortEmbedder {
+        fn spec(&self) -> EmbeddingSpec {
+            FakeEmbedder::new(DIM).spec()
+        }
+
+        fn embed_passages(
+            &mut self,
+            texts: &[String],
+            _batch: usize,
+        ) -> anyhow::Result<Vec<Vec<f32>>> {
+            Ok(texts.iter().map(|_| vec![1.0; DIM - 1]).collect())
+        }
+
+        fn embed_query(&mut self, _text: &str) -> anyhow::Result<Vec<f32>> {
+            Ok(vec![1.0; DIM - 1])
+        }
+    }
+
+    #[test]
+    fn build_rejects_vectors_of_the_wrong_dimension() {
+        let (_tmp, cfg) = fixture();
+        let error =
+            build_index(&cfg, &mut ShortEmbedder, &opts(), &mut |_| {}).expect_err("must fail");
+        assert!(error.to_string().contains("expected 16"), "{error}");
+    }
+}

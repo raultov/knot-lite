@@ -1,9 +1,12 @@
 //! The file-based index under `<repo>/.knot-lite/`: layout, manifest, file
 //! selection, inventory and the record writers.
 
+pub mod build;
 pub mod chunk;
 pub mod edges;
 pub mod encode;
+#[doc(hidden)]
+pub mod fixture;
 mod hash;
 pub mod inventory;
 pub mod layout;
