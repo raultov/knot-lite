@@ -1,10 +1,10 @@
 //! CLI argument definitions for the `knot-lite` CLI tool.
 //!
 //! Defines the `Cli` struct and `Commands` enum used by `clap` for parsing
-//! subcommands: status, search, callers, explore, and files. Flags, short
-//! options and defaults mirror knot's `src/models/cli_args.rs` exactly.
+//! subcommands: index, status, search, callers, explore, and files. Flags, short
+//! options and defaults mirror knot's `src/models/cli_args.rs` where applicable.
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 use crate::config::{CommonArgs, OutputFormat};
 
@@ -21,8 +21,47 @@ pub struct Cli {
     pub command: Commands,
 }
 
+/// Arguments for the `index` subcommand.
+#[derive(Clone, PartialEq, Eq, Debug, Args)]
+pub struct IndexArgs {
+    /// Re-embed every record (ignore reusable vectors)
+    #[arg(long)]
+    pub force: bool,
+
+    /// Track the index in git: write .knot-lite/.gitattributes instead of .gitignore
+    #[arg(long, conflicts_with = "gitignore")]
+    pub commit: bool,
+
+    /// Keep the index out of git (default): write .knot-lite/.gitignore
+    #[arg(long)]
+    pub gitignore: bool,
+
+    /// Embedding model (overrides KNOT_LITE_EMBED_MODEL / KNOT_EMBED_MODEL)
+    #[arg(long)]
+    pub embed_model: Option<String>,
+
+    /// Parallel parser threads (default: available CPUs)
+    #[arg(short, long)]
+    pub jobs: Option<usize>,
+
+    /// Passages per embedding call
+    #[arg(long, default_value_t = 128)]
+    pub batch_size: usize,
+
+    /// No progress on stderr
+    #[arg(short, long)]
+    pub quiet: bool,
+
+    /// Output format (default: table)
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Table)]
+    pub output: OutputFormat,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Subcommand)]
 pub enum Commands {
+    /// Build or update the index under <repo>/.knot-lite/ (the only command that writes)
+    Index(IndexArgs),
+
     /// Show the capability matrix (tiers per language) and the index state
     Status {
         /// Output format (default: table)
@@ -51,7 +90,7 @@ pub enum Commands {
         kinds: Option<String>,
 
         /// Optional path filter: repo-relative directory prefix ('src/api',
-        /// matched on a path boundary) or glob ('src/**/*_test.rs')
+        /// matched on a path boundary). Glob patterns are not supported yet.
         #[arg(short, long)]
         path: Option<String>,
 
@@ -63,8 +102,7 @@ pub enum Commands {
     /// Find all references to an entity (reverse dependency lookup)
     Callers {
         /// Entity name to find references for. Matching is precedence-based:
-        /// exact FQN → FQN suffix → exact name → signature prefix → name
-        /// prefix (queries under 4 chars) → fuzzy substring (4+ chars).
+        /// exact FQN → FQN suffix ('Type.member', 'module::name') → exact name.
         entity_name: String,
 
         /// Repository scope: one name, comma-separated list, or 'all'/'*'
@@ -106,10 +144,10 @@ pub enum Commands {
         output: OutputFormat,
     },
 
-    /// List the indexed files of a repository (read-only), optionally narrowed
-    /// by a directory prefix or glob (`src/api`, `src/**/*_test.rs`)
+    /// List the indexed files of the repository (read-only), optionally under a
+    /// directory prefix (`src/api`)
     Files {
-        /// Optional directory prefix or glob, repo-relative
+        /// Optional repo-relative directory prefix
         #[arg(short, long)]
         path: Option<String>,
 
@@ -131,6 +169,59 @@ mod tests {
         let mut full = vec!["knot-lite"];
         full.extend_from_slice(args);
         Cli::try_parse_from(full).expect("parse")
+    }
+
+    #[test]
+    fn index_defaults() {
+        let cli = parse(&["index"]);
+        match cli.command {
+            Commands::Index(args) => {
+                assert!(!args.force);
+                assert!(!args.commit);
+                assert!(!args.gitignore);
+                assert_eq!(args.embed_model, None);
+                assert_eq!(args.jobs, None);
+                assert_eq!(args.batch_size, 128);
+                assert!(!args.quiet);
+                assert_eq!(args.output, OutputFormat::Table);
+            }
+            other => panic!("expected Index, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn index_commit_conflicts_with_gitignore() {
+        assert!(Cli::try_parse_from(["knot-lite", "index", "--commit", "--gitignore"]).is_err());
+    }
+
+    #[test]
+    fn index_all_flags_parse() {
+        let cli = parse(&[
+            "index",
+            "--force",
+            "--commit",
+            "--embed-model",
+            "BGEBaseENV15",
+            "-j",
+            "4",
+            "--batch-size",
+            "64",
+            "-q",
+            "-o",
+            "json",
+        ]);
+        match cli.command {
+            Commands::Index(args) => {
+                assert!(args.force);
+                assert!(args.commit);
+                assert_eq!(args.embed_model.as_deref(), Some("BGEBaseENV15"));
+                assert_eq!(args.jobs, Some(4));
+                assert_eq!(args.batch_size, 64);
+                assert!(args.quiet);
+                assert_eq!(args.output, OutputFormat::Json);
+            }
+            other => panic!("expected Index, got {other:?}"),
+        }
     }
 
     #[test]

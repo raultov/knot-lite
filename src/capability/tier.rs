@@ -1,7 +1,7 @@
 //! Tier model (3/2/1/0) and `StatusReport` assembly.
 //!
 //! Phase 1 caveat (§2): tier 3 means the language-server **binary was found**;
-//! servers are never started in this phase.
+//! servers are never started in 0.2.0.
 
 use std::collections::BTreeMap;
 
@@ -11,8 +11,8 @@ use super::languages::{LspLang, lsp_lang_for_label};
 use super::lsp_registry::LspStatus;
 use super::scan::{ExcludeReason, FileClass, ScanResult};
 use crate::config::Config;
-use crate::index::layout::{INDEX_DIR, MANIFEST_FILE};
-use crate::index::manifest::IndexState;
+use crate::index::layout::{CommitMode, INDEX_DIR, MANIFEST_FILE};
+use crate::index::manifest::{IndexCounts, IndexState};
 
 /// Schema identifier of the `status` report (`schema` key in the JSON).
 pub const STATUS_SCHEMA_V1: &str = "knot-lite/status/v1";
@@ -21,7 +21,47 @@ pub const STATUS_SCHEMA_V1: &str = "knot-lite/status/v1";
 pub const TOP_KEYS_LIMIT: usize = 10;
 
 /// Note attached to tier-3 rows.
-pub const TIER3_NOTE: &str = "server found, not started (readiness is checked when queries arrive)";
+pub const TIER3_NOTE: &str = "Tier 3 means the language server binary was found; knot-lite 0.2.0 does not start language servers — find_callers answers from heuristic edges for every language.";
+
+/// Freshness state of an index relative to the working tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Freshness {
+    /// `"fresh"`, `"stale"` or `"unknown"`.
+    pub state: &'static str,
+    /// Files added to the working tree since indexing.
+    pub added: usize,
+    /// Files removed from the working tree since indexing.
+    pub removed: usize,
+    /// Files whose content hash changed since indexing.
+    pub changed: usize,
+}
+
+/// Rich details of a present index.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IndexDetails {
+    /// Model name recorded in the manifest.
+    pub model: String,
+    /// Vector dimension.
+    pub dim: u32,
+    /// Wire encoding.
+    pub encoding: String,
+    /// Whether this model was validated by Phase 0 measurements (MiniLM only).
+    pub model_validated: bool,
+    /// Model name resolved from current configuration.
+    pub configured_model: String,
+    /// Git tracking mode.
+    pub commit_mode: CommitMode,
+    /// knot version that built the index.
+    pub knot_version: String,
+    /// Creation timestamp.
+    pub created_at: String,
+    /// Last update timestamp.
+    pub updated_at: String,
+    /// Counts recorded in the manifest.
+    pub counts: IndexCounts,
+    /// Freshness against current file selection.
+    pub freshness: Freshness,
+}
 
 /// One language row of the capability matrix.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -51,7 +91,7 @@ pub struct RepoInfo {
     pub path: String,
 }
 
-/// Index state plus the repo-relative manifest path.
+/// Index state plus the repo-relative manifest path and optional details.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IndexInfo {
     /// The state itself (`state` tag).
@@ -59,6 +99,9 @@ pub struct IndexInfo {
     pub state: IndexState,
     /// Repo-relative path of the manifest.
     pub manifest: String,
+    /// Rich details when state is present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<IndexDetails>,
 }
 
 /// One `files_only` group key.
@@ -156,6 +199,7 @@ pub fn build_report(
         index: IndexInfo {
             state: index,
             manifest: format!("{INDEX_DIR}/{MANIFEST_FILE}"),
+            details: None,
         },
         languages,
         files_only,
@@ -163,8 +207,7 @@ pub fn build_report(
         totals,
         notes: vec![
             "Gitignored files are not counted.".to_string(),
-            "Tier 3 means the language server binary was found; it is started on demand in later phases."
-                .to_string(),
+            TIER3_NOTE.to_string(),
         ],
     }
 }

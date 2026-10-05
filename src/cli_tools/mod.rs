@@ -1,8 +1,10 @@
 //! Business logic entry points (`run_*`) and the CLI driver.
 
+pub mod index;
 pub mod query;
 pub mod status;
 
+pub use index::{format_index_output, run_index};
 pub use query::{
     format_callers_output, format_explore_output, format_files_output, format_search_output,
     run_explore_file, run_find_callers, run_list_files, run_search_hybrid_context,
@@ -14,58 +16,71 @@ use anyhow::Result;
 use crate::config::Config;
 use crate::error::{CLI_EXIT_QUERY_UNAVAILABLE, QueryUnavailable};
 use crate::models::cli_args::{Cli, Commands};
-use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
+use crate::models::params::{CallersParams, ExploreParams, FilesParams, IndexParams, SearchParams};
 use crate::models::repo_scope::check_repo_scope_str;
 use crate::query::session::QueryServices;
 
 /// Run one CLI command and return its rendered output (printed by the binary).
 pub fn run_cli(cli: Cli) -> Result<String> {
     let cfg = Config::load_cli(&cli.common)?;
-    let services = QueryServices::real(&cfg.embed);
     match cli.command {
+        Commands::Index(ref args) => {
+            let params = IndexParams::from_cli(args);
+            let value = run_index(&cfg, &params)?;
+            Ok(format_index_output(&value, args.output))
+        }
         Commands::Status { output } => {
             let report = run_status(&cfg)?;
             Ok(format_status_output(&report, output))
         }
         Commands::Search {
-            query,
+            ref query,
             max_results,
-            repo,
-            kinds,
-            path,
+            ref repo,
+            ref kinds,
+            ref path,
             output,
         } => {
             check_scope(&cfg, repo.as_deref())?;
-            let params = SearchParams::from_cli(query, max_results, kinds, path);
+            let services = QueryServices::real(&cfg.embed);
+            let params =
+                SearchParams::from_cli(query.clone(), max_results, kinds.clone(), path.clone());
             let value = run_search_hybrid_context(&cfg, &services, &params)?;
             Ok(format_search_output(&value, output))
         }
         Commands::Callers {
-            entity_name,
-            repo,
+            ref entity_name,
+            ref repo,
             max_targets,
-            kinds,
+            ref kinds,
             output,
         } => {
             check_scope(&cfg, repo.as_deref())?;
-            let params = CallersParams::from_cli(entity_name, max_targets, kinds);
+            let services = QueryServices::real(&cfg.embed);
+            let params = CallersParams::from_cli(entity_name.clone(), max_targets, kinds.clone());
             let value = run_find_callers(&cfg, &services, &params)?;
             Ok(format_callers_output(&value, output))
         }
         Commands::Explore {
-            file_path,
-            repo,
+            ref file_path,
+            ref repo,
             include_markup,
             output,
         } => {
             check_scope(&cfg, repo.as_deref())?;
-            let params = ExploreParams::from_cli(file_path, include_markup);
+            let services = QueryServices::real(&cfg.embed);
+            let params = ExploreParams::from_cli(file_path.clone(), include_markup);
             let value = run_explore_file(&cfg, &services, &params)?;
             Ok(format_explore_output(&value, output))
         }
-        Commands::Files { path, repo, output } => {
+        Commands::Files {
+            ref path,
+            ref repo,
+            output,
+        } => {
             check_scope(&cfg, repo.as_deref())?;
-            let params = FilesParams::from_cli(path);
+            let services = QueryServices::real(&cfg.embed);
+            let params = FilesParams::from_cli(path.clone());
             let value = run_list_files(&cfg, &services, &params)?;
             Ok(format_files_output(&value, output))
         }
@@ -157,5 +172,29 @@ mod tests {
     fn exit_code_for_plain_error_is_1() {
         let err = anyhow::anyhow!("boom");
         assert_eq!(exit_code_for(&err), 1);
+    }
+
+    #[test]
+    fn run_cli_files_on_fixture_index_renders_table() {
+        let (tmp, cfg) = crate::index::build::test_support::fixture();
+        let mut fake = crate::embed::fake::FakeEmbedder::new(16);
+        crate::index::build::build_index(
+            &cfg,
+            &mut fake,
+            &crate::index::build::test_support::opts(),
+            &mut |_| {},
+        )
+        .expect("build");
+
+        let cli = cli_for(
+            &tmp,
+            Commands::Files {
+                path: None,
+                repo: None,
+                output: OutputFormat::Table,
+            },
+        );
+        let out = run_cli(cli).expect("files must succeed");
+        assert!(out.contains("PATH") && out.contains("src/lib.rs"), "{out}");
     }
 }

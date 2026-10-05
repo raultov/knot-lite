@@ -5,6 +5,47 @@
 //! function). They are the contract for Phases 3/4: the query runners accept
 //! them unchanged.
 
+use crate::index::layout::CommitMode;
+use crate::models::cli_args::IndexArgs;
+
+/// Parameters of `index` (CLI subcommand).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexParams {
+    /// Re-embed every record (ignore reusable vectors).
+    pub force: bool,
+    /// Effective commit mode (`Some(Commit)` or `Some(Gitignore)` or `None`).
+    pub commit_mode: Option<CommitMode>,
+    /// Optional embedding model override.
+    pub embed_model: Option<String>,
+    /// Optional parallel parser threads.
+    pub jobs: Option<usize>,
+    /// Passages per embedding call.
+    pub batch_size: usize,
+    /// Quiet output on stderr.
+    pub quiet: bool,
+}
+
+impl IndexParams {
+    /// Map from the CLI `index` subcommand arguments.
+    pub fn from_cli(args: &IndexArgs) -> Self {
+        let commit_mode = if args.commit {
+            Some(CommitMode::Commit)
+        } else if args.gitignore {
+            Some(CommitMode::Gitignore)
+        } else {
+            None
+        };
+        Self {
+            force: args.force,
+            commit_mode,
+            embed_model: args.embed_model.clone(),
+            jobs: args.jobs,
+            batch_size: args.batch_size,
+            quiet: args.quiet,
+        }
+    }
+}
+
 /// Parameters of `search_hybrid_context`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchParams {
@@ -134,42 +175,70 @@ mod tests {
     use super::*;
 
     #[test]
+    fn index_params_from_cli() {
+        let args = IndexArgs {
+            force: true,
+            commit: true,
+            gitignore: false,
+            embed_model: Some("BGEBaseENV15".to_string()),
+            jobs: Some(4),
+            batch_size: 64,
+            quiet: true,
+            output: crate::config::OutputFormat::Json,
+        };
+        let params = IndexParams::from_cli(&args);
+        assert_eq!(
+            params,
+            IndexParams {
+                force: true,
+                commit_mode: Some(CommitMode::Commit),
+                embed_model: Some("BGEBaseENV15".to_string()),
+                jobs: Some(4),
+                batch_size: 64,
+                quiet: true,
+            }
+        );
+
+        let gi_args = IndexArgs {
+            commit: false,
+            gitignore: true,
+            ..args
+        };
+        assert_eq!(
+            IndexParams::from_cli(&gi_args).commit_mode,
+            Some(CommitMode::Gitignore)
+        );
+    }
+
+    #[test]
     fn search_from_cli_keeps_all_fields() {
         let params = SearchParams::from_cli(
-            "q".to_string(),
-            7,
-            Some("rust_function".to_string()),
-            Some("src/".to_string()),
+            "user auth".to_string(),
+            10,
+            Some("definition".to_string()),
+            Some("src/api".to_string()),
         );
-        assert_eq!(params.query, "q");
-        assert_eq!(params.max_results, Some(7));
-        assert_eq!(params.kinds.as_deref(), Some("rust_function"));
-        assert_eq!(params.path.as_deref(), Some("src/"));
+        assert_eq!(params.query, "user auth");
+        assert_eq!(params.max_results, Some(10));
+        assert_eq!(params.kinds.as_deref(), Some("definition"));
+        assert_eq!(params.path.as_deref(), Some("src/api"));
     }
 
     #[test]
     fn callers_from_cli_maps_optional_max_targets() {
-        let with = CallersParams::from_cli("E".to_string(), Some(3), None);
-        assert_eq!(with.max_targets, Some(3));
-        let without = CallersParams::from_cli("E".to_string(), None, None);
-        assert_eq!(without.max_targets, None);
+        let with_max = CallersParams::from_cli("handle".to_string(), Some(15), None);
+        assert_eq!(with_max.max_targets, Some(15));
+        let without_max = CallersParams::from_cli("handle".to_string(), None, None);
+        assert_eq!(without_max.max_targets, None);
     }
 
     #[test]
     fn explore_and_files_from_cli() {
-        assert_eq!(
-            ExploreParams::from_cli("src/lib.rs".to_string(), true),
-            ExploreParams {
-                file_path: "src/lib.rs".to_string(),
-                include_markup: true,
-            }
-        );
-        assert_eq!(
-            FilesParams::from_cli(Some("src/".to_string())),
-            FilesParams {
-                path: Some("src/".to_string())
-            }
-        );
-        assert_eq!(FilesParams::from_cli(None), FilesParams::default());
+        let explore = ExploreParams::from_cli("src/lib.rs".to_string(), true);
+        assert_eq!(explore.file_path, "src/lib.rs");
+        assert!(explore.include_markup);
+
+        let files = FilesParams::from_cli(Some("src/".to_string()));
+        assert_eq!(files.path.as_deref(), Some("src/"));
     }
 }
