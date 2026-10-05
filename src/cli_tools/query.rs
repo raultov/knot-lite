@@ -1,13 +1,12 @@
-//! Query tool entry points (`run_*`), returning typed unavailability errors
-//! until indexing lands in later phases.
+//! Query tool entry points (`run_*`).
 //!
-//! Each body is a single [`unavailable`] call: the params are the Phase 3/4
-//! contract (named `_params` here on purpose — nothing can run yet).
+//! Interim (P2.8): the runners only diagnose the index through the loader; the
+//! real query bodies replace them in P2.9–P2.11.
 
 use crate::config::Config;
 use crate::error::QueryUnavailable;
-use crate::index::layout::{INDEX_DIR, IndexLayout, MANIFEST_FILE, MANIFEST_SCHEMA_V1};
-use crate::index::manifest::{IndexState, read_index_state};
+use crate::index::layout::IndexLayout;
+use crate::index::load::load_index;
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
 
 /// `search_hybrid_context` — semantic search (Phase 3).
@@ -42,51 +41,16 @@ pub fn run_list_files(
     Err(unavailable(cfg, "list_files"))
 }
 
-/// Map the index state to the matching [`QueryUnavailable`] variant.
-///
-/// Cheap and synchronous: reads only the manifest, never scans the repository.
+/// Diagnose why `tool` cannot answer: the loader's reason when the index is
+/// unusable; a loadable index cannot answer yet either (interim).
 fn unavailable(cfg: &Config, tool: &str) -> QueryUnavailable {
-    let manifest = format!("{INDEX_DIR}/{MANIFEST_FILE}");
-    let version = env!("CARGO_PKG_VERSION").to_string();
-    let repo = cfg.repo_name.clone();
-    let tool = tool.to_string();
-    match read_index_state(&IndexLayout::for_repo(&cfg.repo_path)) {
-        IndexState::Absent => QueryUnavailable::NotIndexed {
-            tool,
-            repo,
-            manifest,
-            version,
-        },
-        IndexState::Present {
-            schema,
-            knot_lite_version,
-        } => QueryUnavailable::NotImplemented {
-            tool,
-            repo,
-            schema,
-            written_by: knot_lite_version,
-            version,
-        },
-        IndexState::Unsupported { schema } => QueryUnavailable::Unsupported {
-            tool,
-            repo,
-            schema,
-            expected: MANIFEST_SCHEMA_V1.to_string(),
-            version,
-        },
-        IndexState::Invalid { error } => QueryUnavailable::Invalid {
-            tool,
-            repo,
-            manifest,
-            error,
-        },
-        // Interim mapping until the error rework (P2.8) adds a dedicated variant.
-        IndexState::Incomplete => QueryUnavailable::Invalid {
-            tool,
-            repo,
-            manifest,
-            error: "an interrupted `knot-lite index` run left the index incomplete; re-run `knot-lite index`"
-                .to_string(),
+    match load_index(&IndexLayout::for_repo(&cfg.repo_path)) {
+        Err(reason) => reason.for_tool(tool, &cfg.repo_name),
+        Ok(_) => QueryUnavailable::Invalid {
+            tool: tool.to_owned(),
+            repo: cfg.repo_name.clone(),
+            manifest: IndexLayout::manifest_rel(),
+            error: "this knot-lite build cannot answer queries yet".to_owned(),
         },
     }
 }
@@ -140,41 +104,51 @@ mod tests {
             assert!(text.contains("has no index"), "{text}");
             assert!(text.contains("'demo'"), "{text}");
             assert!(text.contains("`status`"), "{text}");
+            assert!(text.contains("`knot-lite index`"), "{text}");
+        }
+    }
+
+    fn write_manifest(tmp: &tempfile::TempDir, body: &str) {
+        let dir = tmp.path().join(".knot-lite");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        std::fs::write(dir.join("manifest.toml"), body).expect("write manifest");
+    }
+
+    #[test]
+    fn header_only_manifest_reports_invalid() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        write_manifest(
+            &tmp,
+            "schema = \"knot-lite/manifest/v1\"\nknot_lite_version = \"0.0.1\"\n",
+        );
+        let cfg = config_for(tmp.path().to_path_buf());
+        for err in all_unavailable(&cfg) {
+            let text = err.to_string();
+            assert!(matches!(err, QueryUnavailable::Invalid { .. }), "{text}");
+            assert!(text.contains("could not be read"), "{text}");
+            assert!(text.contains(".knot-lite/manifest.toml"), "{text}");
         }
     }
 
     #[test]
-    fn v1_manifest_reports_not_implemented() {
+    fn leftover_previous_manifest_reports_incomplete() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let dir = tmp.path().join(".knot-lite");
         std::fs::create_dir_all(&dir).expect("mkdir");
-        std::fs::write(
-            dir.join("manifest.toml"),
-            "schema = \"knot-lite/manifest/v1\"\nknot_lite_version = \"0.0.1\"\n",
-        )
-        .expect("write manifest");
+        std::fs::write(dir.join("manifest.prev.toml"), "x = 1\n").expect("write");
         let cfg = config_for(tmp.path().to_path_buf());
         for err in all_unavailable(&cfg) {
-            let text = err.to_string();
-            assert!(
-                matches!(err, QueryUnavailable::NotImplemented { .. }),
-                "{text}"
-            );
-            assert!(text.contains("cannot query indexes yet"), "{text}");
-            assert!(text.contains("0.0.1"), "{text}");
+            assert!(matches!(err, QueryUnavailable::Incomplete { .. }), "{err}");
         }
     }
 
     #[test]
     fn other_schema_reports_unsupported() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let dir = tmp.path().join(".knot-lite");
-        std::fs::create_dir_all(&dir).expect("mkdir");
-        std::fs::write(
-            dir.join("manifest.toml"),
+        write_manifest(
+            &tmp,
             "schema = \"knot-lite/manifest/v2\"\nknot_lite_version = \"9.9.9\"\n",
-        )
-        .expect("write manifest");
+        );
         let cfg = config_for(tmp.path().to_path_buf());
         for err in all_unavailable(&cfg) {
             let text = err.to_string();

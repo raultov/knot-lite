@@ -65,6 +65,7 @@ impl ContainerKey {
     }
 }
 
+#[derive(Debug)]
 struct ContainerSpan {
     l0: usize,
     l1: usize,
@@ -74,7 +75,7 @@ struct ContainerSpan {
 }
 
 /// Per-file container spans, for "which container holds line N" lookups.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ContainerTable {
     by_file: HashMap<String, Vec<ContainerSpan>>,
 }

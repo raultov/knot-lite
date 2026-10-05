@@ -14,4 +14,5 @@ pub mod index;
 pub mod mcp_handler;
 pub mod mcp_tools;
 pub mod models;
+pub mod query;
 pub mod utils;

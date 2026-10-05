@@ -206,7 +206,7 @@ pub fn now_rfc3339() -> String {
 }
 
 /// Collapse an error message to a single line (kept for stable JSON output).
-fn one_line(message: &str) -> String {
+pub(crate) fn one_line(message: &str) -> String {
     message
         .lines()
         .map(str::trim)
