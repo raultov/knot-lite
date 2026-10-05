@@ -215,8 +215,60 @@ fn one_line(message: &str) -> String {
         .join(" ")
 }
 
+/// Shared fixtures for tests that need a fully populated [`Manifest`].
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    /// A fully populated manifest (`demo`, MiniLM-shaped embedding, non-zero counts).
+    pub(crate) fn sample_manifest() -> Manifest {
+        Manifest {
+            schema: MANIFEST_SCHEMA_V1.to_string(),
+            knot_lite_version: "0.2.0".to_string(),
+            knot_version: KNOT_VERSION.to_string(),
+            repo_name: "demo".to_string(),
+            created_at: "2026-10-05T10:00:00Z".to_string(),
+            updated_at: "2026-10-05T11:30:00Z".to_string(),
+            source_fingerprint: "ab".repeat(32),
+            commit_mode: CommitMode::Gitignore,
+            embedding: EmbeddingSpec {
+                model: "AllMiniLML6V2".to_string(),
+                dim: 384,
+                encoding: ENCODING_I8PV_B64.to_string(),
+                query_prefix: String::new(),
+                passage_prefix: String::new(),
+            },
+            counts: IndexCounts {
+                files_inventoried: 9,
+                files_parsed: 7,
+                files_with_entities: 6,
+                tier1_files: 2,
+                entities: 40,
+                entities_without_vector: 1,
+                chunks: 3,
+                file_vectors: 2,
+                records: 45,
+                edges: 12,
+                dropped_edges: 1,
+                shards: 8,
+                edge_shards: 4,
+            },
+            timings_ms: IndexTimings {
+                select: 1,
+                parse: 2,
+                prepare: 3,
+                resolve: 4,
+                embed: 5,
+                write: 6,
+                total: 21,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::test_support::sample_manifest;
     use super::*;
 
     fn layout_for(tmp: &tempfile::TempDir) -> IndexLayout {
@@ -319,50 +371,6 @@ mod tests {
         let before = dir_listing(&tmp);
         let _ = read_index_state(&layout_for(&tmp));
         assert_eq!(before, dir_listing(&tmp));
-    }
-
-    fn sample_manifest() -> Manifest {
-        Manifest {
-            schema: MANIFEST_SCHEMA_V1.to_string(),
-            knot_lite_version: "0.2.0".to_string(),
-            knot_version: KNOT_VERSION.to_string(),
-            repo_name: "demo".to_string(),
-            created_at: "2026-10-05T10:00:00Z".to_string(),
-            updated_at: "2026-10-05T11:30:00Z".to_string(),
-            source_fingerprint: "ab".repeat(32),
-            commit_mode: CommitMode::Gitignore,
-            embedding: EmbeddingSpec {
-                model: "AllMiniLML6V2".to_string(),
-                dim: 384,
-                encoding: ENCODING_I8PV_B64.to_string(),
-                query_prefix: String::new(),
-                passage_prefix: String::new(),
-            },
-            counts: IndexCounts {
-                files_inventoried: 9,
-                files_parsed: 7,
-                files_with_entities: 6,
-                tier1_files: 2,
-                entities: 40,
-                entities_without_vector: 1,
-                chunks: 3,
-                file_vectors: 2,
-                records: 45,
-                edges: 12,
-                dropped_edges: 1,
-                shards: 8,
-                edge_shards: 4,
-            },
-            timings_ms: IndexTimings {
-                select: 1,
-                parse: 2,
-                prepare: 3,
-                resolve: 4,
-                embed: 5,
-                write: 6,
-                total: 21,
-            },
-        }
     }
 
     #[test]

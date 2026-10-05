@@ -12,6 +12,7 @@ pub mod inventory;
 pub mod layout;
 pub mod manifest;
 pub mod record_io;
+pub mod reuse;
 pub mod select;
 pub mod shard;
 

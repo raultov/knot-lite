@@ -73,6 +73,30 @@ pub fn read_jsonl<T: DeserializeOwned>(path: &Path) -> anyhow::Result<Vec<T>> {
     Ok(records)
 }
 
+/// Every `*.jsonl` file under `base`, recursively, sorted. A missing `base`
+/// yields an empty list.
+pub fn list_record_files(base: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    if base.exists() {
+        collect_record_files(base, &mut files)?;
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn collect_record_files(dir: &Path, files: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir).with_context(|| format!("listing {}", dir.display()))? {
+        let entry = entry.with_context(|| format!("listing {}", dir.display()))?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_record_files(&path, files)?;
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("jsonl") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Delete every `*.jsonl` under `base` whose path is not in `keep`, plus any
 /// leftover `*.tmp`, then remove directories left empty (never `base` itself).
 /// Returns the number of files deleted. A missing `base` is not an error.
@@ -257,6 +281,36 @@ mod tests {
         std::fs::write(&path, "{\"a\":1,\"b\":\"x\"}\n\nnot json\n").expect("write");
         let error = format!("{:#}", read_jsonl::<Row>(&path).expect_err("must fail"));
         assert!(error.contains("x.jsonl:3"), "{error}");
+    }
+
+    #[test]
+    fn list_record_files_is_recursive_sorted_and_jsonl_only() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let base = tmp.path().join("shards");
+        for rel in [
+            "b.jsonl",
+            "a/z.jsonl",
+            "a/y.jsonl",
+            "a/skip.tmp",
+            "c/notes.md",
+        ] {
+            let path = base.join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+            std::fs::write(path, "{}\n").expect("write");
+        }
+        assert_eq!(
+            list_record_files(&base).expect("list"),
+            vec![
+                base.join("a/y.jsonl"),
+                base.join("a/z.jsonl"),
+                base.join("b.jsonl")
+            ]
+        );
+        assert!(
+            list_record_files(&tmp.path().join("missing"))
+                .expect("list")
+                .is_empty()
+        );
     }
 
     #[test]

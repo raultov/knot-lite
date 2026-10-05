@@ -23,6 +23,7 @@ use super::manifest::{
     write_manifest_atomic,
 };
 use super::record_io::{WriteOutcome, remove_orphans, write_jsonl_if_changed};
+use super::reuse::{ReuseMap, ReuseSource};
 use super::select::{Selection, select_files};
 use super::shard::{ShardLine, chunk_id, sort_lines, text_hash};
 use crate::capability::languages::label_for;
@@ -116,6 +117,8 @@ pub struct VectorStats {
     pub embedded: usize,
     /// Records without embed text (no vector).
     pub without_text: usize,
+    /// Why vectors were (not) reused; serialised as its label.
+    pub reuse_source: ReuseSource,
 }
 
 /// `files` object of the report.
@@ -204,7 +207,7 @@ pub fn build_index(
 ) -> anyhow::Result<BuildReport> {
     let started = Instant::now();
     let spec = embedder.spec();
-    let dir = prepare_dir(cfg, opts)?;
+    let mut dir = prepare_dir(cfg, opts)?;
     let mut timings = IndexTimings::default();
 
     progress(ProgressEvent::Stage { name: "select" });
@@ -225,7 +228,12 @@ pub fn build_index(
 
     progress(ProgressEvent::Stage { name: "embed" });
     let stage = Instant::now();
-    let vectors = assign_vectors(&mut records.pending, embedder, &spec, opts, progress)?;
+    let (reuse, reuse_warnings) =
+        ReuseMap::load(&dir.layout, dir.previous.as_ref(), &spec, opts.force);
+    dir.warnings.extend(reuse_warnings);
+    apply_reuse(&mut records.pending, &reuse);
+    let mut vectors = assign_vectors(&mut records.pending, embedder, &spec, opts, progress)?;
+    vectors.reuse_source = reuse.source;
     timings.embed = elapsed_ms(stage);
 
     progress(ProgressEvent::Stage { name: "write" });
@@ -512,6 +520,20 @@ fn tier1_records(
     Ok(out)
 }
 
+/// Pre-fill `q`/`s` from the previous index for every record whose text hash
+/// is known (byte-identical output, P2-D6).
+fn apply_reuse(records: &mut [PendingRecord], reuse: &ReuseMap) {
+    for record in records.iter_mut() {
+        if record.text.trim().is_empty() {
+            continue;
+        }
+        if let Some((q, s)) = reuse.get(&record.line.h) {
+            record.line.q = Some(q.clone());
+            record.line.s = Some(*s);
+        }
+    }
+}
+
 /// Embed every record that has text but no vector yet, in slices of
 /// [`EMBED_SLICE`] texts, then normalise and quantise (P2-D5).
 fn assign_vectors(
@@ -568,6 +590,7 @@ fn assign_vectors(
         reused,
         embedded: total,
         without_text,
+        reuse_source: ReuseSource::default(),
     })
 }
 
@@ -666,26 +689,25 @@ fn elapsed_ms(since: Instant) -> u64 {
     u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
+/// Fixtures shared by the build tests and the incremental re-index tests.
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_support {
     use super::*;
     use crate::config::test_support::config_for;
     use crate::embed::fake::FakeEmbedder;
-    use crate::index::encode::decode_i8pv;
     use crate::index::fixture::write_fixture_repo;
-    use crate::index::manifest::{IndexState, read_index_state};
     use crate::index::record_io::read_jsonl;
 
-    const DIM: usize = 16;
+    pub(crate) const DIM: usize = 16;
 
-    fn fixture() -> (tempfile::TempDir, Config) {
+    pub(crate) fn fixture() -> (tempfile::TempDir, Config) {
         let tmp = tempfile::tempdir().expect("tempdir");
         write_fixture_repo(tmp.path()).expect("fixture");
         let cfg = config_for(tmp.path().to_path_buf());
         (tmp, cfg)
     }
 
-    fn opts() -> BuildOptions {
+    pub(crate) fn opts() -> BuildOptions {
         BuildOptions {
             jobs: 2,
             batch_size: 8,
@@ -693,17 +715,17 @@ mod tests {
         }
     }
 
-    fn run_with(cfg: &Config, opts: &BuildOptions) -> BuildReport {
+    pub(crate) fn run_with(cfg: &Config, opts: &BuildOptions) -> BuildReport {
         let mut fake = FakeEmbedder::new(DIM);
         build_index(cfg, &mut fake, opts, &mut |_| {}).expect("build")
     }
 
-    fn run(cfg: &Config) -> BuildReport {
+    pub(crate) fn run(cfg: &Config) -> BuildReport {
         run_with(cfg, &opts())
     }
 
     /// Every file under `dir` as `/`-separated relative path → bytes.
-    fn snapshot(dir: &Path) -> BTreeMap<String, Vec<u8>> {
+    pub(crate) fn snapshot(dir: &Path) -> BTreeMap<String, Vec<u8>> {
         fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
             for entry in std::fs::read_dir(dir).expect("read_dir") {
                 let path = entry.expect("entry").path();
@@ -722,7 +744,7 @@ mod tests {
     }
 
     /// Every shard as repo-relative file → lines.
-    fn shards(layout: &IndexLayout) -> BTreeMap<String, Vec<ShardLine>> {
+    pub(crate) fn shards(layout: &IndexLayout) -> BTreeMap<String, Vec<ShardLine>> {
         snapshot(&layout.shards)
             .into_keys()
             .map(|key| {
@@ -732,6 +754,16 @@ mod tests {
             })
             .collect()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::{DIM, fixture, opts, run, run_with, shards, snapshot};
+    use super::*;
+    use crate::config::test_support::config_for;
+    use crate::embed::fake::FakeEmbedder;
+    use crate::index::encode::decode_i8pv;
+    use crate::index::manifest::{IndexState, read_index_state};
 
     #[test]
     fn build_writes_expected_layout() {
