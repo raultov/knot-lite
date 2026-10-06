@@ -310,6 +310,7 @@ mod tests {
             &cfg,
             &mut fake,
             &crate::index::build::test_support::opts(),
+            None,
             &mut |_| {},
         )
         .expect("build");
@@ -403,6 +404,7 @@ mod tests {
             &cfg,
             &mut fake,
             &crate::index::build::test_support::opts(),
+            None,
             &mut |_| {},
         )
         .expect("rebuild");

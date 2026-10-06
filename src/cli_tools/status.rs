@@ -432,7 +432,8 @@ mod tests {
     fn status_reports_index_details_and_fresh() {
         let (_tmp, cfg) = fixture();
         let mut fake = FakeEmbedder::new(DIM);
-        crate::index::build::build_index(&cfg, &mut fake, &opts(), &mut |_| {}).expect("build");
+        crate::index::build::build_index(&cfg, &mut fake, &opts(), None, &mut |_| {})
+            .expect("build");
 
         let report = run_status_with(&cfg, &|_| stub_detect()).expect("report");
         assert_eq!(str_at(&report, &["index", "state"]), Some("present"));

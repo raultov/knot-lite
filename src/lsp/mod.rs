@@ -23,6 +23,7 @@ pub mod normalize;
 pub mod ops;
 pub mod pool;
 pub mod position;
+pub mod precompute;
 pub mod preopen;
 pub mod process;
 pub mod readiness;

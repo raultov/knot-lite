@@ -11,6 +11,7 @@ pub(crate) mod hash;
 pub mod inventory;
 pub mod layout;
 pub mod load;
+pub mod lsp_records;
 pub mod manifest;
 pub mod record_io;
 pub mod reuse;

@@ -15,13 +15,15 @@ use knot::pipeline::parser::{ParseConfig, parse_files_stream};
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::graph::containers::ContainerTable;
+
 use super::chunk::{chunk_file, tier1_files};
 use super::edges::EdgeLine;
 use super::encode::{encode_i8pv, normalize};
 use super::inventory::{Inventory, collect_inventory, fingerprint, write_inventory};
 use super::layout::{CommitMode, INDEX_DIR, IndexLayout, MANIFEST_SCHEMA_V1, apply_commit_mode};
 use super::manifest::{
-    IndexCounts, IndexTimings, KNOT_VERSION, Manifest, now_rfc3339, read_manifest,
+    IndexCounts, IndexTimings, KNOT_VERSION, LspManifest, Manifest, now_rfc3339, read_manifest,
     write_manifest_atomic,
 };
 use super::record_io::{WriteOutcome, remove_orphans, write_jsonl_if_changed};
@@ -33,7 +35,12 @@ use crate::config::Config;
 use crate::embed::{EmbedBatch, EmbeddingSpec};
 use crate::graph::heuristic::{ResolverMetrics, resolve_edges};
 use crate::lsp::ops::{TargetShape, shape_of};
+use crate::lsp::pool::LspPool;
 use crate::lsp::position::{is_nameless, locate_name_in_lines};
+use crate::lsp::precompute::{
+    PrecomputeInput, PrecomputeOptions, PrecomputePolicy, ProgressEvent as LspProgressEvent,
+    run as run_precompute,
+};
 
 /// Schema id of the [`BuildReport`] document.
 pub const INDEX_RUN_SCHEMA_V1: &str = "knot-lite/index-run/v1";
@@ -41,7 +48,6 @@ pub const INDEX_RUN_SCHEMA_V1: &str = "knot-lite/index-run/v1";
 /// Passages handed to the embedder per progress step.
 pub const EMBED_SLICE: usize = 1024;
 
-/// Default number of passages per model call.
 pub const DEFAULT_BATCH_SIZE: usize = 128;
 
 /// Capacity of the parser → collector channel.
@@ -58,6 +64,8 @@ pub struct BuildOptions {
     pub jobs: usize,
     /// Passages per embedder call (values below 1 are treated as 1).
     pub batch_size: usize,
+    /// Options for LSP call graph pre-computation (P3-D9).
+    pub lsp: PrecomputeOptions,
 }
 
 impl Default for BuildOptions {
@@ -67,6 +75,7 @@ impl Default for BuildOptions {
             commit_mode: None,
             jobs: std::thread::available_parallelism().map_or(4, std::num::NonZero::get),
             batch_size: DEFAULT_BATCH_SIZE,
+            lsp: PrecomputeOptions::default(),
         }
     }
 }
@@ -84,6 +93,15 @@ pub enum ProgressEvent {
         /// Passages embedded.
         done: usize,
         /// Passages to embed in this run.
+        total: usize,
+    },
+    /// LSP target progress during pre-computation.
+    LspTargets {
+        /// Language.
+        lang: LspLang,
+        /// Targets processed so far.
+        done: usize,
+        /// Total targets to process.
         total: usize,
     },
     /// The run finished.
@@ -168,6 +186,9 @@ pub struct BuildReport {
     pub resolver: ResolverMetrics,
     /// Per-stage timings.
     pub timings_ms: IndexTimings,
+    /// Pre-computed LSP call graph manifest, if any (§10.3).
+    #[serde(default)]
+    pub lsp: Option<LspManifest>,
     /// Non-fatal problems found during the run.
     pub warnings: Vec<String>,
 }
@@ -214,6 +235,7 @@ pub fn build_index(
     cfg: &Config,
     embedder: &mut dyn EmbedBatch,
     opts: &BuildOptions,
+    lsp_pool: Option<&LspPool>,
     progress: &mut dyn FnMut(ProgressEvent),
 ) -> anyhow::Result<BuildReport> {
     let started = Instant::now();
@@ -252,6 +274,12 @@ pub fn build_index(
     vectors.reuse_source = reuse.source;
     timings.embed = elapsed_ms(stage);
 
+    let all_records: Vec<(String, ShardLine)> = records
+        .pending
+        .iter()
+        .map(|r| (r.file.clone(), r.line.clone()))
+        .collect();
+
     progress(ProgressEvent::Stage { name: "write" });
     let stage = Instant::now();
     let shards = write_shards(&dir.layout, records.pending)?;
@@ -262,6 +290,22 @@ pub fn build_index(
     let edges = write_edges(&dir.layout, &resolved.edges, &entity_files)?;
     write_inventory(&dir.layout.inventory, &inventory)?;
     timings.write = elapsed_ms(stage);
+
+    // LSP pre-computation stage (P3-D9)
+    let (lsp_manifest, lsp_ms) = run_lsp_stage(
+        &LspStageCtx {
+            cfg,
+            dir: &dir,
+            opts,
+            entities: &entities,
+            all_records: &all_records,
+            edges: &resolved.edges,
+            inventory: &inventory,
+        },
+        lsp_pool,
+        progress,
+    )?;
+    timings.lsp = lsp_ms;
     timings.total = elapsed_ms(started);
 
     let manifest = build_manifest(
@@ -270,8 +314,16 @@ pub fn build_index(
         ManifestParts {
             spec: &spec,
             source_fingerprint: fingerprint(&inventory),
-            counts: index_counts(&selection, &inventory, &records.stats, &shards, &edges),
+            counts: index_counts(CountsInputs {
+                selection: &selection,
+                inventory: &inventory,
+                stats: &records.stats,
+                shards: &shards,
+                edges: &edges,
+                lsp: lsp_manifest.as_ref(),
+            }),
             timings,
+            lsp: lsp_manifest,
         },
     );
     write_manifest_atomic(&dir.layout.manifest, &manifest)?;
@@ -292,6 +344,96 @@ pub fn build_index(
             resolver: resolved.metrics,
         },
     ))
+}
+
+struct LspStageCtx<'a> {
+    cfg: &'a Config,
+    dir: &'a RunDir,
+    opts: &'a BuildOptions,
+    entities: &'a [ParsedEntity],
+    all_records: &'a [(String, ShardLine)],
+    edges: &'a BTreeSet<(Uuid, Uuid, String)>,
+    inventory: &'a Inventory,
+}
+
+fn run_lsp_stage(
+    ctx: &LspStageCtx<'_>,
+    lsp_pool: Option<&LspPool>,
+    progress: &mut dyn FnMut(ProgressEvent),
+) -> anyhow::Result<(Option<LspManifest>, Option<u64>)> {
+    if ctx.opts.lsp.policy == PrecomputePolicy::None {
+        return Ok((None, None));
+    }
+    let fanin = compute_heuristic_fanin(ctx.edges, ctx.entities, ctx.all_records);
+    let input = PrecomputeInput {
+        records: ctx.all_records,
+        heuristic_fanin: &fanin,
+        inventory: ctx.inventory,
+        previous: ctx.dir.previous.as_ref().and_then(|m| m.lsp.as_ref()),
+        repo_root: &ctx.cfg.repo_path,
+    };
+    let mut adapter = |event: LspProgressEvent| match event {
+        LspProgressEvent::Stage => progress(ProgressEvent::Stage { name: "lsp" }),
+        LspProgressEvent::LspTargets { lang, done, total } => {
+            progress(ProgressEvent::LspTargets { lang, done, total })
+        }
+    };
+    let lsp_m = run_precompute(
+        &input,
+        &ctx.opts.lsp,
+        lsp_pool,
+        &ctx.dir.layout,
+        &mut adapter,
+    )?;
+    let lsp_ms = lsp_m.languages.values().map(|l| l.ms).max();
+    Ok((Some(lsp_m), lsp_ms))
+}
+
+fn compute_heuristic_fanin(
+    edges: &BTreeSet<(Uuid, Uuid, String)>,
+    entities: &[ParsedEntity],
+    all_records: &[(String, ShardLine)],
+) -> HashMap<String, usize> {
+    let entity_files: HashMap<Uuid, &str> = entities
+        .iter()
+        .map(|e| (e.uuid, e.file_path.as_str()))
+        .collect();
+    let entity_lines: HashMap<Uuid, usize> =
+        entities.iter().map(|e| (e.uuid, e.start_line)).collect();
+
+    let container_table = ContainerTable::from_records(
+        all_records
+            .iter()
+            .enumerate()
+            .map(|(idx, (rel, line))| (idx, rel.as_str(), line)),
+    );
+
+    let mut fanin_containers: HashMap<String, BTreeSet<String>> = HashMap::new();
+
+    for (src_uuid, dst_uuid, _rel) in edges {
+        let Some(&src_file) = entity_files.get(src_uuid) else {
+            continue;
+        };
+        let Some(&src_line1) = entity_lines.get(src_uuid) else {
+            continue;
+        };
+
+        let dst_id = dst_uuid.to_string();
+        let (_, container_idx) = container_table.container_at(src_file, src_line1);
+        let container_id = container_idx
+            .map(|idx| all_records[idx].1.id.clone())
+            .unwrap_or_else(|| src_file.to_owned());
+
+        fanin_containers
+            .entry(dst_id)
+            .or_default()
+            .insert(container_id);
+    }
+
+    fanin_containers
+        .into_iter()
+        .map(|(dst_id, set)| (dst_id, set.len()))
+        .collect()
 }
 
 /// What the stages produced, beyond what the manifest already holds.
@@ -334,7 +476,8 @@ fn assemble_report(
             edge_shards_removed: results.edges.removed,
         },
         resolver: results.resolver,
-        timings_ms: manifest.timings_ms,
+        timings_ms: manifest.timings_ms.clone(),
+        lsp: manifest.lsp.clone(),
         warnings: dir.warnings,
     }
 }
@@ -821,29 +964,47 @@ fn write_edges(
     Ok(stats)
 }
 
-fn index_counts(
-    selection: &Selection,
-    inventory: &Inventory,
-    stats: &RecordStats,
-    shards: &ShardStats,
-    edges: &EdgeStats,
-) -> IndexCounts {
+struct CountsInputs<'a> {
+    selection: &'a Selection,
+    inventory: &'a Inventory,
+    stats: &'a RecordStats,
+    shards: &'a ShardStats,
+    edges: &'a EdgeStats,
+    lsp: Option<&'a LspManifest>,
+}
+
+fn index_counts(inputs: CountsInputs<'_>) -> IndexCounts {
+    let (lsp_edges, lsp_edge_shards, lsp_targets) = match inputs.lsp {
+        Some(m) => {
+            let mut total_edges = 0;
+            let mut total_targets = 0;
+            for lang_m in m.languages.values() {
+                total_edges += lang_m.edges;
+                total_targets += lang_m.targets_selected;
+            }
+            (total_edges as u64, 0u64, total_targets as u64)
+        }
+        None => (0, 0, 0),
+    };
     IndexCounts {
-        files_inventoried: count(inventory.entries.len()),
-        files_parsed: count(selection.parse.len()),
-        files_with_entities: count(stats.files_with_entities),
-        tier1_files: count(stats.tier1_files),
-        entities: count(stats.entities),
-        entities_without_vector: count(stats.entities_without_vector),
-        chunks: count(stats.chunks),
-        file_vectors: count(stats.file_vectors),
-        records: count(stats.records),
-        edges: count(edges.edges),
-        dropped_edges: count(edges.dropped),
-        shards: count(shards.files),
-        edge_shards: count(edges.files),
-        columns_located: count(stats.columns_located),
-        columns_missing: count(stats.columns_missing),
+        files_inventoried: count(inputs.inventory.entries.len()),
+        files_parsed: count(inputs.selection.parse.len()),
+        files_with_entities: count(inputs.stats.files_with_entities),
+        tier1_files: count(inputs.stats.tier1_files),
+        entities: count(inputs.stats.entities),
+        entities_without_vector: count(inputs.stats.entities_without_vector),
+        chunks: count(inputs.stats.chunks),
+        file_vectors: count(inputs.stats.file_vectors),
+        records: count(inputs.stats.records),
+        edges: count(inputs.edges.edges),
+        dropped_edges: count(inputs.edges.dropped),
+        shards: count(inputs.shards.files),
+        edge_shards: count(inputs.edges.files),
+        columns_located: count(inputs.stats.columns_located),
+        columns_missing: count(inputs.stats.columns_missing),
+        lsp_edges,
+        lsp_edge_shards,
+        lsp_targets,
     }
 }
 
@@ -853,6 +1014,7 @@ struct ManifestParts<'a> {
     source_fingerprint: String,
     counts: IndexCounts,
     timings: IndexTimings,
+    lsp: Option<LspManifest>,
 }
 
 fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manifest {
@@ -872,6 +1034,7 @@ fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manif
         embedding: parts.spec.clone(),
         counts: parts.counts,
         timings_ms: parts.timings,
+        lsp: parts.lsp,
     }
 }
 
@@ -911,7 +1074,7 @@ pub(crate) mod test_support {
 
     pub(crate) fn run_with(cfg: &Config, opts: &BuildOptions) -> BuildReport {
         let mut fake = FakeEmbedder::new(DIM);
-        build_index(cfg, &mut fake, opts, &mut |_| {}).expect("build")
+        build_index(cfg, &mut fake, opts, None, &mut |_| {}).expect("build")
     }
 
     pub(crate) fn run(cfg: &Config) -> BuildReport {
@@ -1199,7 +1362,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let mut fake = FakeEmbedder::new(DIM);
-            let outcome = build_index(&cfg, &mut fake, &opts(), &mut |_| {});
+            let outcome = build_index(&cfg, &mut fake, &opts(), None, &mut |_| {});
             tx.send(outcome.map(|report| report.counts.entities)).ok();
         });
         let entities = rx
@@ -1254,7 +1417,10 @@ mod tests {
         let (_tmp, cfg) = fixture();
         let mut events = Vec::new();
         let mut fake = FakeEmbedder::new(DIM);
-        build_index(&cfg, &mut fake, &opts(), &mut |event| events.push(event)).expect("build");
+        build_index(&cfg, &mut fake, &opts(), None, &mut |event| {
+            events.push(event)
+        })
+        .expect("build");
 
         let stages: Vec<&str> = events
             .iter()
@@ -1265,7 +1431,9 @@ mod tests {
             .collect();
         assert_eq!(
             stages,
-            vec!["select", "parse", "prepare", "resolve", "embed", "write"]
+            vec![
+                "select", "parse", "prepare", "resolve", "embed", "write", "lsp"
+            ]
         );
         assert!(matches!(events.last(), Some(ProgressEvent::Done { .. })));
         let embedded: Vec<(usize, usize)> = events
@@ -1358,8 +1526,8 @@ mod tests {
     #[test]
     fn build_rejects_vectors_of_the_wrong_dimension() {
         let (_tmp, cfg) = fixture();
-        let error =
-            build_index(&cfg, &mut ShortEmbedder, &opts(), &mut |_| {}).expect_err("must fail");
+        let error = build_index(&cfg, &mut ShortEmbedder, &opts(), None, &mut |_| {})
+            .expect_err("must fail");
         assert!(error.to_string().contains("expected 16"), "{error}");
     }
 

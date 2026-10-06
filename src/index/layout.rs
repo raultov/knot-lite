@@ -10,6 +10,7 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
 use super::record_io::atomic_write;
+use crate::capability::languages::LspLang;
 use crate::capability::scan::is_excluded_dir_name;
 
 /// Name of the per-repository index directory.
@@ -25,6 +26,10 @@ pub const MANIFEST_SCHEMA_V1: &str = "knot-lite/manifest/v1";
 pub const SHARDS_DIR: &str = "shards";
 /// Directory holding one JSONL edge shard per caller file.
 pub const EDGES_DIR: &str = "edges";
+/// Directory holding pre-computed LSP edge shards.
+pub const LSP_EDGES_DIR: &str = "lsp-edges";
+/// Directory holding pre-computed LSP target status files.
+pub const LSP_TARGETS_DIR: &str = "lsp-targets";
 /// Inventory of every file the index considered (freshness, P2-D15).
 pub const INVENTORY_FILE: &str = "inventory.jsonl";
 /// The previous manifest, kept while a run is in flight (P2-D13).
@@ -92,6 +97,32 @@ impl IndexLayout {
     /// Edge shard of the caller file `rel`: `edges/<rel>.jsonl`.
     pub fn edges_for(&self, rel: &str) -> anyhow::Result<PathBuf> {
         record_path(&self.edges, rel)
+    }
+
+    /// The `.knot-lite/lsp-edges` directory.
+    pub fn lsp_edges(&self) -> PathBuf {
+        self.dir.join(LSP_EDGES_DIR)
+    }
+
+    /// The `.knot-lite/lsp-targets` directory.
+    pub fn lsp_targets(&self) -> PathBuf {
+        self.dir.join(LSP_TARGETS_DIR)
+    }
+
+    /// `.knot-lite/lsp-edges/<lang>` directory.
+    pub fn lsp_edges_lang_dir(&self, lang: LspLang) -> PathBuf {
+        self.lsp_edges().join(lang.dir_name())
+    }
+
+    /// `.knot-lite/lsp-edges/<lang>/<caller rel>.jsonl`.
+    pub fn lsp_edges_for(&self, lang: LspLang, caller_rel: &str) -> anyhow::Result<PathBuf> {
+        record_path(&self.lsp_edges_lang_dir(lang), caller_rel)
+    }
+
+    /// `.knot-lite/lsp-targets/<lang>.jsonl`.
+    pub fn lsp_targets_for(&self, lang: LspLang) -> PathBuf {
+        self.lsp_targets()
+            .join(format!("{}.{RECORD_EXT}", lang.dir_name()))
     }
 
     /// Repo-relative manifest path (`.knot-lite/manifest.toml`), always with `/`.

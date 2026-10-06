@@ -359,7 +359,7 @@ mod tests {
         /// Second build with an observable embedder.
         fn rebuild(cfg: &Config, options: &BuildOptions) -> (BuildReport, FakeEmbedder) {
             let mut fake = FakeEmbedder::new(DIM);
-            let report = build_index(cfg, &mut fake, options, &mut |_| {}).expect("rebuild");
+            let report = build_index(cfg, &mut fake, options, None, &mut |_| {}).expect("rebuild");
             (report, fake)
         }
 

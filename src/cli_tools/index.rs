@@ -37,8 +37,9 @@ pub fn run_index_with(
             std::thread::available_parallelism().map_or(4, std::num::NonZero::get)
         }),
         batch_size: params.batch_size,
+        lsp: crate::lsp::precompute::PrecomputeOptions::default(),
     };
-    let report = build_index(cfg, embedder, &opts, progress)?;
+    let report = build_index(cfg, embedder, &opts, None, progress)?;
     serde_json::to_value(&report).context("failed to serialize the index report")
 }
 
@@ -52,6 +53,9 @@ fn report_progress(event: &ProgressEvent) {
         ProgressEvent::Stage { name } => eprintln!("index: {name}…"),
         ProgressEvent::Embedded { done, total } => {
             eprintln!("index: embed {done}/{total}");
+        }
+        ProgressEvent::LspTargets { lang, done, total } => {
+            eprintln!("index: lsp [{}] {done}/{total}", lang.dir_name());
         }
         ProgressEvent::Done { total_ms } => {
             let secs = (*total_ms as f64) / 1000.0;

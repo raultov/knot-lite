@@ -274,6 +274,7 @@ fn mcp_stdio_indexed_session() {
         &cfg,
         &mut fake,
         &knot_lite::index::build::BuildOptions::default(),
+        None,
         &mut |_| {},
     )
     .expect("build");

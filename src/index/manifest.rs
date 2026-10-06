@@ -52,6 +52,51 @@ pub struct Manifest {
     pub counts: IndexCounts,
     /// Per-stage timings of the last run, in milliseconds.
     pub timings_ms: IndexTimings,
+    /// Pre-computed LSP call graph manifest (P3-D9).
+    #[serde(default)]
+    pub lsp: Option<LspManifest>,
+}
+
+/// Pre-computed LSP metadata section in manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LspManifest {
+    /// Schema format version (1).
+    pub format: u32,
+    /// Policy used (`"auto"`, `"all"`, `"none"`).
+    pub policy: String,
+    /// Minimum fan-in threshold.
+    pub min_fanin: usize,
+    /// Maximum targets per language.
+    pub max_targets: usize,
+    /// Time budget in seconds per language.
+    pub budget_secs: u64,
+    /// Per-language manifest summaries.
+    pub languages: std::collections::BTreeMap<String, LspLangManifest>,
+}
+
+/// Pre-computed LSP status for one language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LspLangManifest {
+    /// Status (`"computed"`, `"reused"`, `"skipped"`, `"failed"`, `"none"`).
+    pub status: String,
+    /// Executable / server name.
+    pub server: String,
+    /// Server version from `serverInfo`.
+    pub version: String,
+    /// Inventory fingerprint of this language's files.
+    pub files_fingerprint: String,
+    /// Number of targets attempted.
+    pub targets_selected: usize,
+    /// Number of targets that produced an LSP answer.
+    pub targets_ok: usize,
+    /// Number of targets that failed or timed out.
+    pub targets_failed: usize,
+    /// Total pre-computed edges written across all shards.
+    pub edges: usize,
+    /// Wall-clock milliseconds spent pre-computing for this language.
+    pub ms: u64,
+    /// Diagnostic explanation when skipped or failed.
+    pub diagnostic: String,
 }
 
 /// Embedding model and wire encoding of the stored vectors. Lives here (not in
@@ -105,6 +150,15 @@ pub struct IndexCounts {
     /// Entities of language-server languages whose name column was not found.
     #[serde(default)]
     pub columns_missing: u64,
+    /// Pre-computed LSP edges.
+    #[serde(default)]
+    pub lsp_edges: u64,
+    /// Pre-computed LSP edge shards.
+    #[serde(default)]
+    pub lsp_edge_shards: u64,
+    /// Pre-computed LSP targets.
+    #[serde(default)]
+    pub lsp_targets: u64,
 }
 
 /// Per-stage wall-clock timings, milliseconds.
@@ -122,6 +176,9 @@ pub struct IndexTimings {
     pub embed: u64,
     /// Writing shards, edges, inventory and manifest.
     pub write: u64,
+    /// Language-server call graph pre-computation.
+    #[serde(default)]
+    pub lsp: Option<u64>,
     /// Whole run.
     pub total: u64,
 }
@@ -260,6 +317,9 @@ pub(crate) mod test_support {
                 edge_shards: 4,
                 columns_located: 17,
                 columns_missing: 2,
+                lsp_edges: 0,
+                lsp_edge_shards: 0,
+                lsp_targets: 0,
             },
             timings_ms: IndexTimings {
                 select: 1,
@@ -268,8 +328,10 @@ pub(crate) mod test_support {
                 resolve: 4,
                 embed: 5,
                 write: 6,
+                lsp: None,
                 total: 21,
             },
+            lsp: None,
         }
     }
 }
