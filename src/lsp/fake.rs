@@ -119,6 +119,11 @@ pub(crate) struct FakeScript {
     pub content_modified_first: usize,
     /// Every request waits this long before it is answered.
     pub delay: Duration,
+    /// When set, only requests of this method wait [`FakeScript::delay`].
+    pub delay_only: Option<&'static str>,
+    /// The first this many query answers are empty (a server that is still
+    /// indexing: the lag artefact behind Phase 0's `retried_empty`).
+    pub empty_first: usize,
 }
 
 impl FakeScript {
@@ -147,6 +152,7 @@ pub(crate) struct FakeCounters {
     shutdown_seen: AtomicBool,
     exit_seen: AtomicBool,
     content_modified_left: AtomicUsize,
+    empty_left: AtomicUsize,
 }
 
 impl FakeCounters {
@@ -192,12 +198,22 @@ impl FakeCounters {
 
     /// Consume one injected `ContentModified` failure, if any is left.
     fn take_content_modified(&self) -> bool {
-        self.content_modified_left
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
-                left.checked_sub(1)
-            })
-            .is_ok()
+        take_one(&self.content_modified_left)
     }
+
+    /// Consume one injected empty answer, if any is left.
+    fn take_empty(&self) -> bool {
+        take_one(&self.empty_left)
+    }
+}
+
+/// Decrement `counter` unless it is zero; whether it was decremented.
+fn take_one(counter: &AtomicUsize) -> bool {
+    counter
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+            left.checked_sub(1)
+        })
+        .is_ok()
 }
 
 /// The test's grip on the fake server.
@@ -248,6 +264,9 @@ pub(crate) async fn connect_result(
     counters
         .content_modified_left
         .store(script.content_modified_first, Ordering::SeqCst);
+    counters
+        .empty_left
+        .store(script.empty_first, Ordering::SeqCst);
 
     let (client_write, server_read) = tokio::io::duplex(PIPE_BYTES);
     let (server_write, client_read) = tokio::io::duplex(PIPE_BYTES);
@@ -301,7 +320,11 @@ fn gate(
     method: &str,
 ) -> impl Future<Output = Result<(), ResponseError>> + Send + use<> {
     lock(&state.counters.requests).push(method.to_owned());
-    let delay = state.script.delay;
+    let delay = if state.script.delay_only.is_none_or(|only| only == method) {
+        state.script.delay
+    } else {
+        Duration::ZERO
+    };
     let fail = state.counters.take_content_modified();
     async move {
         if !delay.is_zero() {
@@ -315,6 +338,15 @@ fn gate(
         } else {
             Ok(())
         }
+    }
+}
+
+/// The scripted answer, or nothing while the script still wants empty ones.
+fn answer<T>(state: &FakeState, scripted: impl FnOnce(&FakeScript) -> Vec<T>) -> Vec<T> {
+    if state.counters.take_empty() {
+        Vec::new()
+    } else {
+        scripted(&state.script)
     }
 }
 
@@ -376,7 +408,7 @@ fn register_queries(router: &mut Router<FakeState>) {
     router.request::<CallHierarchyPrepare, _>(|state, params| {
         let gate = gate(state, CallHierarchyPrepare::METHOD);
         let position = params.text_document_position_params.position;
-        let items = by_position(&state.script.prepare, position);
+        let items = answer(state, |script| by_position(&script.prepare, position));
         async move {
             gate.await?;
             Ok::<_, ResponseError>(Some(items))
@@ -384,13 +416,14 @@ fn register_queries(router: &mut Router<FakeState>) {
     });
     router.request::<CallHierarchyIncomingCalls, _>(|state, params| {
         let gate = gate(state, CallHierarchyIncomingCalls::METHOD);
-        let calls = state
-            .script
-            .incoming
-            .iter()
-            .find(|(name, _)| *name == params.item.name)
-            .map(|(_, calls)| calls.clone())
-            .unwrap_or_default();
+        let calls = answer(state, |script| {
+            script
+                .incoming
+                .iter()
+                .find(|(name, _)| *name == params.item.name)
+                .map(|(_, calls)| calls.clone())
+                .unwrap_or_default()
+        });
         async move {
             gate.await?;
             Ok::<_, ResponseError>(Some(calls))
@@ -399,7 +432,7 @@ fn register_queries(router: &mut Router<FakeState>) {
     router.request::<References, _>(|state, params| {
         let gate = gate(state, References::METHOD);
         let position = params.text_document_position.position;
-        let locations = by_position(&state.script.references, position);
+        let locations = answer(state, |script| by_position(&script.references, position));
         async move {
             gate.await?;
             Ok::<_, ResponseError>(Some(locations))
@@ -408,7 +441,9 @@ fn register_queries(router: &mut Router<FakeState>) {
     router.request::<GotoImplementation, _>(|state, params| {
         let gate = gate(state, GotoImplementation::METHOD);
         let position = params.text_document_position_params.position;
-        let locations = by_position(&state.script.implementation, position);
+        let locations = answer(state, |script| {
+            by_position(&script.implementation, position)
+        });
         let shape = state.script.implementation_shape;
         async move {
             gate.await?;

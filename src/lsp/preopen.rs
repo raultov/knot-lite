@@ -14,11 +14,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::Peekable;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::Chars;
 
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
+use super::uri::join_rel;
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 
 /// Files pre-opened in tsserver, at most.
@@ -282,13 +283,6 @@ fn is_under(dir: &str, ancestor: &str) -> bool {
         || dir
             .strip_prefix(ancestor)
             .is_some_and(|rest| rest.starts_with('/'))
-}
-
-/// `root` + a `/`-separated repo-relative path, component by component so
-/// Windows never sees mixed separators.
-fn join_rel(root: &Path, rel: &str) -> PathBuf {
-    rel.split('/')
-        .fold(root.to_path_buf(), |path, part| path.join(part))
 }
 
 /// Turn JSON-with-comments (what `tsconfig.json` is) into plain JSON: remove

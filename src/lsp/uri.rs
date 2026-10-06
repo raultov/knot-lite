@@ -38,6 +38,13 @@ impl CanonicalRoot {
     }
 }
 
+/// `root` + a `/`-separated repo-relative path, component by component so
+/// Windows never sees mixed separators.
+pub fn join_rel(root: &Path, rel: &str) -> PathBuf {
+    rel.split('/')
+        .fold(root.to_path_buf(), |path, part| path.join(part))
+}
+
 /// Convert an absolute filesystem path into a `file://` URI.
 pub fn path_to_uri(abs: &Path) -> Result<Url> {
     Url::from_file_path(abs).map_err(|()| anyhow!("not an absolute path: {}", abs.display()))
@@ -130,6 +137,16 @@ mod tests {
     fn windows_style_uri_is_external_on_unix_root() {
         let uri = Url::parse("file:///C:/x/y.rs").expect("valid URI");
         assert_eq!(uri_to_repo_relative(&uri, Path::new("/tmp/root")), None);
+    }
+
+    #[test]
+    fn join_rel_adds_one_component_per_segment() {
+        let root = std::env::temp_dir();
+        assert_eq!(
+            join_rel(&root, "src/a/b.rs"),
+            root.join("src").join("a").join("b.rs")
+        );
+        assert_eq!(join_rel(&root, "b.rs"), root.join("b.rs"));
     }
 
     #[test]
