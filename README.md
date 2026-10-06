@@ -93,7 +93,7 @@ modified and the `.env` file is never written.
 | `KNOT_LITE_REPO_PATH` | repository root (default: current working directory) |
 | `KNOT_LITE_REPO_NAME` | logical repository name (default: last path component) |
 | `KNOT_LITE_EMBED_MODEL` | embedding model name (`AllMiniLML6V2` default, fallback: `KNOT_EMBED_MODEL`) |
-| `KNOT_LITE_FASTEMBED_CACHE_DIR` | fastembed model cache directory (fallback: `KNOT_FASTEMBED_CACHE_DIR` or `~/.knot/repos/fastembed_cache`) |
+| `KNOT_LITE_FASTEMBED_CACHE_DIR` | fastembed model cache directory (fallback: `KNOT_FASTEMBED_CACHE_DIR`, then `$HOME/.cache/knot-lite/fastembed`) |
 | `KNOT_LITE_CONFIG_DIR` | directory holding the `.env` file |
 | `KNOT_LITE_LSP_RUST` | override for `rust-analyzer` (program name or path) |
 | `KNOT_LITE_LSP_TS` | override for `typescript-language-server` |
@@ -130,6 +130,15 @@ repository per instance. Example for opencode 2 (`opencode.jsonc`):
 make check                                  # fmt-check, clippy, every cargo test target, dupes
 make test-lib                               # fast loop: library unit tests only (not a gate)
 make check CRATE_DIR=docs/spikes/phase0     # the Phase 0 spike crate's own gate
+```
+
+The measurement gates (M1/M4/M5/M6, `#[ignore]`d in `src/measure.rs`) run explicitly and
+require two persistent directories — there is no temp-dir default, so results are never lost:
+
+```sh
+KNOT_LITE_SANDBOX=~/.local/share/knot-lite/sandbox \
+KNOT_LITE_MEASURE_OUT=~/.local/share/knot-lite/measure \
+cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
 ```
 
 ## Plans & Conventions
