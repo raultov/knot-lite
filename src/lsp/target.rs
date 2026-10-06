@@ -9,9 +9,9 @@
 //! operation would silently under-report — the caller falls back to the
 //! heuristic edges instead.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use async_lsp::lsp_types::{
@@ -209,19 +209,22 @@ impl Collected {
 /// Current source lines, read on first use (only Java's comment filter asks).
 struct SourceCache<'a> {
     root: &'a Path,
-    files: RefCell<HashMap<String, Option<Vec<String>>>>,
+    files: Mutex<HashMap<String, Option<Vec<String>>>>,
 }
 
 impl<'a> SourceCache<'a> {
     fn new(root: &'a Path) -> Self {
         Self {
             root,
-            files: RefCell::new(HashMap::new()),
+            files: Mutex::new(HashMap::new()),
         }
     }
 
     fn line(&self, rel: &str, line0: u32) -> Option<String> {
-        let mut files = self.files.borrow_mut();
+        let mut files = self
+            .files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let lines = files.entry(rel.to_owned()).or_insert_with(|| {
             std::fs::read_to_string(join_rel(self.root, rel))
                 .ok()
@@ -306,9 +309,12 @@ fn open_target(session: &mut LspSession, req: &LiveRequest) -> Result<Url, Failu
     }
     let uri =
         path_to_uri(&req.abs_file).map_err(|error| Failure::NoPosition(format!("{error:#}")))?;
-    session
-        .did_open(&req.abs_file)
-        .map_err(|error| Failure::NoPosition(format!("{error:#}")))?;
+    if let Err(error) = session.did_open(&req.abs_file) {
+        if !session.is_alive() {
+            return Err(Failure::Failed(format!("didOpen failed: {error:#}")));
+        }
+        return Err(Failure::NoPosition(format!("{error:#}")));
+    }
     Ok(uri)
 }
 

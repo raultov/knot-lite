@@ -65,8 +65,8 @@ impl Drop for ServerProcess {
 pub struct Started {
     /// The LSP session.
     pub session: LspSession,
-    /// The process behind it.
-    pub process: ServerProcess,
+    /// The process behind it, or `None` for in-process fake servers.
+    pub process: Option<ServerProcess>,
 }
 
 /// What [`start_or_degrade`] produced.
@@ -129,7 +129,10 @@ async fn start(spec: &ServerSpec, ctx: &StartContext<'_>) -> Result<Started, Deg
         stderr_log: stderr_log.path,
     };
     match initialize(io, init).await {
-        Ok(session) => Ok(Started { session, process }),
+        Ok(session) => Ok(Started {
+            session,
+            process: Some(process),
+        }),
         Err(error) => Err(initialize_failure(server, process, &error).await),
     }
 }
@@ -175,22 +178,28 @@ pub async fn stop(started: Started, timeout: Duration) {
         session,
         mut process,
     } = started;
-    let descendants = process.pid.map(tree_members).unwrap_or_default();
+    let descendants = process
+        .as_ref()
+        .and_then(|p| p.pid)
+        .map(tree_members)
+        .unwrap_or_default();
     let outcome = session.shutdown(timeout).await;
     tracing::debug!(?outcome, "LSP session shut down");
-    match tokio::time::timeout(timeout, process.child.wait()).await {
-        Ok(Ok(status)) => tracing::info!("language server exited: {status}"),
-        Ok(Err(error)) => tracing::warn!("waiting for the language server failed: {error}"),
-        Err(_) => {
-            tracing::warn!("language server alive after {timeout:?}; killing its process tree");
-            if let Some(pid) = process.pid {
-                kill_process_tree(pid);
+    if let Some(process) = &mut process {
+        match tokio::time::timeout(timeout, process.child.wait()).await {
+            Ok(Ok(status)) => tracing::info!("language server exited: {status}"),
+            Ok(Err(error)) => tracing::warn!("waiting for the language server failed: {error}"),
+            Err(_) => {
+                tracing::warn!("language server alive after {timeout:?}; killing its process tree");
+                if let Some(pid) = process.pid {
+                    kill_process_tree(pid);
+                }
+                let _ = tokio::time::timeout(KILL_REAP, process.child.wait()).await;
             }
-            let _ = tokio::time::timeout(KILL_REAP, process.child.wait()).await;
         }
+        kill_members(&descendants);
+        process.pid = None;
     }
-    kill_members(&descendants);
-    process.pid = None;
 }
 
 /// A process of a server's tree, identified so a reused pid is never killed.
