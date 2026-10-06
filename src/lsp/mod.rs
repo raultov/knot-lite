@@ -17,10 +17,13 @@
 //! **Hermetic tests (P3-D13).** Nothing reachable by `make check` starts a real
 //! language server: an in-process scripted fake speaks LSP over a duplex pipe.
 
+#[cfg(test)]
+pub(crate) mod fake;
 pub mod ops;
 pub mod position;
 pub mod preopen;
 pub mod readiness;
+pub mod session;
 pub mod settings;
 pub mod spec;
 pub mod uri;
