@@ -28,6 +28,16 @@ impl LspLang {
         }
     }
 
+    /// Short, filesystem-safe name: the directory of the language's pre-computed
+    /// data and the prefix of its server log files.
+    pub fn dir_name(self) -> &'static str {
+        match self {
+            Self::Rust => "rust",
+            Self::Ts => "ts",
+            Self::Java => "java",
+        }
+    }
+
     /// Environment variable that overrides the server program.
     pub fn env_override_key(self) -> &'static str {
         match self {

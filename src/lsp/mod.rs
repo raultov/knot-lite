@@ -22,6 +22,7 @@ pub(crate) mod fake;
 pub mod ops;
 pub mod position;
 pub mod preopen;
+pub mod process;
 pub mod readiness;
 pub mod session;
 pub mod settings;

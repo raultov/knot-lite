@@ -4,6 +4,10 @@
 //! KNOT_LITE_MEASURE_OUT=~/.local/share/knot-lite/measure \
 //! cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
 //!
+//! The Phase 3 gates that start real language servers (PLAN_PHASE3_LSP.md §11)
+//! additionally need `KNOT_LITE_LSP_CACHE_DIR` (the servers' scratch root, also
+//! a persistent directory) and only ever run against the sandbox copies.
+//!
 //! The sandbox and output directories are required (no default): measurement
 //! artefacts are worth keeping, so they never land in a temp directory by
 //! accident. The model cache follows knot-lite's own resolution
@@ -17,14 +21,24 @@ use std::path::{Path, PathBuf};
 use knot::models::ParsedEntity;
 use knot::pipeline::parser::{ParseConfig, parse_files_stream};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
 use uuid::Uuid;
 
+use crate::capability::languages::LspLang;
+use crate::config::LspOverrides;
 use crate::embed::EmbedBatch;
 use crate::embed::knot_embedder::KnotEmbedder;
 use crate::embed::settings::resolve_embed_settings;
 use crate::graph::containers::ContainerKey;
+use crate::index::hash::{finish_hex, sha256_hex};
 use crate::index::layout::IndexLayout;
 use crate::index::load::{LoadedIndex, load_index};
+use crate::lsp::preopen::PreopenPlan;
+use crate::lsp::process::{StartContext, StartOutcome, start_or_degrade, stop};
+use crate::lsp::readiness::wait_ready;
+use crate::lsp::settings::{resolve_lsp_settings, scratch_dir};
+use crate::lsp::spec::{SpecInputs, resolve_program, spec_for};
+use crate::lsp::{position, uri};
 use crate::query::search::top_k;
 
 /// Directory named by the required environment variable `key`.
@@ -433,4 +447,181 @@ fn m6_caller_parity() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// L5 smoke (Phase 3, P3.6): a real rust-analyzer leaves the repository untouched
+// ---------------------------------------------------------------------------
+
+/// SHA-256 over the relative path and content of every file and the path of
+/// every directory below `root`, skipping the top-level names in `skip`.
+/// Symlinks are fingerprinted by their target text and never followed.
+fn tree_fingerprint(root: &Path, skip: &[&str]) -> String {
+    fn walk(base: &Path, dir: &Path, skip: &[&str], out: &mut Vec<(String, String)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .expect("read_dir")
+            .map(|entry| entry.expect("entry"))
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let path = entry.path();
+            let rel = path
+                .strip_prefix(base)
+                .expect("under base")
+                .to_string_lossy()
+                .replace('\\', "/");
+            if skip.contains(&rel.as_str()) {
+                continue;
+            }
+            let meta = std::fs::symlink_metadata(&path).expect("metadata");
+            if meta.is_dir() {
+                out.push((format!("{rel}/"), String::new()));
+                walk(base, &path, skip, out);
+            } else if meta.file_type().is_symlink() {
+                let target = std::fs::read_link(&path).unwrap_or_default();
+                out.push((rel, format!("link:{}", target.display())));
+            } else {
+                out.push((rel, sha256_hex(&std::fs::read(&path).expect("read"))));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(root, root, skip, &mut files);
+    let mut hasher = Sha256::new();
+    for (rel, digest) in files {
+        hasher.update(format!("{rel}\0{digest}\n").as_bytes());
+    }
+    finish_hex(hasher)
+}
+
+#[derive(Serialize)]
+struct L5SmokeReport {
+    server_version: String,
+    initialize_ms: u64,
+    ready_ms: u64,
+    ready_reason: String,
+    target: String,
+    references: usize,
+    references_ms: u64,
+    stop_ms: u64,
+    scratch: String,
+}
+
+/// Start rust-analyzer on `repo`, wait until it is ready, ask for the references
+/// of `parse_files`, and stop it.
+async fn l5_smoke_rust(repo: &Path, scratch: &Path) -> L5SmokeReport {
+    let program = resolve_program(LspLang::Rust, &LspOverrides::default())
+        .unwrap_or_else(|degraded| panic!("{}", degraded.diagnostic));
+    let spec = spec_for(&SpecInputs {
+        lang: LspLang::Rust,
+        program: &program,
+        repo_root: repo,
+        scratch,
+        build_exec: true,
+        preopen: &PreopenPlan::default(),
+    });
+    let ctx = StartContext {
+        repo_root: repo,
+        scratch,
+        logs_keep: 5,
+    };
+    let StartOutcome::Ready(mut started) = start_or_degrade(&spec, &ctx).await else {
+        panic!("rust-analyzer did not start (see the stderr log under {scratch:?}/logs)");
+    };
+    let ready = wait_ready(
+        &mut started.session.events,
+        spec.readiness,
+        std::time::Duration::from_secs(2),
+        spec.ready_timeout,
+    )
+    .await;
+    assert!(ready.ready, "not ready: {ready:?}");
+
+    let rel = "src/pipeline/parser/mod.rs";
+    let abs = repo.join(rel);
+    let source = std::fs::read_to_string(&abs).expect("parse_files source");
+    let line_no = source
+        .lines()
+        .position(|line| line.contains("fn parse_files("))
+        .expect("`fn parse_files(` in the sandbox")
+        + 1;
+    let name = position::locate_name(&source, "parse_files", line_no, line_no, LspLang::Rust)
+        .expect("parse_files located");
+    started.session.did_open(&abs).expect("didOpen");
+    let file_uri = uri::path_to_uri(&abs).expect("uri");
+    let asked = std::time::Instant::now();
+    let outcome = started
+        .session
+        .references(
+            &file_uri,
+            async_lsp::lsp_types::Position::new(name.line0, name.col_utf16),
+            false,
+            spec.first_request_timeout,
+        )
+        .await;
+    let references = outcome
+        .result
+        .expect("references answered")
+        .expect("references not null");
+    assert!(!references.is_empty(), "parse_files has callers in knot");
+
+    let report_so_far = (
+        started.session.server_version.clone(),
+        started.session.timings.initialize_ms,
+    );
+    let stopping = std::time::Instant::now();
+    stop(*started, std::time::Duration::from_secs(15)).await;
+    L5SmokeReport {
+        server_version: report_so_far.0,
+        initialize_ms: report_so_far.1,
+        ready_ms: u64::try_from(ready.elapsed.as_millis()).unwrap_or(u64::MAX),
+        ready_reason: ready.reason,
+        target: format!("{rel}:{}:{}", name.line0 + 1, name.col_utf16),
+        references: references.len(),
+        references_ms: u64::try_from(asked.elapsed().as_millis()).unwrap_or(u64::MAX),
+        stop_ms: u64::try_from(stopping.elapsed().as_millis()).unwrap_or(u64::MAX),
+        scratch: scratch.display().to_string(),
+    }
+}
+
+#[test]
+#[ignore = "L5 smoke: starts a real rust-analyzer on the sandbox `knot` (KNOT_LITE_SANDBOX, KNOT_LITE_MEASURE_OUT, KNOT_LITE_LSP_CACHE_DIR)"]
+fn l5_smoke_containment_rust() {
+    let repo = sandbox_path("knot").canonicalize().expect("sandbox knot");
+    // The scratch root is a measurement artefact: no default, like the others.
+    required_env_dir("KNOT_LITE_LSP_CACHE_DIR");
+    let settings = resolve_lsp_settings(&|key| std::env::var(key).ok(), &std::env::temp_dir());
+    let scratch = scratch_dir(&settings, &repo);
+    let index_dir = repo.join(".knot-lite");
+    let source_before = tree_fingerprint(&repo, &[".knot-lite", ".knot"]);
+    let index_before = index_dir
+        .is_dir()
+        .then(|| tree_fingerprint(&index_dir, &[]));
+
+    let report = tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(l5_smoke_rust(&repo, &scratch));
+
+    println!(
+        "L5 smoke rust: {}",
+        serde_json::to_string(&report).expect("json")
+    );
+    assert_eq!(
+        tree_fingerprint(&repo, &[".knot-lite", ".knot"]),
+        source_before,
+        "rust-analyzer changed the repository"
+    );
+    assert_eq!(
+        index_dir
+            .is_dir()
+            .then(|| tree_fingerprint(&index_dir, &[])),
+        index_before,
+        "rust-analyzer changed the index directory"
+    );
+    assert!(
+        scratch.join("target-ra").is_dir(),
+        "cargo's target dir must live in the scratch directory"
+    );
+    let text = serde_json::to_string_pretty(&report).expect("json");
+    std::fs::write(measure_out_dir().join("l5_smoke_rust.json"), text).expect("write");
 }
