@@ -19,5 +19,8 @@
 
 pub mod ops;
 pub mod position;
+pub mod preopen;
+pub mod readiness;
 pub mod settings;
+pub mod spec;
 pub mod uri;
