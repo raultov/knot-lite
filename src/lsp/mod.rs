@@ -19,6 +19,7 @@
 
 #[cfg(test)]
 pub(crate) mod fake;
+pub mod normalize;
 pub mod ops;
 pub mod position;
 pub mod preopen;
