@@ -6,8 +6,9 @@ absent in a fresh clone. This file is the standing contract.
 
 ## Ground rules
 
-1. **Write only inside** this repository (plus `/tmp/knot-lite-*` scratch dirs).
-   Only `index` writes into the analysed repository and only under `.knot-lite/`.
+1. **Write only inside** this repository (plus `~/.local/share/knot-lite/`, the
+   persistent home of the measurement sandbox, outputs and hand-off notes — never
+   keep useful artefacts in a temp directory). Only `index` writes into the analysed repository and only under `.knot-lite/`.
    Never write into `../knot`, `~/.knot/repos/*` or any other repository. Read-only
    runs of `knot-lite status` on other checkouts are allowed. Never run `index` against `~/.knot/repos/*`.
 2. **Rust:** edition 2024; **no `unsafe`** (denied in `Cargo.toml`); **no `#[allow]`**;
@@ -20,8 +21,9 @@ absent in a fresh clone. This file is the standing contract.
 5. **Unit tests inside library modules** (`#[cfg(test)] mod tests`). Binaries stay
    thin; their logic lives in the library. The only test outside `src/` is
    `tests/mcp_stdio.rs` (the transport cannot be covered by lib tests). Hermetic gate:
-   tests in `src/` never download models, access network, or read `~/.knot` / `/tmp/knot-lite-sandbox`.
-   Measurement tests are `#[ignore]`d in `src/measure.rs` and run explicitly.
+   tests in `src/` never download models, access network, or read `~/.knot` / the sandbox.
+   Measurement tests are `#[ignore]`d in `src/measure.rs` and run explicitly with
+   `KNOT_LITE_SANDBOX` and `KNOT_LITE_MEASURE_OUT` set (both required, no default).
 6. After every task `make check` must be green before committing. Commits:
    `phase2(P2.x): <summary>`-style messages, one commit per task.
 7. Use the knot MCP tools (`search_hybrid_context`, `find_callers`, `explore_file`)

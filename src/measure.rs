@@ -1,7 +1,13 @@
 //! Measurement gates of PLAN_PHASE2_INDEX.md §10 (run explicitly, never by `make check`):
 //!
-//! KNOT_LITE_SANDBOX=/tmp/knot-lite-sandbox KNOT_LITE_FASTEMBED_CACHE_DIR=/tmp/knot-lite-fastembed \
+//! KNOT_LITE_SANDBOX=~/.local/share/knot-lite/sandbox \
+//! KNOT_LITE_MEASURE_OUT=~/.local/share/knot-lite/measure \
 //! cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
+//!
+//! The sandbox and output directories are required (no default): measurement
+//! artefacts are worth keeping, so they never land in a temp directory by
+//! accident. The model cache follows knot-lite's own resolution
+//! (`KNOT_LITE_FASTEMBED_CACHE_DIR` → … → `$HOME/.cache/knot-lite/fastembed`).
 
 #![cfg(test)]
 
@@ -15,25 +21,31 @@ use uuid::Uuid;
 
 use crate::embed::EmbedBatch;
 use crate::embed::knot_embedder::KnotEmbedder;
+use crate::embed::settings::resolve_embed_settings;
 use crate::graph::containers::ContainerKey;
 use crate::index::layout::IndexLayout;
 use crate::index::load::{LoadedIndex, load_index};
 use crate::query::search::top_k;
 
+/// Directory named by the required environment variable `key`.
+fn required_env_dir(key: &str) -> PathBuf {
+    match std::env::var(key) {
+        Ok(value) if !value.trim().is_empty() => PathBuf::from(value.trim()),
+        _ => panic!("{key} must be set to a persistent directory (see the module docs)"),
+    }
+}
+
 fn sandbox_path(repo: &str) -> PathBuf {
-    let base =
-        std::env::var("KNOT_LITE_SANDBOX").unwrap_or_else(|_| "/tmp/knot-lite-sandbox".to_owned());
-    PathBuf::from(base).join(repo)
+    required_env_dir("KNOT_LITE_SANDBOX").join(repo)
 }
 
 fn fastembed_cache_dir() -> PathBuf {
-    let base = std::env::var("KNOT_LITE_FASTEMBED_CACHE_DIR")
-        .unwrap_or_else(|_| "/tmp/knot-lite-fastembed".to_owned());
-    PathBuf::from(base)
+    let lookup = |key: &str| std::env::var(key).ok();
+    resolve_embed_settings(&lookup, &std::env::temp_dir()).cache_dir
 }
 
 fn measure_out_dir() -> PathBuf {
-    let dir = PathBuf::from("/tmp/knot-lite-measure");
+    let dir = required_env_dir("KNOT_LITE_MEASURE_OUT");
     std::fs::create_dir_all(&dir).ok();
     dir
 }
@@ -84,7 +96,7 @@ struct M1RepoResult {
 }
 
 #[test]
-#[ignore = "M1 measurement gate: requires sandbox repos at /tmp/knot-lite-sandbox"]
+#[ignore = "M1 measurement gate: requires sandbox repos at $KNOT_LITE_SANDBOX"]
 fn m1_identity_knot_lite_parse() {
     let mut results = Vec::new();
     for repo in ["knot", "knot-site", "spring-ai"] {
