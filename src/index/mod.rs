@@ -7,7 +7,7 @@ pub mod edges;
 pub mod encode;
 #[doc(hidden)]
 pub mod fixture;
-mod hash;
+pub(crate) mod hash;
 pub mod inventory;
 pub mod layout;
 pub mod load;

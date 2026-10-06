@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use crate::embed::settings::{EmbedSettings, resolve_embed_settings};
+use crate::lsp::settings::{LspSettings, resolve_lsp_settings};
 
 /// Fallback repository name when the path has no final component (knot's fallback).
 pub const UNNAMED_REPO: &str = "unnamed-repo";
@@ -66,6 +67,8 @@ pub struct Config {
     pub dry_run: bool,
     /// Embedding model and cache directory (P2-D11); the model name is not validated here.
     pub embed: EmbedSettings,
+    /// Language-server switches, limits and scratch root (P3-D12, P3-D14).
+    pub lsp: LspSettings,
 }
 
 /// Everything [`resolve`] reads besides the CLI arguments, injected so the
@@ -154,6 +157,7 @@ pub fn resolve(args: &CommonArgs, dry_run: bool, inputs: &ResolveInputs<'_>) -> 
         },
         dry_run,
         embed: resolve_embed_settings(&lookup, temp_dir),
+        lsp: resolve_lsp_settings(&lookup, temp_dir),
     })
 }
 
@@ -251,9 +255,12 @@ pub(crate) mod test_support {
 
     use super::{Config, LspOverrides};
     use crate::embed::settings::EmbedSettings;
+    use crate::lsp::settings::resolve_lsp_settings;
 
-    /// A non-dry-run config named `demo` rooted at `root`.
+    /// A non-dry-run config named `demo` rooted at `root`. Language servers are
+    /// resolved from an empty environment: enabled, scratch root under the temp dir.
     pub(crate) fn config_for(root: PathBuf) -> Config {
+        let temp_dir = std::env::temp_dir();
         Config {
             repo_name: "demo".to_string(),
             repo_path: root,
@@ -261,8 +268,9 @@ pub(crate) mod test_support {
             dry_run: false,
             embed: EmbedSettings {
                 model: "AllMiniLML6V2".to_string(),
-                cache_dir: std::env::temp_dir().join("knot-lite-test-fastembed"),
+                cache_dir: temp_dir.join("knot-lite-test-fastembed"),
             },
+            lsp: resolve_lsp_settings(&|_| None, &temp_dir),
         }
     }
 }
@@ -481,6 +489,32 @@ mod tests {
             resolve_with(&empty_args(), false, &[], &BTreeMap::new(), tmp.path()).expect("resolve");
         assert_eq!(cfg.embed.model, "AllMiniLML6V2");
         assert_eq!(cfg.embed.cache_dir, Path::new("/tmp/knot-lite-fastembed"));
+    }
+
+    #[test]
+    fn resolve_fills_lsp_settings_from_dotenv() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dotenv = dotenv_of(&[
+            ("KNOT_LITE_LSP", "off"),
+            ("KNOT_LITE_LSP_BUILD_EXEC", "no"),
+            ("KNOT_LITE_LSP_CACHE_DIR", "/scratch"),
+            ("KNOT_LITE_LSP_DEADLINE_SECS", "45"),
+        ]);
+        let cfg = resolve_with(&empty_args(), false, &[], &dotenv, tmp.path()).expect("resolve");
+        assert!(!cfg.lsp.enabled);
+        assert!(!cfg.lsp.build_exec);
+        assert_eq!(cfg.lsp.cache_root, PathBuf::from("/scratch"));
+        assert_eq!(cfg.lsp.deadline, std::time::Duration::from_secs(45));
+        assert!(cfg.lsp.warnings.is_empty());
+    }
+
+    #[test]
+    fn resolve_process_env_beats_dotenv_for_lsp_settings() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dotenv = dotenv_of(&[("KNOT_LITE_LSP", "off")]);
+        let env = [("KNOT_LITE_LSP", "on")];
+        let cfg = resolve_with(&empty_args(), false, &env, &dotenv, tmp.path()).expect("resolve");
+        assert!(cfg.lsp.enabled);
     }
 
     #[test]

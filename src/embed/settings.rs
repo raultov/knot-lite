@@ -21,6 +21,9 @@ pub const ENV_CACHE_FALLBACK: &str = "KNOT_FASTEMBED_CACHE_DIR";
 /// Directory name used under `<temp dir>` when no home directory is known.
 const TEMP_CACHE_DIR: &str = "knot-lite-fastembed";
 
+/// Components below `~/.cache` of the model cache.
+const CACHE_LEAF: &[&str] = &["knot-lite", "fastembed"];
+
 /// Resolved embedding settings (unvalidated model name + cache directory).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbedSettings {
@@ -44,14 +47,13 @@ pub fn resolve_embed_settings(
         .unwrap_or_else(|| DEFAULT_EMBED_MODEL.to_owned());
     let cache_dir = first_set(lookup, &[ENV_CACHE, ENV_CACHE_FALLBACK])
         .map(PathBuf::from)
-        .or_else(|| home_cache(lookup, "HOME"))
-        .or_else(|| home_cache(lookup, "USERPROFILE"))
+        .or_else(|| user_cache_subdir(lookup, CACHE_LEAF))
         .unwrap_or_else(|| temp_dir.join(TEMP_CACHE_DIR));
     EmbedSettings { model, cache_dir }
 }
 
 /// First key whose trimmed value is not empty.
-fn first_set(lookup: &dyn Fn(&str) -> Option<String>, keys: &[&str]) -> Option<String> {
+pub(crate) fn first_set(lookup: &dyn Fn(&str) -> Option<String>, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         lookup(key)
             .map(|value| value.trim().to_owned())
@@ -59,12 +61,18 @@ fn first_set(lookup: &dyn Fn(&str) -> Option<String>, keys: &[&str]) -> Option<S
     })
 }
 
-fn home_cache(lookup: &dyn Fn(&str) -> Option<String>, key: &str) -> Option<PathBuf> {
-    first_set(lookup, &[key]).map(|home| {
-        PathBuf::from(home)
-            .join(".cache")
-            .join("knot-lite")
-            .join("fastembed")
+/// `<home>/.cache/<leaf…>`, where `<home>` is `$HOME`, else `$USERPROFILE`.
+///
+/// Shared by every per-user cache directory (model cache, language-server
+/// scratch root) so the home-directory ladder exists exactly once.
+pub(crate) fn user_cache_subdir(
+    lookup: &dyn Fn(&str) -> Option<String>,
+    leaf: &[&str],
+) -> Option<PathBuf> {
+    first_set(lookup, &["HOME", "USERPROFILE"]).map(|home| {
+        let mut path = PathBuf::from(home).join(".cache");
+        path.extend(leaf);
+        path
     })
 }
 

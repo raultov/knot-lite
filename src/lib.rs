@@ -14,6 +14,7 @@ pub mod embed;
 pub mod error;
 pub mod graph;
 pub mod index;
+pub mod lsp;
 pub mod mcp_handler;
 pub mod mcp_tools;
 pub mod models;

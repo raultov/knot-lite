@@ -1,6 +1,6 @@
 [package]
 name = "knot-lite"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Database-free code intelligence for one repository: file-based vectors + language-server call graph (built on knot's parsers)"
 authors = ["Raul Tovar <raultov@protonmail.com>"]
@@ -52,6 +52,21 @@ dotenvy = "0.15"
 
 # --- Filesystem traversal (same major as knot) ---
 ignore = "0.4"
+
+# --- Language servers (Phase 3) ---
+# async-lsp's default features pull Unix-only crates (rustix, waitpid-any);
+# the client needs none of them. lsp-types is used only through async_lsp.
+async-lsp = { version = "0.2.4", default-features = false, features = ["omni-trait", "tokio", "tracing"] }
+tower = { version = "0.5", features = ["util"] }
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["compat"] }
+url = "2"
+# Process-tree RSS and termination; the "system" feature alone exposes
+# System/Pid/ProcessRefreshKind without the disk/network/component probes.
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+# tsconfig `include` matching for the TypeScript pre-open set (already in the
+# lockfile through `ignore`).
+globset = "0.4"
 
 # --- Index ---
 base64 = "0.22"
