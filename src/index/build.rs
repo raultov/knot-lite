@@ -28,10 +28,12 @@ use super::record_io::{WriteOutcome, remove_orphans, write_jsonl_if_changed};
 use super::reuse::{ReuseMap, ReuseSource};
 use super::select::{Selection, select_files};
 use super::shard::{ShardLine, chunk_id, sort_lines, text_hash};
-use crate::capability::languages::label_for;
+use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::Config;
 use crate::embed::{EmbedBatch, EmbeddingSpec};
 use crate::graph::heuristic::{ResolverMetrics, resolve_edges};
+use crate::lsp::ops::{TargetShape, shape_of};
+use crate::lsp::position::{is_nameless, locate_name_in_lines};
 
 /// Schema id of the [`BuildReport`] document.
 pub const INDEX_RUN_SCHEMA_V1: &str = "knot-lite/index-run/v1";
@@ -188,11 +190,14 @@ struct RecordStats {
     entities_without_vector: usize,
     chunks: usize,
     file_vectors: usize,
+    columns_located: usize,
+    columns_missing: usize,
 }
 
 struct RecordSet {
     pending: Vec<PendingRecord>,
     stats: RecordStats,
+    warnings: Vec<String>,
 }
 
 /// State prepared before the first shard is touched.
@@ -230,6 +235,7 @@ pub fn build_index(
     progress(ProgressEvent::Stage { name: "prepare" });
     let stage = Instant::now();
     let mut records = collect_records(cfg, &selection, &mut entities)?;
+    dir.warnings.append(&mut records.warnings);
     timings.prepare = elapsed_ms(stage);
 
     progress(ProgressEvent::Stage { name: "resolve" });
@@ -443,6 +449,7 @@ fn collect_records(
     knot::pipeline::prepare::prepare_entities(entities);
 
     let mut pending = entity_records(entities);
+    let columns = assign_columns(&mut pending, &cfg.repo_path);
     let entity_files: BTreeSet<String> = pending.iter().map(|r| r.file.clone()).collect();
     let mut stats = RecordStats {
         files_with_entities: entity_files.len(),
@@ -451,6 +458,8 @@ fn collect_records(
             .iter()
             .filter(|record| record.text.trim().is_empty())
             .count(),
+        columns_located: columns.located,
+        columns_missing: columns.missing,
         ..RecordStats::default()
     };
 
@@ -460,7 +469,81 @@ fn collect_records(
     stats.file_vectors = tier1.file_vectors;
     pending.extend(tier1.records);
     stats.records = pending.len();
-    Ok(RecordSet { pending, stats })
+    Ok(RecordSet {
+        pending,
+        stats,
+        warnings: columns.warnings,
+    })
+}
+
+/// Outcome of [`assign_columns`].
+#[derive(Default)]
+struct ColumnPass {
+    located: usize,
+    missing: usize,
+    warnings: Vec<String>,
+}
+
+/// Set the UTF-16 name column of the entity records a language server can be
+/// asked about, in files it serves (P3-D4). Each such file is read once; a file
+/// that cannot be read leaves `col` unset and adds a warning.
+///
+/// Only declarations count (see [`is_locatable`]): markup attributes, impl
+/// blocks, modules and the synthetic `<module>` entity are neither located nor
+/// missing.
+///
+/// `records` must be grouped by file (they are: entities are sorted by path).
+fn assign_columns(records: &mut [PendingRecord], repo_root: &Path) -> ColumnPass {
+    let mut pass = ColumnPass::default();
+    for group in records.chunk_by_mut(|a, b| a.file == b.file) {
+        let Some(file) = group.first().map(|record| record.file.clone()) else {
+            continue;
+        };
+        let Some(lang) = lsp_lang_for_label(label_for(Path::new(&file))) else {
+            continue;
+        };
+        match std::fs::read_to_string(repo_root.join(&file)) {
+            Ok(source) => {
+                let lines: Vec<&str> = source.lines().collect();
+                let (located, missing) = locate_group(group, &lines, lang);
+                pass.located += located;
+                pass.missing += missing;
+            }
+            Err(error) => {
+                pass.warnings
+                    .push(format!("col: cannot read {file}: {error}"));
+                pass.missing += group
+                    .iter()
+                    .filter(|record| is_locatable(&record.line))
+                    .count();
+            }
+        }
+    }
+    pass
+}
+
+/// Whether a record is a named declaration a language server knows as a symbol.
+fn is_locatable(line: &ShardLine) -> bool {
+    !is_nameless(&line.name) && shape_of(&line.kind) != TargetShape::None
+}
+
+/// Locate the name column of every record of one file; returns `(located, missing)`.
+fn locate_group(group: &mut [PendingRecord], lines: &[&str], lang: LspLang) -> (usize, usize) {
+    let (mut located, mut missing) = (0, 0);
+    for record in group {
+        let line = &mut record.line;
+        if !is_locatable(line) {
+            continue;
+        }
+        match locate_name_in_lines(lines, &line.name, line.l0, line.l1, lang) {
+            Some(position) => {
+                line.col = Some(position.col_utf16);
+                located += 1;
+            }
+            None => missing += 1,
+        }
+    }
+    (located, missing)
 }
 
 /// Normalise paths to `/` and sort entities so the resolver input does not
@@ -759,6 +842,8 @@ fn index_counts(
         dropped_edges: count(edges.dropped),
         shards: count(shards.files),
         edge_shards: count(edges.files),
+        columns_located: count(stats.columns_located),
+        columns_missing: count(stats.columns_missing),
     }
 }
 
@@ -1004,9 +1089,12 @@ mod tests {
             let mut sorted = lines.clone();
             sort_lines(&mut sorted);
             assert_eq!(lines, sorted, "{file} must be stored sorted");
+            let served = lsp_lang_for_label(label_for(Path::new(&file))).is_some();
             for line in &lines {
                 assert!(line.l0 >= 1 && line.l1 >= line.l0, "{file}: {line:?}");
-                assert_eq!(line.col, None);
+                if !served {
+                    assert_eq!(line.col, None, "{file}: no language server, no column");
+                }
             }
         }
     }
@@ -1423,5 +1511,217 @@ mod tests {
         std::fs::remove_dir_all(&layout.dir).expect("remove index");
         run(&cfg);
         assert_eq!(snapshot(&layout.edges), first);
+    }
+}
+
+/// P3.3: the UTF-16 name column of entities served by a language server.
+#[cfg(test)]
+mod column_tests {
+    use super::test_support::{fixture, run, shards};
+    use super::*;
+
+    /// A pending entity record with nothing but the fields the column pass reads.
+    fn pending(file: &str, kind: &str, name: &str, l0: usize, l1: usize) -> PendingRecord {
+        PendingRecord {
+            file: file.to_owned(),
+            line: ShardLine {
+                id: format!("{file}:{name}"),
+                kind: kind.to_owned(),
+                name: name.to_owned(),
+                fqn: name.to_owned(),
+                lang: "x".to_owned(),
+                l0,
+                l1,
+                col: None,
+                sig: None,
+                h: String::new(),
+                q: None,
+                s: None,
+            },
+            text: String::new(),
+        }
+    }
+
+    /// Shards of the fixture repository after one build.
+    fn built() -> (
+        tempfile::TempDir,
+        BTreeMap<String, Vec<ShardLine>>,
+        BuildReport,
+    ) {
+        let (tmp, cfg) = fixture();
+        let report = run(&cfg);
+        let by_file = shards(&IndexLayout::for_repo(tmp.path()));
+        (tmp, by_file, report)
+    }
+
+    fn col_of(by_file: &BTreeMap<String, Vec<ShardLine>>, file: &str, name: &str) -> Option<u32> {
+        by_file[file]
+            .iter()
+            .find(|line| line.name == name)
+            .unwrap_or_else(|| panic!("{name} missing from {file}"))
+            .col
+    }
+
+    #[test]
+    fn col_is_set_for_rust_and_ts_entities() {
+        let (_tmp, by_file, _) = built();
+        // `pub fn target() -> u32 {`
+        assert_eq!(col_of(&by_file, "src/lib.rs", "target"), Some(7));
+        assert_eq!(col_of(&by_file, "src/lib.rs", "caller"), Some(7));
+        assert_eq!(col_of(&by_file, "src/util.rs", "helper"), Some(7));
+        // `    pub fn run(&self) -> u32 {`
+        assert_eq!(col_of(&by_file, "src/util.rs", "run"), Some(11));
+        // `export function greet(n: string): string {`
+        assert_eq!(col_of(&by_file, "web/app.ts", "greet"), Some(16));
+        assert_eq!(col_of(&by_file, "web/app.ts", "main"), Some(16));
+    }
+
+    #[test]
+    fn col_is_null_for_tier1_and_markdown() {
+        let (_tmp, by_file, _) = built();
+        for file in ["docs/guide.md", "scripts/run.sh", "Makefile", "Cargo.toml"] {
+            assert!(
+                by_file[file].iter().all(|line| line.col.is_none()),
+                "{file}: {:?}",
+                by_file[file]
+            );
+        }
+    }
+
+    #[test]
+    fn col_is_utf16_not_bytes() {
+        let (tmp, cfg) = fixture();
+        // `ñ` is 2 bytes / 1 UTF-16 unit and the emoji 4 bytes / 2 units, so the
+        // byte column (29) and the UTF-16 column (26) of `wide` differ.
+        std::fs::write(
+            tmp.path().join("web/wide.ts"),
+            "export function /* ñ😀 */ wide() {}\n",
+        )
+        .expect("write");
+        run(&cfg);
+        let by_file = shards(&IndexLayout::for_repo(tmp.path()));
+        assert_eq!(col_of(&by_file, "web/wide.ts", "wide"), Some(26));
+    }
+
+    #[test]
+    fn unreadable_file_leaves_col_null_with_warning() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // A directory where a source file should be: reading it fails on every
+        // platform and, unlike `chmod 000`, also for root.
+        std::fs::create_dir(tmp.path().join("broken.rs")).expect("mkdir");
+        let mut records = vec![pending("broken.rs", "function", "broken", 1, 3)];
+        let pass = assign_columns(&mut records, tmp.path());
+        assert_eq!(records[0].line.col, None);
+        assert_eq!((pass.located, pass.missing), (0, 1));
+        assert_eq!(pass.warnings.len(), 1);
+        assert!(
+            pass.warnings[0].starts_with("col: cannot read broken.rs:"),
+            "{:?}",
+            pass.warnings
+        );
+    }
+
+    #[test]
+    fn module_entity_counts_as_neither_located_nor_missing() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("a.rs"), "pub fn a() {}\n").expect("write");
+        let mut records = vec![
+            pending("a.rs", "rust_function", "<module>", 1, 1),
+            pending("a.rs", "rust_function", "a", 1, 1),
+            pending("a.rs", "rust_function", "ghost", 1, 1),
+        ];
+        let pass = assign_columns(&mut records, tmp.path());
+        assert_eq!((pass.located, pass.missing), (1, 1));
+        assert_eq!(records[0].line.col, None);
+        assert_eq!(records[1].line.col, Some(7));
+        assert_eq!(records[2].line.col, None);
+        assert!(pass.warnings.is_empty());
+    }
+
+    #[test]
+    fn non_symbol_kinds_are_neither_located_nor_missing() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("view.tsx"),
+            "const v = <p className=\"hero\" id=\"hero\" />;\nmod hero {}\n",
+        )
+        .expect("write");
+        let mut records = vec![
+            pending("view.tsx", "html_class", "hero", 1, 1),
+            pending("view.tsx", "html_id", "hero", 1, 1),
+            pending("view.tsx", "rust_module", "hero", 2, 2),
+            pending("view.tsx", "rust_impl", "hero", 2, 2),
+        ];
+        let pass = assign_columns(&mut records, tmp.path());
+        assert_eq!((pass.located, pass.missing), (0, 0));
+        assert!(records.iter().all(|record| record.line.col.is_none()));
+    }
+
+    #[test]
+    fn unlocatable_symbol_is_counted_missing() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // knot places import bindings on line 1 even when the import is on line 2.
+        std::fs::write(
+            tmp.path().join("vite.config.ts"),
+            "import a from 'a'\nimport pkg from './package.json'\n",
+        )
+        .expect("write");
+        let mut records = vec![pending("vite.config.ts", "constant", "pkg", 1, 1)];
+        let pass = assign_columns(&mut records, tmp.path());
+        assert_eq!((pass.located, pass.missing), (0, 1));
+        assert_eq!(records[0].line.col, None);
+    }
+
+    #[test]
+    fn files_of_other_languages_are_not_even_read() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        // Neither file exists: a read attempt would produce a warning.
+        let mut records = vec![
+            pending("docs/guide.md", "function", "Guide", 1, 2),
+            pending("scripts/run.sh", "function", "run", 1, 2),
+        ];
+        let pass = assign_columns(&mut records, tmp.path());
+        assert_eq!((pass.located, pass.missing), (0, 0));
+        assert!(pass.warnings.is_empty());
+        assert!(records.iter().all(|record| record.line.col.is_none()));
+    }
+
+    #[test]
+    fn columns_counters_in_manifest() {
+        let (tmp, by_file, report) = built();
+        let served = |file: &str| lsp_lang_for_label(label_for(Path::new(file))).is_some();
+        let (mut located, mut missing) = (0, 0);
+        for (file, lines) in &by_file {
+            for line in lines
+                .iter()
+                .filter(|line| served(file) && is_locatable(line))
+            {
+                if line.col.is_some() {
+                    located += 1;
+                } else {
+                    missing += 1;
+                }
+            }
+        }
+        assert!(located >= 6, "the fixture has six located entities");
+        assert_eq!(report.counts.columns_located, count(located));
+        assert_eq!(report.counts.columns_missing, count(missing));
+        let layout = IndexLayout::for_repo(tmp.path());
+        assert_eq!(
+            read_manifest(&layout.manifest).expect("manifest").counts,
+            report.counts
+        );
+    }
+
+    #[test]
+    fn reuse_is_unaffected_by_col() {
+        let (tmp, cfg) = fixture();
+        let first = run(&cfg);
+        assert!(first.vectors.embedded > 0);
+        let second = run(&cfg);
+        assert_eq!(second.vectors.embedded, 0, "no vector is recomputed");
+        assert_eq!(second.vectors.reused, first.vectors.embedded);
+        let by_file = shards(&IndexLayout::for_repo(tmp.path()));
+        assert_eq!(col_of(&by_file, "src/lib.rs", "target"), Some(7));
     }
 }

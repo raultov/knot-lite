@@ -99,6 +99,12 @@ pub struct IndexCounts {
     pub shards: u64,
     /// Edge shard files.
     pub edge_shards: u64,
+    /// Entities of language-server languages whose name column was located.
+    #[serde(default)]
+    pub columns_located: u64,
+    /// Entities of language-server languages whose name column was not found.
+    #[serde(default)]
+    pub columns_missing: u64,
 }
 
 /// Per-stage wall-clock timings, milliseconds.
@@ -252,6 +258,8 @@ pub(crate) mod test_support {
                 dropped_edges: 1,
                 shards: 8,
                 edge_shards: 4,
+                columns_located: 17,
+                columns_missing: 2,
             },
             timings_ms: IndexTimings {
                 select: 1,
@@ -394,6 +402,21 @@ mod tests {
         assert!(commit_mode < position("[embedding]"));
         assert!(position("[embedding]") < position("[counts]"));
         assert!(position("[counts]") < position("[timings_ms]"));
+    }
+
+    #[test]
+    fn counts_written_before_the_column_counters_still_load() {
+        let text = toml::to_string(&sample_manifest()).expect("serialise");
+        let phase2: String = text
+            .lines()
+            .filter(|line| !line.starts_with("columns_"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        assert!(!phase2.contains("columns_"), "fixture must drop both keys");
+        let manifest: Manifest = toml::from_str(&phase2).expect("Phase 2 manifest loads");
+        assert_eq!(manifest.counts.columns_located, 0);
+        assert_eq!(manifest.counts.columns_missing, 0);
+        assert_eq!(manifest.counts.entities, 40, "other counters are kept");
     }
 
     #[test]

@@ -23,6 +23,15 @@ pub struct NamePos {
 /// annotations, multi-line signatures).
 const MAX_NAME_LOOKAHEAD_LINES: usize = 15;
 
+/// Name of knot's synthetic file-level entity.
+const MODULE_ENTITY_NAME: &str = "<module>";
+
+/// Whether an entity has no declaration name to locate (the synthetic
+/// `<module>` entity, or an empty name). Not a location failure.
+pub fn is_nameless(name: &str) -> bool {
+    name.is_empty() || name == MODULE_ENTITY_NAME
+}
+
 /// Locate the declaration name of an entity in `source`.
 ///
 /// `start_line`/`end_line` are 1-based, as stored by knot. Returns `None` for
@@ -51,7 +60,7 @@ pub fn locate_name_in_lines(
     end_line: usize,
     lang: LspLang,
 ) -> Option<NamePos> {
-    if name == "<module>" || name.is_empty() || start_line == 0 {
+    if is_nameless(name) || start_line == 0 {
         return None;
     }
     let mut best: Option<(i64, usize, usize)> = None;

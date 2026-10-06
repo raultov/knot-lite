@@ -28,7 +28,9 @@ pub struct ShardLine {
     pub l0: usize,
     /// 1-based last line (inclusive).
     pub l1: usize,
-    /// Reserved: UTF-16 column of the name (written `null` until Phase 3).
+    /// UTF-16 column of the declaration name on the line found by
+    /// `lsp::position::locate_name` (which may be below `l0`); `null` when not
+    /// located or not an LSP language.
     pub col: Option<u32>,
     /// Signature.
     pub sig: Option<String>,
