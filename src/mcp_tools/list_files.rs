@@ -17,9 +17,9 @@ use crate::models::params::FilesParams;
 )]
 #[derive(JsonSchema, serde::Deserialize, Debug)]
 pub struct ListFilesTool {
-    /// Optional repo-relative directory prefix or glob.
+    /// Optional repo-relative directory prefix.
     #[json_schema(
-        description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary) or glob pattern (segments: `*` segment wildcard, `**` any depth, `?` one char). Omit to list every indexed file.",
+        description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary). Glob patterns are not supported in this version. Omit to list every indexed file.",
         min_length = 1,
         max_length = 500
     )]

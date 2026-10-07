@@ -12,7 +12,7 @@ use crate::mcp_tools::parse_args;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "status",
     title = "Repository capability matrix",
-    description = "Read-only capability matrix of the repository served by this knot-lite instance: for each language, the file count, whether a parser exists, whether its language server is installed, the resulting tier (3 = parser + language server, 2 = parser only, heuristic graph, 1 = files only, 0 = excluded) and the index state (components, counts, embedding model and freshness against the working tree). Call this FIRST. Returns a Markdown table plus the same data as structured JSON (schema knot-lite/status/v1).",
+    description = "Read-only capability matrix of the repository served by this knot-lite instance: for each language, the file count, whether a parser exists, whether its language server is installed, the resulting tier (3 = parser + language server, 2 = parser only, heuristic graph, 1 = files only, 0 = excluded) and the index state (components, counts, embedding model and freshness against the working tree). Call this FIRST. Returns a Markdown table plus the same data as structured JSON (schema knot-lite/status/v1). For tier-3 languages it also shows whether the language server is running, its version and memory use, and whether language-server results were pre-computed.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -37,10 +37,13 @@ impl StatusTool {
     ) -> Result<CallToolResult, CallToolError> {
         let cfg = handler.config()?.clone();
         let _args: StatusTool = parse_args("status", &params, &cfg.repo_name)?;
-        let json = tokio::task::spawn_blocking(move || cli_tools::run_status(&cfg))
-            .await
-            .map_err(|e| CallToolError::from_message(format!("status: {e}")))?
-            .map_err(|e| CallToolError::from_message(format!("status: {e}")))?;
+        let runtime = handler.services.lsp_runtime();
+        let json = tokio::task::spawn_blocking(move || {
+            cli_tools::run_status_with_runtime(&cfg, runtime.as_ref())
+        })
+        .await
+        .map_err(|e| CallToolError::from_message(format!("status: {e}")))?
+        .map_err(|e| CallToolError::from_message(format!("status: {e}")))?;
         let text = cli_tools::format_status_output(&json, OutputFormat::Markdown);
         let structured = json.as_object().cloned().unwrap_or_default();
         Ok(

@@ -5,6 +5,8 @@
 //! created once per model. The CLI builds a fresh `QueryServices` per
 //! invocation. Poisoned mutexes recover the inner value; nothing here panics.
 
+use std::collections::BTreeSet;
+use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -12,6 +14,7 @@ use std::time::Duration;
 
 use knot::pipeline::embed::EmbedModelChoice;
 
+use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::Config;
 use crate::embed::knot_embedder::KnotEmbedder;
 use crate::embed::settings::EmbedSettings;
@@ -209,6 +212,37 @@ impl QueryServices {
     fn create_pool(&self, cfg: &Config, index: &LoadedIndex) -> Option<Arc<LspPool>> {
         let files: Vec<String> = index.file_sha16.keys().cloned().collect();
         start_pool(cfg, &files, self.ready_wait, Some(index.stamp.clone())).map(Arc::new)
+    }
+
+    /// Start the servers of the languages the index has, ahead of the first
+    /// query (`KNOT_LITE_LSP_WARMUP=on`, MCP only). Nothing happens when
+    /// servers are off or there is no index yet. Returns without waiting.
+    pub fn warm_up(&self, cfg: &Config) {
+        if !cfg.lsp.enabled {
+            return;
+        }
+        let layout = IndexLayout::for_repo(&cfg.repo_path);
+        let Ok(index) = self.get_index(&layout) else {
+            return;
+        };
+        let Some(pool) = self.lsp_pool(cfg, &index) else {
+            return;
+        };
+        let languages: BTreeSet<LspLang> = index
+            .by_file
+            .keys()
+            .filter_map(|rel| lsp_lang_for_label(label_for(Path::new(rel))))
+            .collect();
+        for lang in languages {
+            pool.warm(lang);
+        }
+    }
+
+    /// The same services over a ready-made pool (tests inject a fake one).
+    #[cfg(test)]
+    pub(crate) fn with_lsp_pool(self, pool: LspPool) -> Self {
+        let _ = self.lsp.set(Some(Arc::new(pool)));
+        self
     }
 
     /// The state of every language server, when a pool exists.
@@ -437,5 +471,61 @@ mod tests {
         );
         // Asking for the index again tells the pool about its stamp and still works.
         assert!(services.get_index(&layout).is_ok());
+    }
+    #[test]
+    fn warm_up_starts_the_servers_of_the_indexed_languages_only() {
+        let (tmp, mut cfg) = fixture();
+        run(&cfg);
+        cfg.lsp.enabled = true;
+        let servers = crate::lsp::fake::FakeServers::new(|_| crate::lsp::fake::FakeScript::full());
+        let starts = servers.starts();
+        let services =
+            QueryServices::with_factory(counting_factory(DIM).0).with_lsp_pool(servers.pool());
+
+        services.warm_up(&cfg);
+
+        // The fixture has Rust and TypeScript sources and no Java: warming is
+        // asynchronous, so wait for both starts.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while starts.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert_eq!(starts.load(Ordering::SeqCst), 2);
+        let states: Vec<(String, String)> = services
+            .lsp_runtime()
+            .expect("pool")
+            .slots
+            .into_iter()
+            .map(|(language, slot)| (language, slot.state))
+            .collect();
+        assert_eq!(
+            states,
+            vec![
+                ("java".to_owned(), "not_started".to_owned()),
+                ("rust".to_owned(), "ready".to_owned()),
+                ("ts".to_owned(), "ready".to_owned()),
+            ]
+        );
+        let _ = tmp;
+    }
+
+    #[test]
+    fn warm_up_does_nothing_without_servers_or_without_an_index() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        // Servers off: nothing starts and no pool is created.
+        let services = QueryServices::with_factory(counting_factory(DIM).0);
+        services.warm_up(&cfg);
+        assert!(services.lsp_runtime().is_none());
+
+        // Servers on but no index: nothing to warm either.
+        let empty = tempfile::tempdir().expect("tempdir");
+        let mut cfg = crate::config::test_support::config_for(empty.path().to_path_buf());
+        cfg.lsp.enabled = true;
+        let services = QueryServices::with_factory(counting_factory(DIM).0);
+        services.warm_up(&cfg);
+        assert!(services.lsp_runtime().is_none());
+        let _ = tmp;
     }
 }

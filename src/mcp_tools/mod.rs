@@ -4,6 +4,8 @@
 //! one-line `handle` that delegates here; the shared machinery keeps each tool
 //! file tiny and the diagnostics identical.
 
+use std::sync::Arc;
+
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -43,7 +45,10 @@ pub(crate) fn parse_args<T: DeserializeOwned>(
 }
 
 /// Common body of the four query tools.
-pub(crate) fn query_tool<T, P>(
+///
+/// The runner is synchronous and may wait for a language server, so it runs on
+/// a blocking thread: the async runtime keeps serving other requests (P3-D16).
+pub(crate) async fn query_tool<T, P>(
     tool: &str,
     params: CallToolRequestParams,
     handler: &KnotLiteMcpHandler,
@@ -51,10 +56,17 @@ pub(crate) fn query_tool<T, P>(
 ) -> Result<CallToolResult, CallToolError>
 where
     T: DeserializeOwned,
+    P: Send + 'static,
 {
     let cfg = handler.config()?.clone();
     let args = parse_args::<T>(tool, &params, &cfg.repo_name)?;
-    match (spec.run)(&cfg, &handler.services, &(spec.to_params)(args)) {
+    let tool_params = (spec.to_params)(args);
+    let services = Arc::clone(&handler.services);
+    let run = spec.run;
+    let joined = tokio::task::spawn_blocking(move || run(&cfg, &services, &tool_params)).await;
+    let outcome = joined
+        .map_err(|error| CallToolError::from_message(format!("{tool}: internal error: {error}")))?;
+    match outcome {
         Ok(json) => {
             let markdown = (spec.format)(&json, OutputFormat::Markdown);
             let mut result =
@@ -91,6 +103,7 @@ macro_rules! impl_query_tool_handle {
                         format: $format,
                     },
                 )
+                .await
             }
         }
     };
@@ -188,6 +201,45 @@ mod tests {
                     .contains("knot-lite index")
             );
         }
+    }
+
+    #[test]
+    fn descriptions_contain_phase3_keywords() {
+        let callers = tool_named("find_callers").description.unwrap();
+        for needle in [
+            "provenance 'lsp-live'",
+            "'lsp-indexed' when pre-computed by `knot-lite index`",
+            "provenance 'heuristic'",
+            "Every target states its provenance.",
+            "language-server answers are limited to the first 10 targets per call",
+        ] {
+            assert!(callers.contains(needle), "{needle} missing in {callers}");
+        }
+        assert!(
+            !callers.contains("language servers are not used yet"),
+            "the Phase 2 wording is stale"
+        );
+        let status = tool_named("status").description.unwrap();
+        assert!(
+            status.ends_with(
+                "For tier-3 languages it also shows whether the language server is running, its version and memory use, and whether language-server results were pre-computed."
+            ),
+            "{status}"
+        );
+    }
+
+    #[test]
+    fn list_files_path_does_not_promise_globs() {
+        let tool = tool_named("list_files");
+        let description = property(&tool, "path")["description"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(
+            description.contains("Glob patterns are not supported"),
+            "{description}"
+        );
+        assert!(!description.contains("segment wildcard"), "{description}");
     }
 
     #[test]
@@ -307,8 +359,8 @@ mod tests {
         assert!(err.to_string().contains("not served here"), "{err}");
     }
 
-    #[test]
-    fn query_tool_not_indexed_message() {
+    #[tokio::test]
+    async fn query_tool_not_indexed_message() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let cfg = crate::config::test_support::config_for(tmp.path().to_path_buf());
         let handler = KnotLiteMcpHandler::new(cfg);
@@ -325,9 +377,107 @@ mod tests {
                 format: crate::cli_tools::format_callers_output,
             },
         )
+        .await
         .unwrap_err();
         let text = err.to_string();
         assert!(text.contains("has no index"), "{text}");
         assert!(text.contains("`status`"), "{text}");
+    }
+
+    /// A handler whose runners never touch a repository (dry-run configs are
+    /// refused by `config()`, so this one serves an empty temp directory).
+    fn handler_for_runner_tests() -> (tempfile::TempDir, KnotLiteMcpHandler) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cfg = crate::config::test_support::config_for(tmp.path().to_path_buf());
+        (tmp, KnotLiteMcpHandler::new(cfg))
+    }
+
+    fn find_callers_params() -> CallToolRequestParams {
+        let mut args = serde_json::Map::new();
+        args.insert("entity_name".to_string(), json!("x"));
+        call_params("find_callers", args)
+    }
+
+    fn slow_runner(
+        _cfg: &Config,
+        _services: &QueryServices,
+        _params: &(),
+    ) -> anyhow::Result<Value> {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        Ok(json!({"ok": true}))
+    }
+
+    fn panicking_runner(
+        _cfg: &Config,
+        _services: &QueryServices,
+        _params: &(),
+    ) -> anyhow::Result<Value> {
+        panic!("the runner panicked");
+    }
+
+    fn unit_spec(
+        run: fn(&Config, &QueryServices, &()) -> anyhow::Result<Value>,
+    ) -> QueryToolSpec<FindCallersTool, ()> {
+        QueryToolSpec {
+            to_params: |_| (),
+            run,
+            format: |_, _| String::new(),
+        }
+    }
+
+    #[test]
+    fn query_tools_run_on_blocking_pool() {
+        // Source-level guard: the runner is handed to `spawn_blocking`, never called inline.
+        let source = include_str!("mod.rs");
+        let start = source
+            .find("pub(crate) async fn query_tool")
+            .expect("query_tool");
+        let end = source[start..].find("/// Generates").expect("end") + start;
+        let body = &source[start..end];
+        assert!(body.contains("spawn_blocking"), "{body}");
+        assert!(
+            !body.contains("(spec.run)("),
+            "the runner must not run on the async thread"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_slow_query_does_not_block_the_async_runtime() {
+        let (_tmp, handler) = handler_for_runner_tests();
+        let started = std::time::Instant::now();
+        let (result, ticked_after) = tokio::join!(
+            query_tool::<FindCallersTool, _>(
+                "find_callers",
+                find_callers_params(),
+                &handler,
+                unit_spec(slow_runner),
+            ),
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                started.elapsed()
+            }
+        );
+        assert!(result.is_ok());
+        // On a single-threaded runtime the timer can only fire while the
+        // runner is NOT occupying the thread.
+        assert!(
+            ticked_after < std::time::Duration::from_millis(300),
+            "the runtime was blocked for {ticked_after:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_panicking_runner_becomes_a_tool_error() {
+        let (_tmp, handler) = handler_for_runner_tests();
+        let err = query_tool::<FindCallersTool, _>(
+            "find_callers",
+            find_callers_params(),
+            &handler,
+            unit_spec(panicking_runner),
+        )
+        .await
+        .unwrap_err();
+        let text = err.to_string();
+        assert!(text.starts_with("find_callers: internal error:"), "{text}");
     }
 }

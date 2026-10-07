@@ -34,6 +34,14 @@ fn call(id: u64, name: &str, arguments: &str) -> String {
 
 /// Spawn the MCP server over stdio against an isolated tempdir repository.
 fn spawn_server(repo: &std::path::Path) -> (Child, Receiver<String>, tempfile::TempDir) {
+    spawn_server_with(repo, &[])
+}
+
+/// [`spawn_server`] with extra environment variables (they win over the defaults).
+fn spawn_server_with(
+    repo: &std::path::Path,
+    extra_env: &[(&str, &str)],
+) -> (Child, Receiver<String>, tempfile::TempDir) {
     let isolation = tempfile::tempdir().expect("config isolation tempdir");
     let non_exec = isolation.path().join("not-an-lsp");
     std::fs::write(&non_exec, b"stub").expect("write non-exec stub");
@@ -48,6 +56,7 @@ fn spawn_server(repo: &std::path::Path) -> (Child, Receiver<String>, tempfile::T
         .env("KNOT_LITE_LSP_RUST", &non_exec)
         .env("KNOT_LITE_LSP_TS", &non_exec)
         .env("KNOT_LITE_LSP_JAVA", &non_exec)
+        .envs(extra_env.iter().copied())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -250,8 +259,9 @@ fn mcp_stdio_protocol_session() {
     assert_eq!(error.get("code").and_then(Value::as_i64), Some(-32601));
 }
 
-#[test]
-fn mcp_stdio_indexed_session() {
+/// The fixture repository with its index built (language servers never run:
+/// the build pre-computes nothing for the fixture and the pool is absent).
+fn indexed_fixture() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("tempdir");
     knot_lite::index::fixture::write_fixture_repo(tmp.path()).expect("fixture");
     let common_args = knot_lite::config::CommonArgs {
@@ -278,6 +288,12 @@ fn mcp_stdio_indexed_session() {
         &mut |_| {},
     )
     .expect("build");
+    tmp
+}
+
+#[test]
+fn mcp_stdio_indexed_session() {
+    let tmp = indexed_fixture();
 
     let (mut child, rx, _isolation) = spawn_server(tmp.path());
     let mut stdin = child.stdin.take().expect("child stdin");
@@ -296,7 +312,26 @@ fn mcp_stdio_indexed_session() {
     stdin.flush().expect("flush requests");
 
     let responses = collect_responses(&rx, &[1, 2, 3, 4, 5, 6]);
+
+    // After the first `find_callers` tried the Rust server, `status` reports it as missing.
+    writeln!(stdin, "{}", call(7, "status", "{}")).expect("write status");
+    stdin.flush().expect("flush status");
+    let after = collect_responses(&rx, &[7]);
     stop(&mut child);
+    let status_after = result_of(&after["7"]);
+    let rust_row = row_of(
+        status_after
+            .get("structuredContent")
+            .expect("structuredContent"),
+        "rust",
+    );
+    assert_eq!(rust_row["lsp_runtime"]["state"], "missing", "{rust_row}");
+    assert!(
+        rust_row["lsp_runtime"]["diagnostic"]
+            .as_str()
+            .is_some_and(|d| d.starts_with("KNOT_LITE_LSP_RUST = '")),
+        "{rust_row}"
+    );
 
     let status_res = result_of(&responses["1"]);
     assert_ne!(
@@ -343,6 +378,7 @@ fn mcp_stdio_indexed_session() {
         .as_u64()
         .expect("caller_count");
     assert!(caller_count >= 3, "target has >= 3 callers");
+    assert_unavailable_server_answer(callers_struct, "KNOT_LITE_LSP_RUST = '");
 
     let explore_res = result_of(&responses["3"]);
     assert_ne!(
@@ -397,4 +433,64 @@ fn mcp_stdio_indexed_session() {
     let search_err = error_text(&search_res);
     assert!(search_err.contains("knot-lite-fake-sha256"), "{search_err}");
     assert!(search_err.contains("cannot be loaded"), "{search_err}");
+}
+
+/// The language row `language` of a status report.
+fn row_of<'a>(status: &'a Value, language: &str) -> &'a Value {
+    status["languages"]
+        .as_array()
+        .expect("languages")
+        .iter()
+        .find(|row| row["language"] == language)
+        .unwrap_or_else(|| panic!("no {language} row in {status}"))
+}
+
+/// A target whose language server is unavailable answers from the heuristic
+/// edges, says why, and carries the server's own diagnostic as a note.
+fn assert_unavailable_server_answer(callers: &Value, diagnostic_prefix: &str) {
+    assert_eq!(callers["provenance"], "heuristic", "{callers}");
+    assert_eq!(callers["targets"][0]["provenance"], "heuristic");
+    assert_eq!(
+        callers["targets"][0]["lsp"]["status"], "no_server",
+        "{callers}"
+    );
+    assert_eq!(callers["lsp"]["live_enabled"], true);
+    let notes = callers["notes"].to_string();
+    assert!(notes.contains(diagnostic_prefix), "{notes}");
+    assert!(
+        notes.contains("does not resolve to an executable"),
+        "{notes}"
+    );
+}
+
+#[test]
+fn mcp_stdio_lsp_off_session() {
+    let tmp = indexed_fixture();
+    let (mut child, rx, _isolation) = spawn_server_with(tmp.path(), &[("KNOT_LITE_LSP", "off")]);
+    let mut stdin = child.stdin.take().expect("child stdin");
+    for req in [
+        call(1, "find_callers", r#"{"entity_name":"target"}"#),
+        call(2, "status", "{}"),
+    ] {
+        writeln!(stdin, "{req}").expect("write request");
+    }
+    stdin.flush().expect("flush requests");
+    let responses = collect_responses(&rx, &[1, 2]);
+    stop(&mut child);
+
+    let callers = result_of(&responses["1"]);
+    let callers = callers.get("structuredContent").expect("structuredContent");
+    assert_eq!(callers["schema"], "knot-lite/callers/v2");
+    assert_eq!(callers["provenance"], "heuristic");
+    assert!(
+        callers["lsp"].is_null(),
+        "servers off and nothing pre-computed"
+    );
+    assert_eq!(callers["targets"][0]["lsp"]["status"], "disabled");
+    assert!(callers["targets"][0]["caller_count"].as_u64().unwrap_or(0) >= 3);
+
+    let status = result_of(&responses["2"]);
+    let status = status.get("structuredContent").expect("structuredContent");
+    assert_eq!(status["lsp_settings"]["enabled"], false);
+    assert!(row_of(status, "rust")["lsp_runtime"].is_null());
 }

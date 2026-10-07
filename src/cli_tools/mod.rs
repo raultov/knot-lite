@@ -11,7 +11,7 @@ pub use query::{
 };
 pub use status::{
     StatusExtras, format_status_output, run_status, run_status_probing, run_status_with,
-    run_status_with_extras,
+    run_status_with_extras, run_status_with_runtime,
 };
 
 use std::io::IsTerminal as _;

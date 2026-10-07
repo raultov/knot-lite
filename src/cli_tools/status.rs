@@ -79,6 +79,18 @@ fn probe_real(
     }
 }
 
+/// The report with the live state of a running pool (the MCP server's).
+pub fn run_status_with_runtime(
+    cfg: &Config,
+    runtime: Option<&PoolSnapshot>,
+) -> Result<serde_json::Value> {
+    let extras = StatusExtras {
+        runtime,
+        probe: None,
+    };
+    run_status_with_extras(cfg, &|lang| detect(lang, &cfg.lsp_overrides), &extras)
+}
+
 /// Build the report with an injected language-server lookup (tests).
 pub fn run_status_with(
     cfg: &Config,

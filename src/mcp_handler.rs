@@ -27,12 +27,13 @@ pub const DRY_RUN_MESSAGE: &str = "Server is running in dry-run mode. The reposi
 
 /// Advertised instructions, surfaced by `server/discover`.
 pub const SERVER_INSTRUCTIONS: &str = "knot-lite answers code-intelligence questions about ONE repository without databases.\n\
-1. status — call it first: capability matrix (tiers 3/2/1/0 per language) and index state.\n\
+1. status — call it first: capability matrix (tiers 3/2/1/0 per language), index state and language-server state.\n\
 2. search_hybrid_context — semantic search over the index.\n\
-3. find_callers — reverse references (graph provenance: lsp or heuristic).\n\
+3. find_callers — reverse references; provenance per target: lsp-live, lsp-indexed or heuristic.\n\
 4. explore_file — entities declared in one file.\n\
-5. list_files — files in the index, optionally by prefix or glob.\n\
+5. list_files — files in the index, optionally under a directory prefix.\n\
 Tools 2-5 require a knot-lite index; without one they explain what is missing.\n\
+The first find_callers on a language may answer from heuristic edges while its language server starts; retry for language-server answers.\n\
 repo_name is optional: this server serves a single repository; 'all', '*' or its own name are accepted.";
 
 /// The MCP handler: one server, one repository (P1-D7).
@@ -50,6 +51,9 @@ impl KnotLiteMcpHandler {
     /// lazily, on the first search).
     pub fn new(config: Config) -> Self {
         let services = Arc::new(QueryServices::real(&config.embed).with_ready_wait(MCP_READY_WAIT));
+        if config.lsp.warmup {
+            services.warm_up(&config);
+        }
         Self::with_services(config, services)
     }
 
@@ -216,6 +220,23 @@ mod tests {
             .map(|tool| tool.name)
             .collect();
         assert_eq!(names, EXPECTED_TOOLS);
+    }
+
+    #[test]
+    fn server_instructions_are_pinned() {
+        assert_eq!(
+            SERVER_INSTRUCTIONS,
+            "knot-lite answers code-intelligence questions about ONE repository without databases.\n\
+1. status — call it first: capability matrix (tiers 3/2/1/0 per language), index state and language-server state.\n\
+2. search_hybrid_context — semantic search over the index.\n\
+3. find_callers — reverse references; provenance per target: lsp-live, lsp-indexed or heuristic.\n\
+4. explore_file — entities declared in one file.\n\
+5. list_files — files in the index, optionally under a directory prefix.\n\
+Tools 2-5 require a knot-lite index; without one they explain what is missing.\n\
+The first find_callers on a language may answer from heuristic edges while its language server starts; retry for language-server answers.\n\
+repo_name is optional: this server serves a single repository; 'all', '*' or its own name are accepted."
+        );
+        assert!(!SERVER_INSTRUCTIONS.contains("prefix or glob"));
     }
 
     #[test]
@@ -440,5 +461,110 @@ mod tests {
             assert!(instructions.contains(tool), "instructions miss {tool}");
         }
         assert!(details.capabilities.tools.is_some());
+    }
+    fn callers_args(name: &str) -> serde_json::Map<String, serde_json::Value> {
+        let mut args = serde_json::Map::new();
+        args.insert("entity_name".to_string(), serde_json::json!(name));
+        args
+    }
+
+    #[tokio::test]
+    async fn handler_without_lsp_has_no_pool() {
+        let (_tmp, cfg, handler, services) = indexed_handler();
+        assert!(!cfg.lsp.enabled, "test configs keep servers off");
+        let result = handler
+            .dispatch(call_params("find_callers", callers_args("target")))
+            .await
+            .expect("callers");
+        let structured = result.structured_content.expect("structured content");
+        assert_eq!(structured["provenance"], "heuristic");
+        assert_eq!(structured["targets"][0]["lsp"]["status"], "disabled");
+        assert!(structured["lsp"].is_null());
+        assert!(services.lsp_runtime().is_none(), "no pool without servers");
+    }
+
+    #[tokio::test]
+    async fn dry_run_has_no_pool() {
+        let handler = KnotLiteMcpHandler::new_dry_run();
+        assert!(handler.services.lsp_runtime().is_none());
+        let err = handler
+            .dispatch(call_params("find_callers", callers_args("x")))
+            .await
+            .expect_err("refused");
+        assert!(err.to_string().contains("dry-run"), "{err}");
+        assert!(handler.services.lsp_runtime().is_none());
+    }
+
+    /// An indexed handler whose pool is a fake that answers the fixture's `target`.
+    fn handler_with_fake_pool() -> (tempfile::TempDir, KnotLiteMcpHandler) {
+        let (tmp, mut cfg) = crate::index::build::test_support::fixture();
+        let mut fake = crate::embed::fake::FakeEmbedder::new(16);
+        crate::index::build::build_index(
+            &cfg,
+            &mut fake,
+            &crate::index::build::test_support::opts(),
+            None,
+            &mut |_| {},
+        )
+        .expect("build");
+        cfg.lsp.enabled = true;
+        let pool =
+            crate::lsp::fake::FakeServers::new(crate::lsp::fake::fixture_target_script(tmp.path()))
+                .pool();
+        let services = Arc::new(
+            QueryServices::with_factory(Arc::new(|_model| {
+                Ok(Box::new(crate::embed::fake::FakeEmbedder::new(16))
+                    as Box<dyn crate::embed::EmbedBatch + Send>)
+            }))
+            .with_lsp_pool(pool),
+        );
+        (tmp, KnotLiteMcpHandler::with_services(cfg, services))
+    }
+
+    #[tokio::test]
+    async fn find_callers_answers_live_through_the_pool_and_status_shows_the_server() {
+        let (_tmp, handler) = handler_with_fake_pool();
+
+        let before = handler
+            .dispatch(call_params("status", serde_json::Map::new()))
+            .await
+            .expect("status")
+            .structured_content
+            .expect("structured");
+        let rust_before = before["languages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["language"] == "rust")
+            .expect("rust row")
+            .clone();
+        assert_eq!(rust_before["lsp_runtime"]["state"], "not_started");
+
+        let callers = handler
+            .dispatch(call_params("find_callers", callers_args("target")))
+            .await
+            .expect("callers")
+            .structured_content
+            .expect("structured");
+        assert_eq!(callers["provenance"], "lsp-live");
+        assert_eq!(callers["targets"][0]["lsp"]["status"], "ok");
+        assert_eq!(callers["targets"][0]["caller_count"], 3);
+        assert_eq!(callers["lsp"]["languages"]["rust"]["state"], "ready");
+
+        let after = handler
+            .dispatch(call_params("status", serde_json::Map::new()))
+            .await
+            .expect("status")
+            .structured_content
+            .expect("structured");
+        let rust_after = after["languages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["language"] == "rust")
+            .expect("rust row")
+            .clone();
+        assert_eq!(rust_after["lsp_runtime"]["state"], "ready");
+        assert!(rust_after["lsp_runtime"]["ready_ms"].is_u64());
     }
 }
