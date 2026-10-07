@@ -20,7 +20,7 @@ use crate::mcp_tools::find_callers::FindCallersTool;
 use crate::mcp_tools::list_files::ListFilesTool;
 use crate::mcp_tools::search_hybrid_context::SearchHybridContextTool;
 use crate::mcp_tools::status::StatusTool;
-use crate::query::session::QueryServices;
+use crate::query::session::{MCP_READY_WAIT, QueryServices};
 
 /// Refusal message for every tool call in dry-run mode.
 pub const DRY_RUN_MESSAGE: &str = "Server is running in dry-run mode. The repository is not opened. This mode is used for protocol validation and quality checks only.";
@@ -49,7 +49,7 @@ impl KnotLiteMcpHandler {
     /// A handler serving one repository, with knot's real embedder (loaded
     /// lazily, on the first search).
     pub fn new(config: Config) -> Self {
-        let services = Arc::new(QueryServices::real(&config.embed));
+        let services = Arc::new(QueryServices::real(&config.embed).with_ready_wait(MCP_READY_WAIT));
         Self::with_services(config, services)
     }
 
@@ -360,7 +360,7 @@ mod tests {
         let structured = result.structured_content.expect("structured content");
         assert_eq!(
             structured.get("schema").and_then(|v| v.as_str()),
-            Some("knot-lite/callers/v1")
+            Some("knot-lite/callers/v2")
         );
         let count = structured["targets"][0]["caller_count"].as_u64().unwrap();
         assert_eq!(count, 3);

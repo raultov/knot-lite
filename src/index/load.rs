@@ -10,14 +10,30 @@ use std::time::Instant;
 
 use super::edges::EdgeLine;
 use super::encode::decode_i8pv;
+use super::inventory::read_inventory;
 use super::layout::{
     EDGES_DIR, INDEX_DIR, IndexLayout, MANIFEST_SCHEMA_V1, SHARDS_DIR, rel_of_record,
 };
+use super::lsp_records::{LspTargetLine, read_lsp_edge_shard, read_lsp_targets};
 use super::manifest::{IndexState, Manifest, one_line, read_index_state, read_manifest};
 use super::record_io::{list_record_files, read_jsonl};
 use super::shard::{ShardLine, sort_lines};
+use crate::capability::languages::LspLang;
 use crate::error::IndexUnavailable;
 use crate::graph::containers::ContainerTable;
+
+/// A pre-computed LSP edge as loaded into memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LspIncoming {
+    /// Repo-relative caller file.
+    pub rel: String,
+    /// Container entity id (`None` for file-level caller).
+    pub src: Option<String>,
+    /// Relationship label (`CALLS`, `REFERENCES`, `IMPLEMENTS`, `EXTENDS`, `OVERRIDES`).
+    pub relation: String,
+    /// Call/reference site count.
+    pub n: u32,
+}
 
 /// One shard record plus where it lives.
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +106,12 @@ pub struct LoadedIndex {
     pub matrix: Matrix,
     /// Containers of every file, for caller granularity.
     pub containers: ContainerTable,
+    /// Pre-computed LSP edges per target id.
+    pub lsp_incoming: HashMap<String, Vec<LspIncoming>>,
+    /// Pre-computed LSP target status per target id.
+    pub lsp_targets: HashMap<String, LspTargetLine>,
+    /// Inventory file sha16 per repo-relative path (for stale target detection).
+    pub file_sha16: HashMap<String, String>,
     /// Milliseconds the load took.
     pub load_ms: u64,
 }
@@ -137,19 +159,109 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
     let manifest = read_valid_manifest(layout)?;
     let dim = usize::try_from(manifest.embedding.dim).unwrap_or(usize::MAX);
     let (records, matrix) = load_records(layout, dim)?;
-    let edges = load_edges(layout)?;
-    Ok(assemble(manifest, records, matrix, edges, started))
+    let loaded = Loaded {
+        records,
+        matrix,
+        edges: load_edges(layout)?,
+        lsp_incoming: load_lsp_incoming(layout)?,
+        lsp_targets: load_lsp_targets(layout)?,
+        file_sha16: load_file_sha16(layout),
+    };
+    Ok(assemble(manifest, loaded, started))
 }
 
-/// Derive the lookup maps, the incoming-edge map and the containers from the
-/// raw records and edges (shared by the loader and the test builder).
-fn assemble(
-    manifest: Manifest,
+fn load_lsp_incoming(
+    layout: &IndexLayout,
+) -> Result<HashMap<String, Vec<LspIncoming>>, IndexUnavailable> {
+    let mut map: HashMap<String, Vec<LspIncoming>> = HashMap::new();
+    let lsp_edges_dir = layout.lsp_edges();
+    if !lsp_edges_dir.exists() {
+        return Ok(map);
+    }
+    for lang in [LspLang::Rust, LspLang::Ts, LspLang::Java] {
+        let lang_dir = layout.lsp_edges_lang_dir(lang);
+        if !lang_dir.exists() {
+            continue;
+        }
+        let record_files = match list_record_files(&lang_dir) {
+            Ok(files) => files,
+            Err(error) => {
+                return Err(IndexUnavailable::Corrupt {
+                    path: format!("{INDEX_DIR}/lsp-edges/{}", lang.dir_name()),
+                    error: one_line(&format!("{error:#}")),
+                });
+            }
+        };
+        for path in record_files {
+            let Some(caller_rel) = rel_of_record(&lang_dir, &path) else {
+                return Err(corrupt(layout, &path, "not an lsp edge record file name"));
+            };
+            let shard = read_lsp_edge_shard(&path)
+                .map_err(|error| corrupt(layout, &path, &format!("{error:#}")))?;
+            for edge in shard {
+                map.entry(edge.dst).or_default().push(LspIncoming {
+                    rel: caller_rel.clone(),
+                    src: edge.src,
+                    relation: edge.rel,
+                    n: edge.n,
+                });
+            }
+        }
+    }
+    Ok(map)
+}
+
+fn load_lsp_targets(
+    layout: &IndexLayout,
+) -> Result<HashMap<String, LspTargetLine>, IndexUnavailable> {
+    let mut map = HashMap::new();
+    let lsp_targets_dir = layout.lsp_targets();
+    if !lsp_targets_dir.exists() {
+        return Ok(map);
+    }
+    for lang in [LspLang::Rust, LspLang::Ts, LspLang::Java] {
+        let path = layout.lsp_targets_for(lang);
+        if !path.exists() {
+            continue;
+        }
+        let lines = read_lsp_targets(&path)
+            .map_err(|error| corrupt(layout, &path, &format!("{error:#}")))?;
+        for line in lines {
+            map.insert(line.id.clone(), line);
+        }
+    }
+    Ok(map)
+}
+
+fn load_file_sha16(layout: &IndexLayout) -> HashMap<String, String> {
+    let Ok(inv) = read_inventory(&layout.inventory) else {
+        return HashMap::new();
+    };
+    inv.entries.into_iter().map(|e| (e.rel, e.sha)).collect()
+}
+
+/// Everything read from disk, before the lookup maps are derived.
+#[derive(Default)]
+struct Loaded {
     records: Vec<LoadedRecord>,
     matrix: Matrix,
     edges: Vec<EdgeLine>,
-    started: Instant,
-) -> LoadedIndex {
+    lsp_incoming: HashMap<String, Vec<LspIncoming>>,
+    lsp_targets: HashMap<String, LspTargetLine>,
+    file_sha16: HashMap<String, String>,
+}
+
+/// Derive the lookup maps, the incoming-edge map and the containers from what
+/// was read (shared by the loader and the test builder).
+fn assemble(manifest: Manifest, loaded: Loaded, started: Instant) -> LoadedIndex {
+    let Loaded {
+        records,
+        matrix,
+        edges,
+        lsp_incoming,
+        lsp_targets,
+        file_sha16,
+    } = loaded;
     let mut by_id = HashMap::with_capacity(records.len());
     let mut by_file: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
@@ -180,6 +292,9 @@ fn assemble(
         incoming,
         matrix,
         containers,
+        lsp_incoming,
+        lsp_targets,
+        file_sha16,
         load_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     }
 }
@@ -354,13 +469,12 @@ pub(crate) mod test_support {
                 rel: (*rel).to_owned(),
             })
             .collect();
-        assemble(
-            sample_manifest(),
+        let loaded = Loaded {
             records,
-            Matrix::default(),
             edges,
-            Instant::now(),
-        )
+            ..Loaded::default()
+        };
+        assemble(sample_manifest(), loaded, Instant::now())
     }
 }
 
@@ -640,5 +754,128 @@ mod tests {
         assert_eq!(matrix.rows(), 2);
         // A zero-dimension matrix has no rows either (`0..0` is a valid range).
         assert_eq!(Matrix::default().row(0), None);
+    }
+    /// Writes the pre-computed LSP data of the fixture index: the target
+    /// `target` answered with a call from `caller` and a file-level reference.
+    fn write_lsp_data(layout: &IndexLayout, index: &LoadedIndex) -> (String, String) {
+        use crate::capability::languages::LspLang;
+        use crate::index::lsp_records::{
+            LspEdgeLine, LspTargetLine, write_lsp_edge_shards, write_lsp_targets,
+        };
+
+        let target = id_of(index, "src/lib.rs", "target");
+        let caller = id_of(index, "src/lib.rs", "caller");
+        let edge = |src: Option<&str>, rel: &str| LspEdgeLine {
+            src: src.map(str::to_owned),
+            dst: target.clone(),
+            rel: rel.to_owned(),
+            n: 2,
+        };
+        let shards = BTreeMap::from([
+            (
+                "src/lib.rs".to_owned(),
+                vec![edge(Some(&caller), "CALLS"), edge(None, "REFERENCES")],
+            ),
+            ("src/util.rs".to_owned(), vec![edge(None, "REFERENCES")]),
+        ]);
+        write_lsp_edge_shards(layout, LspLang::Rust, &shards).expect("edges");
+        let line = LspTargetLine {
+            id: target.clone(),
+            status: "ok".to_owned(),
+            ms: 812,
+            ops: crate::lsp::target::OpCounts {
+                incoming: Some(1),
+                references: Some(2),
+                implementation: None,
+            },
+            server: "rust-analyzer".to_owned(),
+        };
+        write_lsp_targets(layout, LspLang::Rust, &[line]).expect("targets");
+        (target, caller)
+    }
+
+    #[test]
+    fn lsp_maps_are_empty_for_phase2_index() {
+        let (_tmp, layout, index) = loaded();
+        assert!(index.lsp_incoming.is_empty());
+        assert!(index.lsp_targets.is_empty());
+        assert!(!layout.lsp_edges().exists() && !layout.lsp_targets().exists());
+    }
+
+    #[test]
+    fn lsp_maps_load_fixture() {
+        let (_tmp, layout, index) = loaded();
+        let (target, caller) = write_lsp_data(&layout, &index);
+        let reloaded = load_index(&layout).expect("reload");
+
+        let incoming = &reloaded.lsp_incoming[&target];
+        assert_eq!(incoming.len(), 3);
+        let calls = incoming
+            .iter()
+            .find(|edge| edge.relation == "CALLS")
+            .expect("CALLS edge");
+        assert_eq!(
+            (calls.rel.as_str(), calls.src.as_deref(), calls.n),
+            ("src/lib.rs", Some(caller.as_str()), 2)
+        );
+        let file_level: Vec<&str> = incoming
+            .iter()
+            .filter(|edge| edge.src.is_none())
+            .map(|edge| edge.rel.as_str())
+            .collect();
+        assert_eq!(file_level, vec!["src/lib.rs", "src/util.rs"]);
+
+        let line = &reloaded.lsp_targets[&target];
+        assert_eq!((line.status.as_str(), line.ms), ("ok", 812));
+        assert_eq!(line.ops.incoming, Some(1));
+        assert_eq!(reloaded.lsp_targets.len(), 1);
+    }
+
+    #[test]
+    fn corrupt_lsp_shard_is_reported_with_path() {
+        let (_tmp, layout, index) = loaded();
+        write_lsp_data(&layout, &index);
+        std::fs::write(
+            layout
+                .lsp_edges_for(crate::capability::languages::LspLang::Rust, "src/lib.rs")
+                .expect("path"),
+            "{\"src\":1}\n",
+        )
+        .expect("corrupt");
+        match load_index(&layout) {
+            Err(IndexUnavailable::Corrupt { path, error }) => {
+                assert_eq!(path, ".knot-lite/lsp-edges/rust/src/lib.rs.jsonl");
+                assert!(!error.contains('\n'), "{error}");
+            }
+            other => panic!("expected Corrupt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn corrupt_lsp_targets_file_is_reported_with_path() {
+        let (_tmp, layout, index) = loaded();
+        write_lsp_data(&layout, &index);
+        std::fs::write(
+            layout.lsp_targets_for(crate::capability::languages::LspLang::Rust),
+            "not json\n",
+        )
+        .expect("corrupt");
+        match load_index(&layout) {
+            Err(IndexUnavailable::Corrupt { path, .. }) => {
+                assert_eq!(path, ".knot-lite/lsp-targets/rust.jsonl");
+            }
+            other => panic!("expected Corrupt, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn file_sha16_is_loaded() {
+        let (tmp, _layout, index) = loaded();
+        let (sha, _) =
+            crate::index::inventory::file_sha16(&tmp.path().join("src/lib.rs")).expect("hash");
+        assert_eq!(index.file_sha16["src/lib.rs"], sha);
+        assert!(index.file_sha16.contains_key("src/util.rs"));
+        // The build output the index never reads is not in the inventory.
+        assert!(!index.file_sha16.contains_key("target/debug/junk.rs"));
     }
 }

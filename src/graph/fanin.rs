@@ -122,7 +122,7 @@ mod tests {
         use crate::index::build::test_support::{fixture, run};
         use crate::index::layout::IndexLayout;
         use crate::index::load::load_index;
-        use crate::query::callers::callers_response;
+        use crate::query::callers::test_support::heuristic_response;
 
         let (tmp, cfg) = fixture();
         run(&cfg);
@@ -147,7 +147,7 @@ mod tests {
         let mut compared = 0;
         let mut with_callers = 0;
         for record in index.records.iter().filter(|r| !r.line.is_tier1()) {
-            let response = callers_response(&index, "demo", &record.line.name, 500, &any);
+            let response = heuristic_response(&index, "demo", &record.line.name, 500, &any);
             let Some(target) = response.targets.iter().find(|t| t.id == record.line.id) else {
                 continue;
             };

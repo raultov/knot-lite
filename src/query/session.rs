@@ -5,11 +5,14 @@
 //! created once per model. The CLI builds a fresh `QueryServices` per
 //! invocation. Poisoned mutexes recover the inner value; nothing here panics.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use knot::pipeline::embed::EmbedModelChoice;
 
+use crate::config::Config;
 use crate::embed::knot_embedder::KnotEmbedder;
 use crate::embed::settings::EmbedSettings;
 use crate::embed::{EmbedBatch, EmbeddingSpec};
@@ -17,6 +20,8 @@ use crate::error::IndexUnavailable;
 use crate::index::encode::normalize;
 use crate::index::layout::IndexLayout;
 use crate::index::load::{LoadedIndex, load_index, read_stamp};
+use crate::lsp::pool::{LspPool, PoolSettings, ProcessFactory};
+use crate::lsp::settings::scratch_dir;
 
 /// Builds a query embedder for a model name (may download the model).
 pub type EmbedderFactory =
@@ -132,12 +137,24 @@ fn model_unavailable(spec: &EmbeddingSpec, error: &str) -> IndexUnavailable {
     }
 }
 
+/// How long a CLI query waits for a starting language server: the longest
+/// server ready timeout. The start gives up on its own at the server's timeout,
+/// and every waiter is told, so this only needs to be no shorter.
+pub const CLI_READY_WAIT: Duration = Duration::from_secs(900);
+
+/// How long an MCP query waits for a starting language server (P3-D7).
+pub const MCP_READY_WAIT: Duration = Duration::from_secs(20);
+
 /// Everything a query needs besides the configuration.
 pub struct QueryServices {
     /// The cached in-memory index.
     pub index: IndexCache,
     /// The cached query embedder.
     pub embedder: EmbedderCache,
+    /// The process-wide language-server pool, created on first use.
+    lsp: OnceLock<Option<Arc<LspPool>>>,
+    /// Wait for a starting server when `KNOT_LITE_LSP_READY_WAIT_SECS` is unset.
+    ready_wait: Duration,
 }
 
 impl QueryServices {
@@ -156,6 +173,59 @@ impl QueryServices {
         Self {
             index: IndexCache::new(),
             embedder: EmbedderCache::new(factory),
+            lsp: OnceLock::new(),
+            ready_wait: CLI_READY_WAIT,
+        }
+    }
+
+    /// The same services with another default wait for starting servers.
+    pub fn with_ready_wait(mut self, ready_wait: Duration) -> Self {
+        self.ready_wait = ready_wait;
+        self
+    }
+
+    /// The current index. When it is a new version of the index, the
+    /// language-server pool is told (its servers were started on the old one).
+    pub fn get_index(&self, layout: &IndexLayout) -> Result<Arc<LoadedIndex>, IndexUnavailable> {
+        let loaded = self.index.get(layout)?;
+        if let Some(Some(pool)) = self.lsp.get() {
+            pool.invalidate(loaded.stamp.clone());
+        }
+        Ok(loaded)
+    }
+
+    /// The language-server pool, created on first use; `None` when language
+    /// servers are off (`KNOT_LITE_LSP=off`) or the pool cannot be created.
+    /// Servers inside the pool start lazily.
+    pub fn lsp_pool(&self, cfg: &Config, index: &LoadedIndex) -> Option<Arc<LspPool>> {
+        if !cfg.lsp.enabled {
+            return None;
+        }
+        self.lsp
+            .get_or_init(|| self.create_pool(cfg, index))
+            .clone()
+    }
+
+    fn create_pool(&self, cfg: &Config, index: &LoadedIndex) -> Option<Arc<LspPool>> {
+        let files: Vec<String> = index.file_sha16.keys().cloned().collect();
+        let factory = ProcessFactory::new(
+            cfg.repo_path.clone(),
+            scratch_dir(&cfg.lsp, &cfg.repo_path),
+            cfg.lsp_overrides.clone(),
+            cfg.lsp.build_exec,
+            &files,
+        );
+        let settings = PoolSettings {
+            ready_wait: cfg.lsp.ready_wait.unwrap_or(self.ready_wait),
+            idle: cfg.lsp.idle,
+            ..PoolSettings::default()
+        };
+        match LspPool::new(Arc::new(factory), settings, Some(index.stamp.clone())) {
+            Ok(pool) => Some(Arc::new(pool)),
+            Err(error) => {
+                tracing::warn!("cannot start the language-server pool: {error:#}");
+                None
+            }
         }
     }
 }
@@ -345,5 +415,40 @@ mod tests {
         let (factory, _) = counting_factory(DIM);
         let services = QueryServices::with_factory(factory);
         assert_eq!((services.index.loads(), services.embedder.inits()), (0, 0));
+    }
+    #[test]
+    fn lsp_pool_is_absent_when_servers_are_off() {
+        let (tmp, cfg) = fixture();
+        run(&cfg);
+        let services = QueryServices::with_factory(counting_factory(DIM).0);
+        let index = services
+            .get_index(&IndexLayout::for_repo(tmp.path()))
+            .expect("index");
+        assert!(!cfg.lsp.enabled, "test configs never start servers");
+        assert!(services.lsp_pool(&cfg, &index).is_none());
+    }
+
+    #[test]
+    fn lsp_pool_is_created_once_and_shared() {
+        let (tmp, mut cfg) = fixture();
+        run(&cfg);
+        // Creating the pool starts no server: servers start on the first query.
+        cfg.lsp.enabled = true;
+        let services = QueryServices::with_factory(counting_factory(DIM).0);
+        let layout = IndexLayout::for_repo(tmp.path());
+        let index = services.get_index(&layout).expect("index");
+
+        let first = services.lsp_pool(&cfg, &index).expect("pool");
+        let second = services.lsp_pool(&cfg, &index).expect("pool");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(
+            first
+                .snapshot()
+                .slots
+                .values()
+                .all(|slot| slot.state == "not_started")
+        );
+        // Asking for the index again tells the pool about its stamp and still works.
+        assert!(services.get_index(&layout).is_ok());
     }
 }

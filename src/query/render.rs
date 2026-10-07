@@ -37,6 +37,8 @@ impl Column {
 pub struct RenderSection {
     /// Optional heading above the table.
     pub heading: Option<String>,
+    /// Optional line between the heading and the table.
+    pub caption: Option<String>,
     /// Column definitions.
     pub columns: Vec<Column>,
     /// Rows; every row has one cell per column.
@@ -98,6 +100,10 @@ fn render_table(doc: &RenderDoc) -> String {
         out.push('\n');
         if let Some(heading) = &section.heading {
             out.push_str(heading);
+            out.push('\n');
+        }
+        if let Some(caption) = &section.caption {
+            out.push_str(caption);
             out.push('\n');
         }
         if section.rows.is_empty() {
@@ -162,6 +168,9 @@ fn render_markdown(doc: &RenderDoc) -> String {
         if let Some(heading) = &section.heading {
             out.push_str(&format!("### {heading}\n\n"));
         }
+        if let Some(caption) = &section.caption {
+            out.push_str(&format!("{caption}\n\n"));
+        }
         if section.rows.is_empty() {
             out.push_str(NO_RESULTS_MARKDOWN);
             out.push_str("\n\n");
@@ -202,6 +211,7 @@ mod tests {
             title: "knot-lite demo — repository 'x'".to_owned(),
             summary: vec!["query: hello".to_owned()],
             sections: vec![RenderSection {
+                caption: None,
                 heading: Some("Results".to_owned()),
                 columns: vec![Column::right("#"), Column::left("NAME")],
                 rows,
@@ -291,6 +301,7 @@ mod tests {
             title: "t".to_owned(),
             summary: Vec::new(),
             sections: vec![RenderSection {
+                caption: None,
                 heading: None,
                 columns: vec![Column::left("A")],
                 rows: vec![vec!["x".to_owned()]],

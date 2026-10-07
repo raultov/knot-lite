@@ -516,61 +516,17 @@ fn prune_orphan_edge_shards(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::atomic::Ordering;
 
-    use async_lsp::lsp_types::{
-        CallHierarchyIncomingCall, CallHierarchyItem, Location, Position, Range, SymbolKind,
-    };
+    use async_lsp::lsp_types::Position;
     use tempfile::TempDir;
 
     use super::*;
     use crate::index::lsp_records::{read_lsp_edge_shard, read_lsp_targets};
-    use crate::lsp::fake::{FakeScript, connect, test_spec};
-    use crate::lsp::pool::{FactoryContext, PoolSettings, SessionFactory};
-    use crate::lsp::process::{StartOutcome, Started};
-    use crate::lsp::spec::Degraded;
-    use crate::lsp::uri::{join_rel, path_to_uri};
+    use crate::lsp::fake::{FakeScript, FakeServers, Scene};
+    use crate::lsp::uri::join_rel;
 
     const LIB: &str = "pub fn target() {}\npub fn caller_a() {\n    target();\n}\npub fn caller_b() {\n    target();\n}\n";
-
-    /// Starts a fake server per language and counts the starts.
-    struct ScriptedPoolFactory {
-        script_fn: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>,
-        missing: bool,
-        starts: Arc<AtomicUsize>,
-    }
-
-    impl SessionFactory for ScriptedPoolFactory {
-        fn start(
-            &self,
-            lang: LspLang,
-            _ctx: FactoryContext,
-        ) -> super::super::pool::BoxFuture<'static, StartOutcome> {
-            if self.missing {
-                return Box::pin(async move {
-                    StartOutcome::Degraded(Degraded::unavailable(format!(
-                        "{} not found in PATH",
-                        lang.server_program()
-                    )))
-                });
-            }
-            self.starts.fetch_add(1, Ordering::SeqCst);
-            let script = (self.script_fn)(lang);
-            Box::pin(async move {
-                let spec = test_spec(lang);
-                let init = crate::lsp::session::InitInputs {
-                    spec: &spec,
-                    repo_root: Path::new("/work/demo"),
-                };
-                let (session, _) = connect(script, init).await;
-                StartOutcome::Ready(Box::new(Started {
-                    session,
-                    process: None,
-                }))
-            })
-        }
-    }
 
     fn shard_line(id: &str, name: &str, l0: usize, l1: usize, col: Option<u32>) -> ShardLine {
         ShardLine {
@@ -596,7 +552,6 @@ mod tests {
         records: Vec<(String, ShardLine)>,
         fanin: HashMap<String, usize>,
         inventory: Inventory,
-        starts: Arc<AtomicUsize>,
     }
 
     impl Rig {
@@ -639,31 +594,6 @@ mod tests {
                 records,
                 fanin: HashMap::from([("t".to_owned(), 5)]),
                 inventory,
-                starts: Arc::new(AtomicUsize::new(0)),
-            }
-        }
-
-        fn uri(&self, rel: &str) -> async_lsp::lsp_types::Url {
-            path_to_uri(&join_rel(self.tmp.path(), rel)).expect("uri")
-        }
-
-        fn location(&self, rel: &str, line: u32) -> Location {
-            Location {
-                uri: self.uri(rel),
-                range: Range::new(Position::new(line, 4), Position::new(line, 10)),
-            }
-        }
-
-        fn item(&self, name: &str, line: u32) -> CallHierarchyItem {
-            CallHierarchyItem {
-                name: name.to_owned(),
-                kind: SymbolKind::FUNCTION,
-                tags: None,
-                detail: None,
-                uri: self.uri("src/lib.rs"),
-                range: Range::new(Position::new(line, 0), Position::new(line + 2, 1)),
-                selection_range: Range::new(Position::new(line, 7), Position::new(line, 13)),
-                data: None,
             }
         }
 
@@ -671,57 +601,42 @@ mod tests {
         /// (and references it from the same lines), `caller_b` references it,
         /// `main.rs` references it outside any function, and the target's own
         /// body mentions itself.
-        fn script(&self) -> FakeScript {
-            let position = Position::new(0, 7);
-            FakeScript {
-                prepare: vec![(position, vec![self.item("target", 0)])],
-                incoming: vec![(
-                    "target".to_owned(),
-                    vec![CallHierarchyIncomingCall {
-                        from: self.item("caller_a", 1),
-                        from_ranges: vec![Range::default()],
-                    }],
-                )],
-                references: vec![(
-                    position,
-                    vec![
-                        self.location("src/lib.rs", 0),
-                        self.location("src/lib.rs", 2),
-                        self.location("src/lib.rs", 5),
-                        self.location("src/main.rs", 0),
-                    ],
-                )],
-                ..FakeScript::full()
+        fn script(&self) -> impl Fn(LspLang) -> FakeScript + Send + Sync + 'static {
+            let scene = Scene::new(self.tmp.path());
+            move |_| {
+                let position = Position::new(0, 7);
+                FakeScript {
+                    prepare: vec![(position, vec![scene.item("target", "src/lib.rs", 0)])],
+                    incoming: vec![(
+                        "target".to_owned(),
+                        vec![scene.call("caller_a", "src/lib.rs", 1)],
+                    )],
+                    references: vec![(
+                        position,
+                        vec![
+                            scene.location("src/lib.rs", 0),
+                            scene.location("src/lib.rs", 2),
+                            scene.location("src/lib.rs", 5),
+                            scene.location("src/main.rs", 0),
+                        ],
+                    )],
+                    ..FakeScript::full()
+                }
             }
         }
 
-        fn pool_with(&self, script: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>) -> LspPool {
-            self.pool(script, false)
-        }
-
-        fn pool(
+        /// Run against a fresh pool of the standard servers; returns the
+        /// manifest and how many servers the pool started.
+        fn run_standard(
             &self,
-            script_fn: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>,
-            missing: bool,
-        ) -> LspPool {
-            let factory = Arc::new(ScriptedPoolFactory {
-                script_fn,
-                missing,
-                starts: Arc::clone(&self.starts),
-            });
-            LspPool::new(factory, PoolSettings::default(), None).expect("pool")
-        }
-
-        /// The standard server for this repository.
-        fn standard_pool(&self) -> LspPool {
-            let script = Arc::new(Mutex::new(Some(self.script())));
-            self.pool_with(Arc::new(move |_| {
-                script
-                    .lock()
-                    .expect("lock")
-                    .take()
-                    .expect("one server start")
-            }))
+            opts: &PrecomputeOptions,
+            previous: Option<&LspManifest>,
+        ) -> (LspManifest, usize) {
+            let servers = FakeServers::new(self.script());
+            let starts = servers.starts();
+            let pool = servers.pool();
+            let manifest = self.run(opts, Some(&pool), previous);
+            (manifest, starts.load(Ordering::SeqCst))
         }
 
         fn run(
@@ -816,7 +731,7 @@ mod tests {
     #[test]
     fn edges_are_written_per_caller_file_sorted() {
         let rig = Rig::new();
-        let manifest = rig.run(&all(2), Some(&rig.standard_pool()), None);
+        let (manifest, _) = rig.run_standard(&all(2), None);
 
         let rust = &manifest.languages["rust"];
         assert_eq!(rust.status, "computed");
@@ -836,7 +751,7 @@ mod tests {
     #[test]
     fn file_level_callers_have_null_src() {
         let rig = Rig::new();
-        rig.run(&all(2), Some(&rig.standard_pool()), None);
+        rig.run_standard(&all(2), None);
         assert_eq!(
             rig.edges_of("src/main.rs"),
             vec![edge(None, "REFERENCES", 1)]
@@ -852,7 +767,7 @@ mod tests {
             shard_line("g", "ghost", 5, 7, Some(7)),
         ));
         rig.fanin.insert("g".to_owned(), 4);
-        rig.run(&all(2), Some(&rig.standard_pool()), None);
+        rig.run_standard(&all(2), None);
 
         let targets = rig.targets();
         let statuses: Vec<(&str, &str)> = targets
@@ -940,11 +855,11 @@ mod tests {
             rig.fanin.insert(id.to_owned(), 5);
         }
         // Every request outlives the whole budget: the first target uses it up.
-        let slow = Arc::new(|_| FakeScript {
+        let pool = FakeServers::new(|_| FakeScript {
             delay: Duration::from_millis(600),
             ..FakeScript::full()
-        });
-        let pool = rig.pool_with(slow);
+        })
+        .pool();
         let opts = PrecomputeOptions {
             budget: Duration::from_millis(250),
             ..all(2)
@@ -959,40 +874,40 @@ mod tests {
     #[test]
     fn unchanged_language_files_reuse_without_starting_server() {
         let rig = Rig::new();
-        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
-        assert_eq!(rig.starts.load(Ordering::SeqCst), 1);
+        let (first, started) = rig.run_standard(&all(2), None);
+        assert_eq!(started, 1);
         let edges_before = rig.edges_of("src/lib.rs");
 
-        let second = rig.run(&all(2), Some(&rig.standard_pool()), Some(&first));
+        let (second, started) = rig.run_standard(&all(2), Some(&first));
         assert_eq!(second.languages["rust"].status, "reused");
-        assert_eq!(rig.starts.load(Ordering::SeqCst), 1);
+        assert_eq!(started, 0);
         assert_eq!(rig.edges_of("src/lib.rs"), edges_before);
     }
 
     #[test]
     fn changed_language_file_recomputes() {
         let mut rig = Rig::new();
-        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
+        let (first, _) = rig.run_standard(&all(2), None);
         rig.inventory = Inventory::new(vec![InventoryEntry {
             rel: "src/lib.rs".to_owned(),
             sha: "changed".to_owned(),
             bytes: 1,
         }]);
 
-        let second = rig.run(&all(2), Some(&rig.standard_pool()), Some(&first));
+        let (second, started) = rig.run_standard(&all(2), Some(&first));
         assert_eq!(second.languages["rust"].status, "computed");
-        assert_eq!(rig.starts.load(Ordering::SeqCst), 2);
+        assert_eq!(started, 1);
     }
 
     #[test]
     fn parameter_change_recomputes() {
         let rig = Rig::new();
-        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
+        let (first, _) = rig.run_standard(&all(2), None);
 
-        let second = rig.run(&all(3), Some(&rig.standard_pool()), Some(&first));
+        let (second, started) = rig.run_standard(&all(3), Some(&first));
         assert_eq!(second.languages["rust"].status, "computed");
         assert_eq!(second.min_fanin, 3);
-        assert_eq!(rig.starts.load(Ordering::SeqCst), 2);
+        assert_eq!(started, 1);
     }
 
     #[test]
@@ -1014,7 +929,7 @@ mod tests {
         )
         .expect("write");
 
-        let pool = rig.pool(Arc::new(|_| FakeScript::full()), true);
+        let pool = FakeServers::missing().pool();
         let manifest = rig.run(&all(2), Some(&pool), None);
 
         let rust = &manifest.languages["rust"];

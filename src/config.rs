@@ -255,10 +255,11 @@ pub(crate) mod test_support {
 
     use super::{Config, LspOverrides};
     use crate::embed::settings::EmbedSettings;
-    use crate::lsp::settings::resolve_lsp_settings;
+    use crate::lsp::settings::{LspSettings, resolve_lsp_settings};
 
     /// A non-dry-run config named `demo` rooted at `root`. Language servers are
-    /// resolved from an empty environment: enabled, scratch root under the temp dir.
+    /// **off**: nothing reachable by the test suite may start a real one (P3-D13).
+    /// Tests that need a pool inject a fake one.
     pub(crate) fn config_for(root: PathBuf) -> Config {
         let temp_dir = std::env::temp_dir();
         Config {
@@ -270,7 +271,10 @@ pub(crate) mod test_support {
                 model: "AllMiniLML6V2".to_string(),
                 cache_dir: temp_dir.join("knot-lite-test-fastembed"),
             },
-            lsp: resolve_lsp_settings(&|_| None, &temp_dir),
+            lsp: LspSettings {
+                enabled: false,
+                ..resolve_lsp_settings(&|_| None, &temp_dir)
+            },
         }
     }
 }

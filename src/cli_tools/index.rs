@@ -123,6 +123,7 @@ pub fn index_doc(value: &Value) -> RenderDoc {
         title: format!("knot-lite index — repository '{repo_name}' ({repo_path})"),
         summary,
         sections: vec![RenderSection {
+            caption: None,
             heading: None,
             columns: vec![Column::left("ITEM"), Column::right("VALUE")],
             rows,

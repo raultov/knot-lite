@@ -1,11 +1,13 @@
-//! `find_callers`: who references an entity, from the pre-computed heuristic
-//! edges (provenance `heuristic`; no language server in 0.2.0).
+//! `find_callers`: who references an entity.
 //!
 //! Targets are resolved in three tiers (the first with a match wins), callers
 //! are reported at container granularity (the function or type that holds the
-//! reference site) and grouped by relationship.
+//! reference site) and grouped by relationship. Each target is answered by a
+//! language server (pre-computed at index time, or asked now) when one applies,
+//! else by the index's heuristic edges (see [`super::sources`]).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use knot::cli_tools::kinds::KindFilter;
 use serde::ser::SerializeMap;
@@ -13,13 +15,16 @@ use serde::{Serialize, Serializer};
 use serde_json::Value;
 
 use super::render::{Column, RenderDoc, RenderSection, str_at, u64_at};
+use super::sources::{Describer, PROVENANCE_HEURISTIC, PROVENANCE_INDEXED};
+use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::OutputFormat;
-use crate::graph::containers::{ContainerKey, FILE_LEVEL_NAME};
-use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::LoadedIndex;
+use crate::lsp::pool::LspPool;
+use crate::lsp::settings::LspSettings;
+use crate::lsp::target::OpCounts;
 
-/// Schema id of the callers document.
-pub const CALLERS_SCHEMA_V1: &str = "knot-lite/callers/v1";
+/// Schema id of the callers document (P3-D11).
+pub const CALLERS_SCHEMA_V2: &str = "knot-lite/callers/v2";
 /// Default `max_targets`.
 pub const DEFAULT_MAX_TARGETS: usize = 25;
 /// Largest accepted `max_targets`.
@@ -159,7 +164,7 @@ pub struct CallerRow {
 }
 
 /// Callers grouped by relationship, serialised as a JSON object in the order
-/// of [`EDGE_REL_LABELS`].
+/// of [`EDGE_REL_LABELS`](crate::graph::heuristic::EDGE_REL_LABELS).
 #[derive(Debug, Clone, Default)]
 pub struct RelationGroups(pub Vec<(String, Vec<CallerRow>)>);
 
@@ -171,6 +176,79 @@ impl Serialize for RelationGroups {
         }
         map.end()
     }
+}
+
+/// What a call may ask of language servers.
+pub struct LspContext<'a> {
+    /// Resolved settings (live budget, deadline, whether servers may start).
+    pub settings: &'a LspSettings,
+    /// Absolute repository root, where the current files are read.
+    pub repo_root: &'a Path,
+    /// The process-wide pool; `None` when live language servers are off.
+    pub pool: Option<&'a LspPool>,
+}
+
+/// Inputs of [`callers_response`].
+pub struct CallersContext<'a> {
+    /// The loaded index.
+    pub index: &'a LoadedIndex,
+    /// Repository name.
+    pub repo: &'a str,
+    /// The query as given.
+    pub query: &'a str,
+    /// Targets shown at most.
+    pub max_targets: usize,
+    /// Kind filter.
+    pub filter: &'a KindFilter,
+    /// What language servers may be asked.
+    pub lsp: LspContext<'a>,
+}
+
+/// The `lsp` object of one target (§10.1).
+#[derive(Debug, Clone, Serialize)]
+pub struct TargetLspInfo {
+    /// `ok` (live), `indexed`, or why the server did not answer: `not_ready`,
+    /// `no_server`, `failed`, `no_position`, `no_column`, `stale_target`,
+    /// `unsupported_kind`, `budget`, `deadline`, `timeout`, `error`, `disabled`.
+    pub status: &'static str,
+    /// In-repository locations per operation; `null` when the operation did not run.
+    pub ops: OpCounts,
+    /// Locations outside the repository that were dropped.
+    pub external: usize,
+    /// Java references that only sit in a comment and were dropped.
+    pub comment_filtered: usize,
+    /// Whether an empty first answer was asked again.
+    pub retried_empty: bool,
+    /// Query time; for `indexed`, the pre-computation time.
+    pub ms: u64,
+    /// Caller containers the heuristic found and the server did not.
+    pub heuristic_extra: usize,
+}
+
+/// State of one language server, in the top-level `lsp.languages`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LangRuntimeState {
+    /// `ready`, `starting`, `failed`, `disabled`, `missing` or `not_started`.
+    pub state: String,
+    /// Server executable.
+    pub server: String,
+    /// Version the server reported.
+    pub version: String,
+    /// Milliseconds the server took to become ready.
+    pub ready_ms: Option<u64>,
+}
+
+/// The top-level `lsp` object (§10.1).
+#[derive(Debug, Clone, Serialize)]
+pub struct TopLspInfo {
+    /// Whether live language servers were allowed.
+    pub live_enabled: bool,
+    /// Live targets allowed per call.
+    pub live_budget: usize,
+    /// Live time allowed per call.
+    pub deadline_ms: u64,
+    /// The language servers this call touched.
+    pub languages: BTreeMap<String, LangRuntimeState>,
 }
 
 /// One resolved target and who references it.
@@ -192,6 +270,10 @@ pub struct CallerTarget {
     pub l1: usize,
     /// Signature, when the entity has one.
     pub signature: Option<String>,
+    /// The source of this answer: `lsp-live`, `lsp-indexed` or `heuristic`.
+    pub provenance: &'static str,
+    /// What the language server did; `null` when none was considered.
+    pub lsp: Option<TargetLspInfo>,
     /// Distinct containers across every relationship group.
     pub caller_count: usize,
     /// References that come from the target's own container (recursion).
@@ -200,10 +282,10 @@ pub struct CallerTarget {
     pub callers: RelationGroups,
 }
 
-/// The `knot-lite/callers/v1` document (§9.3).
+/// The `knot-lite/callers/v2` document (§10.1).
 #[derive(Debug, Clone, Serialize)]
 pub struct CallersResponse {
-    /// [`CALLERS_SCHEMA_V1`].
+    /// [`CALLERS_SCHEMA_V2`].
     pub schema: &'static str,
     /// knot-lite version.
     pub knot_lite_version: &'static str,
@@ -211,10 +293,13 @@ pub struct CallersResponse {
     pub repo: String,
     /// The query as given.
     pub query: String,
-    /// Always `heuristic` in 0.2.0.
+    /// The one provenance every target shares, or `mixed`; `heuristic` with no targets.
     pub provenance: &'static str,
     /// The index the answer came from.
     pub index: CallersIndexInfo,
+    /// Language-server summary; `null` when servers are off and the index has no
+    /// pre-computed data.
+    pub lsp: Option<TopLspInfo>,
     /// How the query was resolved.
     pub resolution: Resolution,
     /// The resolved targets (possibly truncated).
@@ -223,156 +308,219 @@ pub struct CallersResponse {
     pub notes: Vec<String>,
 }
 
-/// A merged reference container: its record (if any) and how many entities
-/// referenced the target from inside it.
-type ContainerHit = (Option<usize>, usize);
-
-/// Answer `find_callers` for `query` against `index`.
-pub fn callers_response(
-    index: &LoadedIndex,
-    repo: &str,
-    query: &str,
-    max_targets: usize,
-    filter: &KindFilter,
-) -> CallersResponse {
-    let resolved = resolve_targets(index, query, filter);
-    let (tier, matched) = match resolved {
+/// Answer `find_callers`.
+pub fn callers_response(ctx: &CallersContext<'_>) -> CallersResponse {
+    let (tier, matched) = match resolve_targets(ctx.index, ctx.query, ctx.filter) {
         Some((tier, matched)) => (Some(tier), matched),
         None => (None, Vec::new()),
     };
-    let total = matched.len();
+    let mut describer = Describer::new(ctx);
     let targets: Vec<CallerTarget> = matched
         .iter()
-        .take(max_targets)
-        .map(|&position| describe_target(index, position))
+        .take(ctx.max_targets)
+        .map(|&position| describer.describe(position))
         .collect();
-
-    let mut notes = Vec::new();
-    if tier.is_none() {
-        notes.push(format!(
-            "no indexed entity matches '{}' (tiers tried: exact FQN, FQN suffix, exact name; kind filter {}). Use search_hybrid_context to discover names.",
-            query.trim(),
-            filter.wire_label()
-        ));
-    }
-    notes.push(HEURISTIC_NOTE.to_owned());
-
-    CallersResponse {
-        schema: CALLERS_SCHEMA_V1,
-        knot_lite_version: env!("CARGO_PKG_VERSION"),
-        repo: repo.to_owned(),
-        query: query.to_owned(),
-        provenance: "heuristic",
-        index: CallersIndexInfo {
-            updated_at: index.manifest.updated_at.clone(),
+    let languages = touched_languages(ctx, &targets);
+    let notes = response_notes(
+        ctx,
+        &Findings {
+            tier,
+            targets: &targets,
+            languages: &languages,
+            diagnostics: &describer.into_diagnostics(),
         },
+    );
+    CallersResponse {
+        schema: CALLERS_SCHEMA_V2,
+        knot_lite_version: env!("CARGO_PKG_VERSION"),
+        repo: ctx.repo.to_owned(),
+        query: ctx.query.to_owned(),
+        provenance: overall_provenance(&targets),
+        index: CallersIndexInfo {
+            updated_at: ctx.index.manifest.updated_at.clone(),
+        },
+        lsp: top_lsp(ctx, languages),
         resolution: Resolution {
             tier,
-            kind_filter: filter.wire_label(),
-            targets_total: total,
+            kind_filter: ctx.filter.wire_label(),
+            targets_total: matched.len(),
             targets_shown: targets.len(),
-            truncated: targets.len() < total,
+            truncated: targets.len() < matched.len(),
         },
         targets,
         notes,
     }
 }
 
-/// Who references the record at `position`, merged to containers.
-fn describe_target(index: &LoadedIndex, position: usize) -> CallerTarget {
-    let target = &index.records[position];
-    let own = index
-        .containers
-        .container_at(&target.file, target.line.l0)
-        .0;
-
-    let mut by_relation: BTreeMap<(usize, String), BTreeMap<ContainerKey, ContainerHit>> =
-        BTreeMap::new();
-    let mut self_references = 0;
-    for (src, relation) in index.incoming.get(&target.line.id).into_iter().flatten() {
-        let Some(&caller_position) = index.by_id.get(src) else {
-            continue;
-        };
-        let caller = &index.records[caller_position];
-        let (key, container) = index.containers.container_at(&caller.file, caller.line.l0);
-        if key == own {
-            self_references += 1;
-            continue;
-        }
-        let order = EDGE_REL_LABELS
-            .iter()
-            .position(|label| label == relation)
-            .unwrap_or(usize::MAX);
-        by_relation
-            .entry((order, relation.clone()))
-            .or_default()
-            .entry(key)
-            .or_insert((container, 0))
-            .1 += 1;
+/// The provenance all targets share, `mixed` when they differ.
+fn overall_provenance(targets: &[CallerTarget]) -> &'static str {
+    match targets.first() {
+        None => PROVENANCE_HEURISTIC,
+        Some(first) if targets.iter().all(|t| t.provenance == first.provenance) => first.provenance,
+        Some(_) => "mixed",
     }
+}
 
-    let caller_count = by_relation
-        .values()
-        .flat_map(BTreeMap::keys)
-        .collect::<BTreeSet<_>>()
-        .len();
-    let groups = by_relation
-        .into_iter()
-        .map(|((_, relation), containers)| {
-            let rows = containers
-                .into_iter()
-                .map(|(key, (container, sites))| caller_row(index, key, container, sites))
-                .collect();
-            (relation, rows)
-        })
+fn lang_of(file: &str) -> Option<LspLang> {
+    lsp_lang_for_label(label_for(Path::new(file)))
+}
+
+/// The state of every language server this call considered.
+fn touched_languages(
+    ctx: &CallersContext<'_>,
+    targets: &[CallerTarget],
+) -> BTreeMap<String, LangRuntimeState> {
+    let Some(pool) = ctx.lsp.pool else {
+        return BTreeMap::new();
+    };
+    let touched: BTreeSet<LspLang> = targets
+        .iter()
+        .filter(|target| target.lsp.is_some())
+        .filter_map(|target| lang_of(&target.file))
         .collect();
+    if touched.is_empty() {
+        return BTreeMap::new();
+    }
+    let snapshot = pool.snapshot();
+    touched
+        .into_iter()
+        .filter_map(|lang| {
+            let slot = snapshot.slots.get(lang.dir_name())?;
+            Some((
+                lang.dir_name().to_owned(),
+                LangRuntimeState {
+                    state: slot.state.clone(),
+                    server: slot.server.clone(),
+                    version: slot.version.clone(),
+                    ready_ms: slot.ready_ms,
+                },
+            ))
+        })
+        .collect()
+}
 
-    CallerTarget {
-        id: target.line.id.clone(),
-        kind: target.line.kind.clone(),
-        name: target.line.name.clone(),
-        fqn: target.line.fqn.clone(),
-        file: target.file.clone(),
-        l0: target.line.l0,
-        l1: target.line.l1,
-        signature: target.line.sig.clone(),
-        caller_count,
-        self_references,
-        callers: RelationGroups(groups),
+fn top_lsp(
+    ctx: &CallersContext<'_>,
+    languages: BTreeMap<String, LangRuntimeState>,
+) -> Option<TopLspInfo> {
+    let live_enabled = ctx.lsp.pool.is_some();
+    (live_enabled || !ctx.index.lsp_targets.is_empty()).then(|| TopLspInfo {
+        live_enabled,
+        live_budget: ctx.lsp.settings.max_live_targets,
+        deadline_ms: u64::try_from(ctx.lsp.settings.deadline.as_millis()).unwrap_or(u64::MAX),
+        languages,
+    })
+}
+
+/// What the targets of one call turned out to be, for the notes.
+struct Findings<'a> {
+    tier: Option<MatchTier>,
+    targets: &'a [CallerTarget],
+    languages: &'a BTreeMap<String, LangRuntimeState>,
+    diagnostics: &'a [(&'static str, String)],
+}
+
+impl Findings<'_> {
+    /// Targets whose language server status is `status`.
+    fn with_status(&self, status: &str) -> Vec<&CallerTarget> {
+        self.targets
+            .iter()
+            .filter(|target| target.lsp.as_ref().is_some_and(|lsp| lsp.status == status))
+            .collect()
+    }
+
+    fn count_provenance(&self, provenance: &str) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| target.provenance == provenance)
+            .count()
     }
 }
 
-fn caller_row(
-    index: &LoadedIndex,
-    key: ContainerKey,
-    container: Option<usize>,
-    sites: usize,
-) -> CallerRow {
-    match container.map(|position| &index.records[position]) {
-        Some(record) => CallerRow {
-            id: Some(record.line.id.clone()),
-            kind: record.line.kind.clone(),
-            name: record.line.name.clone(),
-            fqn: Some(record.line.fqn.clone()),
-            file: record.file.clone(),
-            l0: record.line.l0,
-            signature: record.line.sig.clone(),
-            sites,
-        },
-        None => CallerRow {
-            id: None,
-            kind: "file".to_owned(),
-            name: FILE_LEVEL_NAME.to_owned(),
-            fqn: None,
-            file: key.file,
-            l0: 0,
-            signature: None,
-            sites,
-        },
+/// Caveats and hints, in a fixed order (§10.5).
+fn response_notes(ctx: &CallersContext<'_>, findings: &Findings<'_>) -> Vec<String> {
+    let mut notes = Vec::new();
+    if findings.tier.is_none() {
+        notes.push(format!(
+            "no indexed entity matches '{}' (tiers tried: exact FQN, FQN suffix, exact name; kind filter {}). Use search_hybrid_context to discover names.",
+            ctx.query.trim(),
+            ctx.filter.wire_label()
+        ));
     }
+    notes.extend(not_ready_notes(findings));
+    let settings = ctx.lsp.settings;
+    let budget = findings.with_status("budget").len();
+    if budget > 0 {
+        notes.push(format!(
+            "Language-server answers were limited to the first {} targets (KNOT_LITE_LSP_MAX_LIVE_TARGETS); {budget} target(s) answered from heuristic edges.",
+            settings.max_live_targets
+        ));
+    }
+    let stale = findings.with_status("stale_target").len();
+    if stale > 0 {
+        notes.push(format!(
+            "{stale} target(s) changed since the last index and were answered from heuristic edges; run knot-lite index to refresh."
+        ));
+    }
+    let deadline = findings.with_status("deadline").len();
+    if deadline > 0 {
+        notes.push(format!(
+            "The language-server deadline ({} s, KNOT_LITE_LSP_DEADLINE_SECS) expired; {deadline} target(s) answered from heuristic edges.",
+            settings.deadline.as_secs()
+        ));
+    }
+    notes.extend(diagnostic_notes(findings.diagnostics));
+    let indexed = findings.count_provenance(PROVENANCE_INDEXED);
+    if indexed > 0 {
+        notes.push(format!(
+            "{indexed} target(s) answered from language-server results pre-computed at {}.",
+            ctx.index.manifest.updated_at
+        ));
+    }
+    if findings.count_provenance(PROVENANCE_HEURISTIC) > 0 {
+        notes.push(HEURISTIC_NOTE.to_owned());
+    }
+    notes
 }
 
-/// Build the format-agnostic document for a `knot-lite/callers/v1` value.
+/// One note per language whose server was still starting.
+fn not_ready_notes(findings: &Findings<'_>) -> Vec<String> {
+    let waiting = findings.with_status("not_ready");
+    findings
+        .languages
+        .iter()
+        .filter_map(|(dir_name, state)| {
+            let of_language: Vec<&&CallerTarget> = waiting
+                .iter()
+                .filter(|target| lang_of(&target.file).is_some_and(|l| l.dir_name() == dir_name))
+                .collect();
+            let elapsed_ms = of_language
+                .iter()
+                .filter_map(|target| target.lsp.as_ref().map(|lsp| lsp.ms))
+                .max()?;
+            Some(format!(
+                "{} is still starting ({}, {} s): {} target(s) answered from heuristic edges. Retry shortly for language-server answers.",
+                state.server,
+                state.state,
+                elapsed_ms / 1000,
+                of_language.len()
+            ))
+        })
+        .collect()
+}
+
+/// The reasons the servers gave for not answering, once each.
+fn diagnostic_notes(diagnostics: &[(&'static str, String)]) -> BTreeSet<String> {
+    diagnostics
+        .iter()
+        .map(|(status, detail)| match *status {
+            "no_server" => detail.clone(),
+            other => format!("language-server query {other}: {detail}"),
+        })
+        .collect()
+}
+
+/// Build the format-agnostic document for a `knot-lite/callers/v2` value.
 pub fn callers_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
     let repo = str_at(value, &["repo"]).unwrap_or("-");
     let resolution = value.get("resolution").cloned().unwrap_or_default();
@@ -390,7 +538,12 @@ pub fn callers_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
             u64_at(&resolution, &["targets_shown"]).unwrap_or(0),
             u64_at(&resolution, &["targets_total"]).unwrap_or(0)
         ),
+        format!(
+            "source: {}",
+            str_at(value, &["provenance"]).unwrap_or(PROVENANCE_HEURISTIC)
+        ),
     ];
+    summary.extend(server_summary(value));
     if resolution.get("truncated").and_then(Value::as_bool) == Some(true) {
         summary.push("the target list is truncated (raise max_targets)".to_owned());
     }
@@ -428,14 +581,16 @@ fn target_section(target: &Value) -> RenderSection {
         .collect();
     RenderSection {
         heading: Some(format!(
-            "{} {} — {}:{} ({} callers, {} self-references)",
+            "{} {} — {}:{} [{}] ({} callers, {} self-references)",
             str_at(target, &["kind"]).unwrap_or("-"),
             str_at(target, &["name"]).unwrap_or("-"),
             str_at(target, &["file"]).unwrap_or("-"),
             u64_at(target, &["l0"]).unwrap_or(0),
+            str_at(target, &["provenance"]).unwrap_or(PROVENANCE_HEURISTIC),
             u64_at(target, &["caller_count"]).unwrap_or(0),
             u64_at(target, &["self_references"]).unwrap_or(0)
         )),
+        caption: target.get("lsp").and_then(lsp_caption),
         columns: vec![
             Column::left("REL"),
             Column::left("CALLER"),
@@ -445,6 +600,37 @@ fn target_section(target: &Value) -> RenderSection {
         ],
         rows,
     }
+}
+
+/// `incoming 3 · references 5 · implementation –` for an answered target, or
+/// the reason a language server did not answer.
+fn lsp_caption(lsp: &Value) -> Option<String> {
+    let status = str_at(lsp, &["status"])?;
+    if !matches!(status, "ok" | "indexed") {
+        return Some(format!("language server: {status} (heuristic answer)"));
+    }
+    let count = |op: &str| {
+        lsp.get("ops")
+            .and_then(|ops| ops.get(op))
+            .and_then(Value::as_u64)
+            .map_or_else(|| "–".to_owned(), |n| n.to_string())
+    };
+    Some(format!(
+        "incoming {} · references {} · implementation {}",
+        count("incoming"),
+        count("references"),
+        count("implementation")
+    ))
+}
+
+/// `servers: rust ready · java starting` for the servers a call touched.
+fn server_summary(value: &Value) -> Option<String> {
+    let languages = value.pointer("/lsp/languages")?.as_object()?;
+    let parts: Vec<String> = languages
+        .iter()
+        .map(|(language, state)| format!("{language} {}", str_at(state, &["state"]).unwrap_or("-")))
+        .collect();
+    (!parts.is_empty()).then(|| format!("servers: {}", parts.join(" · ")))
 }
 
 fn caller_cells(relation: &str, caller: &Value) -> Vec<String> {
@@ -461,13 +647,46 @@ fn caller_cells(relation: &str, caller: &Value) -> Vec<String> {
     ]
 }
 
+/// Builders shared by the tests of the query layer.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+    use crate::lsp::settings::resolve_lsp_settings;
+
+    /// [`callers_response`] with language servers off: the heuristic answer.
+    pub(crate) fn heuristic_response(
+        index: &LoadedIndex,
+        repo: &str,
+        query: &str,
+        max_targets: usize,
+        filter: &KindFilter,
+    ) -> CallersResponse {
+        let settings = resolve_lsp_settings(&|_| None, Path::new("/tmp"));
+        callers_response(&CallersContext {
+            index,
+            repo,
+            query,
+            max_targets,
+            filter,
+            lsp: LspContext {
+                settings: &settings,
+                repo_root: Path::new("/nonexistent"),
+                pool: None,
+            },
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::test_support::heuristic_response;
     use super::*;
     use crate::index::build::test_support::{fixture, run};
     use crate::index::layout::IndexLayout;
+    use crate::index::load::LspIncoming;
     use crate::index::load::test_support::{entity, synthetic_index};
     use crate::index::load::{LoadedIndex, load_index};
+    use crate::index::lsp_records::LspTargetLine;
 
     fn code() -> KindFilter {
         KindFilter::parse(None)
@@ -616,19 +835,19 @@ mod tests {
     #[test]
     fn max_targets_truncates_and_reports_total() {
         let index = homonyms();
-        let response = callers_response(&index, "demo", "run", 2, &code());
+        let response = heuristic_response(&index, "demo", "run", 2, &code());
         assert_eq!(response.targets.len(), 2);
         assert_eq!(response.resolution.targets_total, 3);
         assert_eq!(response.resolution.targets_shown, 2);
         assert!(response.resolution.truncated);
-        let full = callers_response(&index, "demo", "run", 25, &code());
+        let full = heuristic_response(&index, "demo", "run", 25, &code());
         assert!(!full.resolution.truncated);
     }
 
     #[test]
     fn callers_are_containers_with_sites() {
         let (_tmp, index) = fixture_index();
-        let response = callers_response(&index, "demo", "target", 25, &code());
+        let response = heuristic_response(&index, "demo", "target", 25, &code());
         assert_eq!(response.resolution.tier, Some(MatchTier::ExactName));
         assert_eq!(response.targets.len(), 1);
         let target = &response.targets[0];
@@ -679,7 +898,7 @@ mod tests {
     fn recursion_counts_as_self_reference() {
         let (_tmp, index) = fixture_index();
         // knot records `struct Widget` as referencing itself (its `impl` block).
-        let response = callers_response(&index, "demo", "Widget", 25, &code());
+        let response = heuristic_response(&index, "demo", "Widget", 25, &code());
         let widget = &response.targets[0];
         assert_eq!(widget.fqn, "fixture::util::Widget");
         assert_eq!(widget.self_references, 1);
@@ -703,7 +922,7 @@ mod tests {
             ],
             &[("k", "t", "CALLS")],
         );
-        let response = callers_response(&index, "demo", "target", 25, &code());
+        let response = heuristic_response(&index, "demo", "target", 25, &code());
         let rows = &response.targets[0].callers.0[0].1;
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
@@ -747,7 +966,7 @@ mod tests {
                 ("f", "t", "REFERENCES"),
             ],
         );
-        let response = callers_response(&index, "demo", "target", 25, &code());
+        let response = heuristic_response(&index, "demo", "target", 25, &code());
         let target = &response.targets[0];
         assert_eq!(target.caller_count, 1, "all three sites sit inside `outer`");
         let groups: Vec<(&str, usize, usize)> = target
@@ -776,10 +995,13 @@ mod tests {
     #[test]
     fn no_match_answer_has_hint() {
         let (_tmp, index) = fixture_index();
-        let response = callers_response(&index, "demo", "does_not_exist", 25, &code());
+        let response = heuristic_response(&index, "demo", "does_not_exist", 25, &code());
         assert!(response.targets.is_empty());
         assert_eq!(response.resolution.tier, None);
         assert_eq!(response.resolution.targets_total, 0);
+        assert_eq!(response.provenance, "heuristic");
+        // The heuristic caveat is only for targets that were answered heuristically.
+        assert_eq!(response.notes.len(), 1, "{:?}", response.notes);
         assert!(
             response.notes[0].starts_with("no indexed entity matches 'does_not_exist'"),
             "{:?}",
@@ -787,16 +1009,12 @@ mod tests {
         );
         assert!(response.notes[0].contains("kind filter code_default"));
         assert!(response.notes[0].contains("search_hybrid_context"));
-        assert_eq!(
-            response.notes.last().map(String::as_str),
-            Some(HEURISTIC_NOTE)
-        );
     }
 
     #[test]
     fn target_without_callers_is_listed_with_zero() {
         let (_tmp, index) = fixture_index();
-        let response = callers_response(&index, "demo", "caller", 25, &code());
+        let response = heuristic_response(&index, "demo", "caller", 25, &code());
         assert_eq!(response.targets.len(), 1);
         assert_eq!(response.targets[0].caller_count, 0);
         assert_eq!(response.notes, vec![HEURISTIC_NOTE]);
@@ -805,29 +1023,678 @@ mod tests {
     #[test]
     fn callers_renderers_snapshot() {
         let (_tmp, index) = fixture_index();
-        let response = callers_response(&index, "demo", "target", 25, &code());
+        let response = heuristic_response(&index, "demo", "target", 25, &code());
         let value = serde_json::to_value(&response).expect("json");
-        assert_eq!(value["schema"], "knot-lite/callers/v1");
+        assert_eq!(value["schema"], "knot-lite/callers/v2");
         assert_eq!(value["provenance"], "heuristic");
         assert_eq!(value["resolution"]["tier"], "exact_name");
         assert_eq!(value["resolution"]["kind_filter"], "code_default");
+        assert!(value["lsp"].is_null(), "servers off, nothing pre-computed");
 
         let doc = callers_doc(&value, OutputFormat::Table);
         assert_eq!(doc.title, "knot-lite callers — repository 'demo'");
         assert_eq!(
             doc.sections[0].heading.as_deref(),
-            Some("rust_function target — src/lib.rs:3 (3 callers, 0 self-references)")
+            Some("rust_function target — src/lib.rs:3 [heuristic] (3 callers, 0 self-references)")
+        );
+        assert_eq!(
+            doc.sections[0].caption.as_deref(),
+            Some("language server: disabled (heuristic answer)")
         );
         assert_eq!(doc.sections[0].rows.len(), 3);
         assert_eq!(
             doc.sections[0].rows[0],
             vec!["CALLS", "caller", "rust_function", "src/lib.rs:7", "1"]
         );
+        assert!(doc.summary.contains(&"source: heuristic".to_owned()));
         assert!(
             doc.notes
                 .last()
                 .expect("note")
                 .starts_with("Heuristic edges")
+        );
+    }
+    // ---- language-server sources (P3.11) ----
+
+    use async_lsp::lsp_types::Position;
+
+    use crate::lsp::fake::{FakeScript, FakeServers, Scene};
+    use crate::lsp::pool::PoolSettings;
+    use crate::lsp::settings::resolve_lsp_settings;
+
+    fn default_settings() -> LspSettings {
+        resolve_lsp_settings(&|_| None, Path::new("/tmp"))
+    }
+
+    fn respond(
+        index: &LoadedIndex,
+        root: &Path,
+        settings: &LspSettings,
+        pool: Option<&LspPool>,
+        query: &str,
+    ) -> CallersResponse {
+        callers_response(&CallersContext {
+            index,
+            repo: "demo",
+            query,
+            max_targets: 25,
+            filter: &code(),
+            lsp: LspContext {
+                settings,
+                repo_root: root,
+                pool,
+            },
+        })
+    }
+
+    /// What a Rust server answers for the fixture's `target` (src/lib.rs, line 3):
+    /// `caller` and `helper` call it, `run` only mentions it; the mentions inside
+    /// `caller` and `helper` are the call sites themselves.
+    fn target_script(root: &Path) -> impl Fn(LspLang) -> FakeScript + Send + Sync + 'static {
+        let scene = Scene::new(root);
+        move |_| {
+            let position = Position::new(2, 7);
+            FakeScript {
+                prepare: vec![(position, vec![scene.item("target", "src/lib.rs", 2)])],
+                incoming: vec![(
+                    "target".to_owned(),
+                    vec![
+                        scene.call("caller", "src/lib.rs", 6),
+                        scene.call("helper", "src/util.rs", 0),
+                    ],
+                )],
+                references: vec![(
+                    position,
+                    vec![
+                        scene.location("src/lib.rs", 7),
+                        scene.location("src/util.rs", 1),
+                        scene.location("src/util.rs", 8),
+                    ],
+                )],
+                ..FakeScript::full()
+            }
+        }
+    }
+
+    fn id_of(index: &LoadedIndex, name: &str) -> String {
+        index.records[index.by_name[name][0]].line.id.clone()
+    }
+
+    fn rows(target: &CallerTarget, relation: &str) -> Vec<(String, usize)> {
+        target
+            .callers
+            .0
+            .iter()
+            .filter(|(rel, _)| rel == relation)
+            .flat_map(|(_, rows)| rows.iter().map(|r| (r.name.clone(), r.sites)))
+            .collect()
+    }
+
+    fn status_of(target: &CallerTarget) -> &'static str {
+        target.lsp.as_ref().map_or("-", |lsp| lsp.status)
+    }
+
+    #[test]
+    fn live_target_uses_pool() {
+        let (tmp, index) = fixture_index();
+        let servers = FakeServers::new(target_script(tmp.path()));
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-live");
+        let lsp = target.lsp.as_ref().expect("lsp");
+        assert_eq!(lsp.status, "ok");
+        assert_eq!(
+            (lsp.ops.incoming, lsp.ops.references, lsp.ops.implementation),
+            (Some(2), Some(3), None)
+        );
+        assert_eq!(lsp.heuristic_extra, 0);
+        // The call sites are not listed again as references; `run` only references.
+        assert_eq!(
+            rows(target, "CALLS"),
+            vec![("caller".to_owned(), 1), ("helper".to_owned(), 1)]
+        );
+        assert_eq!(rows(target, "REFERENCES"), vec![("run".to_owned(), 1)]);
+        assert_eq!((target.caller_count, target.self_references), (3, 0));
+        assert_eq!(response.provenance, "lsp-live");
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        let top = response.lsp.as_ref().expect("top-level lsp");
+        assert!(top.live_enabled);
+        assert_eq!((top.live_budget, top.deadline_ms), (10, 30_000));
+        assert_eq!(top.languages["rust"].state, "ready");
+        assert_eq!(top.languages["rust"].server, "rust-analyzer");
+    }
+
+    #[test]
+    fn heuristic_note_dropped_when_all_targets_lsp() {
+        let (tmp, index) = fixture_index();
+        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        assert!(response.notes.is_empty(), "{:?}", response.notes);
+    }
+
+    #[test]
+    fn indexed_target_uses_lsp_indexed_without_pool() {
+        let (tmp, mut index) = fixture_index();
+        let target = id_of(&index, "target");
+        let (caller, helper) = (id_of(&index, "caller"), id_of(&index, "helper"));
+        index.lsp_targets.insert(
+            target.clone(),
+            LspTargetLine {
+                id: target.clone(),
+                status: "ok".to_owned(),
+                ms: 812,
+                ops: OpCounts {
+                    incoming: Some(2),
+                    references: Some(3),
+                    implementation: None,
+                },
+                server: "rust-analyzer".to_owned(),
+            },
+        );
+        let edge = |rel: &str, src: Option<&str>, relation: &str, n: u32| LspIncoming {
+            rel: rel.to_owned(),
+            src: src.map(str::to_owned),
+            relation: relation.to_owned(),
+            n,
+        };
+        index.lsp_incoming.insert(
+            target,
+            vec![
+                edge("src/lib.rs", Some(&caller), "CALLS", 1),
+                edge("src/util.rs", Some(&helper), "CALLS", 2),
+                edge("src/main.rs", None, "REFERENCES", 1),
+            ],
+        );
+
+        // No pool: pre-computed edges are data, used even with servers off.
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-indexed");
+        let lsp = target.lsp.as_ref().expect("lsp");
+        assert_eq!((lsp.status, lsp.ms), ("indexed", 812));
+        assert_eq!(
+            rows(target, "CALLS"),
+            vec![("caller".to_owned(), 1), ("helper".to_owned(), 2)]
+        );
+        assert_eq!(rows(target, "REFERENCES"), vec![("<file>".to_owned(), 1)]);
+        assert_eq!(target.caller_count, 3);
+        // The heuristic also found `run`, which the pre-computed answer does not have.
+        assert_eq!(lsp.heuristic_extra, 1);
+
+        let top = response.lsp.as_ref().expect("pre-computed data counts");
+        assert!(!top.live_enabled);
+        assert!(top.languages.is_empty());
+        assert_eq!(response.provenance, "lsp-indexed");
+        assert_eq!(
+            response.notes,
+            vec![format!(
+                "1 target(s) answered from language-server results pre-computed at {}.",
+                index.manifest.updated_at
+            )]
+        );
+    }
+
+    #[test]
+    fn heuristic_extra_counts_containers_lsp_did_not_return() {
+        let (tmp, index) = fixture_index();
+        let scene = Scene::new(tmp.path());
+        let pool = FakeServers::new(move |_| {
+            let position = Position::new(2, 7);
+            FakeScript {
+                prepare: vec![(position, vec![scene.item("target", "src/lib.rs", 2)])],
+                incoming: vec![(
+                    "target".to_owned(),
+                    vec![scene.call("caller", "src/lib.rs", 6)],
+                )],
+                ..FakeScript::full()
+            }
+        })
+        .pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        // The server's answer wins; `helper` and `run` are the heuristic's extras.
+        assert_eq!(target.caller_count, 1);
+        assert_eq!(target.lsp.as_ref().expect("lsp").heuristic_extra, 2);
+        assert_eq!(rows(target, "CALLS"), vec![("caller".to_owned(), 1)]);
+    }
+
+    /// Two files that each declare `pub fn run() {}` plus an index of them.
+    fn homonyms_on_disk(
+        records: Vec<(&str, crate::index::shard::ShardLine)>,
+    ) -> (tempfile::TempDir, LoadedIndex) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join("src")).expect("mkdir");
+        for file in ["src/a.rs", "src/b.rs"] {
+            std::fs::write(tmp.path().join(file), "pub fn run() {}\n").expect("write");
+        }
+        (tmp, synthetic_index(records, &[]))
+    }
+
+    fn located(
+        id: &str,
+        kind: &str,
+        name: &str,
+        lines: (usize, usize),
+    ) -> crate::index::shard::ShardLine {
+        let mut line = entity(id, kind, name, &format!("pkg::{name}"), lines);
+        line.col = Some(7);
+        line
+    }
+
+    fn two_runs() -> (tempfile::TempDir, LoadedIndex) {
+        homonyms_on_disk(vec![
+            ("src/a.rs", located("a", "rust_function", "run", (1, 1))),
+            ("src/b.rs", located("b", "rust_function", "run", (1, 1))),
+        ])
+    }
+
+    #[test]
+    fn live_budget_limits_lsp_targets_in_resolution_order() {
+        let (tmp, index) = two_runs();
+        let settings = LspSettings {
+            max_live_targets: 1,
+            ..default_settings()
+        };
+        let pool = FakeServers::new(|_| FakeScript::full()).pool();
+        let response = respond(&index, tmp.path(), &settings, Some(&pool), "run");
+
+        let statuses: Vec<(&str, &str)> = response
+            .targets
+            .iter()
+            .map(|t| (t.file.as_str(), status_of(t)))
+            .collect();
+        assert_eq!(statuses, vec![("src/a.rs", "ok"), ("src/b.rs", "budget")]);
+        assert_eq!(response.provenance, "mixed");
+        assert!(response.notes.contains(&"Language-server answers were limited to the first 1 targets (KNOT_LITE_LSP_MAX_LIVE_TARGETS); 1 target(s) answered from heuristic edges.".to_owned()), "{:?}", response.notes);
+        // One target is heuristic, so the caveat stays.
+        assert!(response.notes.contains(&HEURISTIC_NOTE.to_owned()));
+    }
+
+    #[test]
+    fn deadline_stops_further_live_targets() {
+        let (tmp, index) = two_runs();
+        let settings = LspSettings {
+            deadline: std::time::Duration::ZERO,
+            ..default_settings()
+        };
+        let servers = FakeServers::new(|_| FakeScript::full());
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = respond(&index, tmp.path(), &settings, Some(&pool), "run");
+
+        assert!(response.targets.iter().all(|t| status_of(t) == "deadline"));
+        assert!(response.targets.iter().all(|t| t.provenance == "heuristic"));
+        assert!(response.notes.contains(&"The language-server deadline (0 s, KNOT_LITE_LSP_DEADLINE_SECS) expired; 2 target(s) answered from heuristic edges.".to_owned()), "{:?}", response.notes);
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn unsupported_kind_falls_back_to_heuristic() {
+        let (tmp, index) = homonyms_on_disk(vec![(
+            "src/a.rs",
+            located("i", "rust_impl", "Thing", (1, 1)),
+        )]);
+        let pool = FakeServers::missing().pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "Thing",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "unsupported_kind")
+        );
+    }
+
+    #[test]
+    fn missing_col_falls_back() {
+        let (tmp, index) = homonyms_on_disk(vec![(
+            "src/a.rs",
+            entity("f", "rust_function", "run", "pkg::run", (1, 1)),
+        )]);
+        let pool = FakeServers::missing().pool();
+        let response = respond(&index, tmp.path(), &default_settings(), Some(&pool), "run");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "no_column")
+        );
+    }
+
+    #[test]
+    fn non_lsp_languages_are_not_asked_and_report_no_lsp() {
+        let (tmp, index) = homonyms_on_disk(vec![(
+            "docs/guide.md",
+            entity(
+                "g",
+                "markdown_section",
+                "Setup",
+                "docs/guide.md::Setup",
+                (1, 4),
+            ),
+        )]);
+        let pool = FakeServers::missing().pool();
+        let filter = any();
+        let response = callers_response(&CallersContext {
+            index: &index,
+            repo: "demo",
+            query: "Setup",
+            max_targets: 25,
+            filter: &filter,
+            lsp: LspContext {
+                settings: &default_settings(),
+                repo_root: tmp.path(),
+                pool: Some(&pool),
+            },
+        });
+        assert!(response.targets[0].lsp.is_none());
+        let value = serde_json::to_value(&response).expect("json");
+        assert!(value["targets"][0]["lsp"].is_null());
+    }
+
+    #[test]
+    fn stale_target_falls_back_to_heuristic() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, format!("{text}// edited after the index\n")).expect("edit");
+
+        let servers = FakeServers::new(target_script(tmp.path()));
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert_eq!(target.caller_count, 3, "the heuristic answer is intact");
+        assert!(response.notes.contains(&"1 target(s) changed since the last index and were answered from heuristic edges; run knot-lite index to refresh.".to_owned()), "{:?}", response.notes);
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn not_ready_falls_back_with_note() {
+        let (tmp, index) = fixture_index();
+        let pool = FakeServers::new(target_script(tmp.path()))
+            .starting_for(std::time::Duration::from_millis(600))
+            .pool_with(PoolSettings {
+                ready_wait: std::time::Duration::from_millis(50),
+                ..PoolSettings::default()
+            });
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "not_ready")
+        );
+        let note = response
+            .notes
+            .iter()
+            .find(|note| note.contains("is still starting"))
+            .unwrap_or_else(|| panic!("{:?}", response.notes));
+        assert!(
+            note.starts_with("rust-analyzer is still starting (starting, "),
+            "{note}"
+        );
+        assert!(note.ends_with("s): 1 target(s) answered from heuristic edges. Retry shortly for language-server answers."), "{note}");
+    }
+
+    #[test]
+    fn missing_server_reports_its_diagnostic() {
+        let (tmp, index) = fixture_index();
+        let pool = FakeServers::missing().pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "no_server")
+        );
+        assert!(
+            response
+                .notes
+                .contains(&"rust-analyzer not found in PATH".to_owned()),
+            "{:?}",
+            response.notes
+        );
+    }
+
+    #[test]
+    fn summary_provenance_mixed_and_uniform() {
+        let target = |provenance| CallerTarget {
+            id: String::new(),
+            kind: String::new(),
+            name: String::new(),
+            fqn: String::new(),
+            file: String::new(),
+            l0: 0,
+            l1: 0,
+            signature: None,
+            provenance,
+            lsp: None,
+            caller_count: 0,
+            self_references: 0,
+            callers: RelationGroups::default(),
+        };
+        assert_eq!(overall_provenance(&[]), "heuristic");
+        assert_eq!(overall_provenance(&[target("lsp-live")]), "lsp-live");
+        assert_eq!(
+            overall_provenance(&[target("lsp-indexed"), target("lsp-indexed")]),
+            "lsp-indexed"
+        );
+        assert_eq!(
+            overall_provenance(&[target("lsp-live"), target("heuristic")]),
+            "mixed"
+        );
+    }
+
+    #[test]
+    fn render_shows_source_column() {
+        let (tmp, index) = fixture_index();
+        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let value = serde_json::to_value(&response).expect("json");
+
+        let doc = callers_doc(&value, OutputFormat::Table);
+        assert_eq!(
+            doc.sections[0].heading.as_deref(),
+            Some("rust_function target — src/lib.rs:3 [lsp-live] (3 callers, 0 self-references)")
+        );
+        assert_eq!(
+            doc.sections[0].caption.as_deref(),
+            Some("incoming 2 · references 3 · implementation –")
+        );
+        assert!(doc.summary.contains(&"source: lsp-live".to_owned()));
+        assert!(
+            doc.summary.contains(&"servers: rust ready".to_owned()),
+            "{:?}",
+            doc.summary
+        );
+
+        let table = crate::query::render::render(&doc, &value, OutputFormat::Table);
+        assert!(
+            table.contains("[lsp-live]") && table.contains("incoming 2 · references 3"),
+            "{table}"
+        );
+        let markdown = crate::query::render::render(&doc, &value, OutputFormat::Markdown);
+        assert!(markdown.contains("### rust_function target — src/lib.rs:3 [lsp-live] (3 callers, 0 self-references)\n\nincoming 2 · references 3 · implementation –\n\n"), "{markdown}");
+    }
+
+    #[test]
+    fn m6_heuristic_answers_unchanged_when_lsp_disabled() {
+        let (tmp, index) = fixture_index();
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "heuristic");
+        assert_eq!(status_of(target), "disabled");
+        assert_eq!(target.caller_count, 3);
+        assert_eq!(
+            rows(target, "CALLS"),
+            vec![
+                ("caller".to_owned(), 1),
+                ("helper".to_owned(), 1),
+                ("run".to_owned(), 1)
+            ]
+        );
+        assert!(response.lsp.is_none());
+        assert_eq!(response.notes, vec![HEURISTIC_NOTE.to_owned()]);
+    }
+
+    /// Replace what changes between runs (ids, times, versions) with markers.
+    fn normalised(mut value: Value) -> Value {
+        fn walk(value: &mut Value) {
+            match value {
+                Value::Object(map) => {
+                    for (key, child) in map.iter_mut() {
+                        match key.as_str() {
+                            "id" => *child = Value::from("<id>"),
+                            "updated_at" => *child = Value::from("<time>"),
+                            "knot_lite_version" => *child = Value::from("<version>"),
+                            "ms" | "ready_ms" => *child = Value::from(0),
+                            _ => walk(child),
+                        }
+                    }
+                }
+                Value::Array(items) => items.iter_mut().for_each(walk),
+                _ => {}
+            }
+        }
+        walk(&mut value);
+        value
+    }
+
+    #[test]
+    fn v2_schema_and_wire_shape_are_pinned() {
+        let (tmp, index) = fixture_index();
+        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let caller = |name: &str, fqn: &str, kind: &str, file: &str, l0: u32, sig: &str| {
+            serde_json::json!({
+                "id": "<id>", "kind": kind, "name": name, "fqn": fqn, "file": file,
+                "l0": l0, "signature": sig, "sites": 1
+            })
+        };
+        let expected = serde_json::json!({
+            "schema": "knot-lite/callers/v2",
+            "knot_lite_version": "<version>",
+            "repo": "demo",
+            "query": "target",
+            "provenance": "lsp-live",
+            "index": { "updated_at": "<time>" },
+            "lsp": {
+                "live_enabled": true,
+                "live_budget": 10,
+                "deadline_ms": 30000,
+                "languages": {
+                    "rust": { "state": "ready", "server": "rust-analyzer", "version": "", "ready_ms": 0 }
+                }
+            },
+            "resolution": {
+                "tier": "exact_name", "kind_filter": "code_default",
+                "targets_total": 1, "targets_shown": 1, "truncated": false
+            },
+            "targets": [{
+                "id": "<id>", "kind": "rust_function", "name": "target",
+                "fqn": "fixture::target", "file": "src/lib.rs", "l0": 3, "l1": 5,
+                "signature": "()",
+                "provenance": "lsp-live",
+                "lsp": {
+                    "status": "ok",
+                    "ops": { "incoming": 2, "references": 3, "implementation": null },
+                    "external": 0, "comment_filtered": 0, "retried_empty": false,
+                    "ms": 0, "heuristic_extra": 0
+                },
+                "caller_count": 3, "self_references": 0,
+                "callers": {
+                    "CALLS": [
+                        caller("caller", "fixture::caller", "rust_function", "src/lib.rs", 7, "()"),
+                        caller("helper", "fixture::util::helper", "rust_function", "src/util.rs", 1, "()")
+                    ],
+                    "REFERENCES": [
+                        caller("run", "fixture::util::Widget::run", "rust_method", "src/util.rs", 8, "(&self)")
+                    ]
+                }
+            }],
+            "notes": []
+        });
+        let actual = normalised(serde_json::to_value(&response).expect("json"));
+        assert_eq!(actual, expected, "{actual:#}");
+    }
+
+    #[test]
+    fn a_precomputed_target_that_did_not_answer_is_not_used() {
+        let (tmp, mut index) = fixture_index();
+        let target = id_of(&index, "target");
+        index.lsp_targets.insert(
+            target.clone(),
+            LspTargetLine {
+                id: target,
+                status: "timeout".to_owned(),
+                ms: 1,
+                ops: OpCounts::default(),
+                server: String::new(),
+            },
+        );
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "disabled")
         );
     }
 }

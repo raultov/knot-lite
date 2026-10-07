@@ -409,7 +409,7 @@ fn m6_caller_parity() {
                 .collect();
 
             let target_info = &target_map[&target.id];
-            let response = crate::query::callers::callers_response(
+            let response = crate::query::callers::test_support::heuristic_response(
                 &index,
                 repo,
                 &target_info.knot_query,

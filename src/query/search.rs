@@ -240,6 +240,7 @@ pub fn search_doc(value: &Value, format: OutputFormat) -> RenderDoc {
         title: format!("knot-lite search — repository '{repo}'"),
         summary,
         sections: vec![RenderSection {
+            caption: None,
             heading: None,
             columns: vec![
                 Column::right("#"),

@@ -15,7 +15,9 @@ use crate::error::IndexUnavailable;
 use crate::index::layout::IndexLayout;
 use crate::index::load::LoadedIndex;
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchParams};
-use crate::query::callers::{DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP, callers_doc, callers_response};
+use crate::query::callers::{
+    CallersContext, DEFAULT_MAX_TARGETS, LspContext, MAX_TARGETS_CAP, callers_doc, callers_response,
+};
 use crate::query::explore::{explore_doc, explore_response};
 use crate::query::files::{files_doc, files_response};
 use crate::query::filters::{PathPrefix, clamp_i64};
@@ -45,8 +47,7 @@ fn with_index<T>(
 ) -> anyhow::Result<T> {
     let layout = IndexLayout::for_repo(&cfg.repo_path);
     let index = services
-        .index
-        .get(&layout)
+        .get_index(&layout)
         .map_err(|reason| unavailable_error(reason, tool, cfg))?;
     body(&index)
 }
@@ -97,18 +98,24 @@ pub fn run_find_callers(
     let max_targets = clamp_i64(params.max_targets, DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP);
     let filter = KindFilter::parse(params.kinds.as_deref());
     with_index(cfg, services, CALLERS_TOOL, |index| {
-        let response = callers_response(
+        let pool = services.lsp_pool(cfg, index);
+        let response = callers_response(&CallersContext {
             index,
-            &cfg.repo_name,
-            &params.entity_name,
+            repo: &cfg.repo_name,
+            query: &params.entity_name,
             max_targets,
-            &filter,
-        );
+            filter: &filter,
+            lsp: LspContext {
+                settings: &cfg.lsp,
+                repo_root: &cfg.repo_path,
+                pool: pool.as_deref(),
+            },
+        });
         to_json(&response, CALLERS_TOOL)
     })
 }
 
-/// Render a `knot-lite/callers/v1` document.
+/// Render a `knot-lite/callers/v2` document.
 pub fn format_callers_output(value: &Value, format: OutputFormat) -> String {
     render(&callers_doc(value, format), value, format)
 }
@@ -616,7 +623,7 @@ mod tests {
     fn callers_runner_answers_over_the_fixture_index() {
         let (_tmp, cfg) = indexed();
         let value = run_find_callers(&cfg, &services(), &callers("target")).expect("callers");
-        assert_eq!(value["schema"], "knot-lite/callers/v1");
+        assert_eq!(value["schema"], "knot-lite/callers/v2");
         assert_eq!(value["targets"][0]["caller_count"], 3);
         let table = format_callers_output(&value, OutputFormat::Table);
         assert!(

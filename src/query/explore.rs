@@ -374,6 +374,7 @@ pub fn explore_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
         .collect();
     if !candidates.is_empty() {
         sections.push(RenderSection {
+            caption: None,
             heading: Some("Candidates".to_owned()),
             columns: vec![Column::left("PATH")],
             rows: candidates,
@@ -423,6 +424,7 @@ fn group_section(group: &Value) -> RenderSection {
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);
     RenderSection {
+        caption: None,
         heading: Some(format!(
             "{} ({})",
             str_at(group, &["family"]).unwrap_or("-"),

@@ -8,7 +8,7 @@
 //! did in Phase 0.
 
 use std::ops::ControlFlow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -26,8 +26,8 @@ use async_lsp::lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyServerCapability, ConfigurationItem,
     ConfigurationParams, GotoDefinitionResponse, ImplementationProviderCapability,
     InitializeResult, Location, LocationLink, MessageType, NumberOrString, OneOf, Position,
-    ProgressParams, ProgressParamsValue, RegistrationParams, ServerCapabilities, ServerInfo,
-    ShowMessageRequestParams, WorkDoneProgress, WorkDoneProgressBegin,
+    ProgressParams, ProgressParamsValue, Range, RegistrationParams, ServerCapabilities, ServerInfo,
+    ShowMessageRequestParams, SymbolKind, Url, WorkDoneProgress, WorkDoneProgressBegin,
     WorkDoneProgressCreateParams, WorkDoneProgressEnd,
 };
 use async_lsp::panic::CatchUnwindLayer;
@@ -38,11 +38,14 @@ use tokio::task::JoinHandle;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tower::ServiceBuilder;
 
+use super::pool::{BoxFuture, FactoryContext, LspPool, PoolSettings, SessionFactory};
+use super::process::{StartOutcome, Started};
 use super::session::{
     InitInputs, LanguageStatusNotification, LanguageStatusParams, LspSession, RawInitialize,
     ServerStatusNotification, ServerStatusParams, SessionIo, initialize,
 };
-use super::spec::{ServerSpec, SpecInputs, spec_for};
+use super::spec::{Degraded, ServerSpec, SpecInputs, spec_for};
+use super::uri::{join_rel, path_to_uri};
 use crate::capability::languages::LspLang;
 
 /// Bytes buffered by each direction of the in-memory pipe.
@@ -246,6 +249,134 @@ pub(crate) fn test_spec(lang: LspLang) -> ServerSpec {
         build_exec: true,
         preopen: &super::preopen::PreopenPlan::default(),
     })
+}
+
+/// Starts one fake server per language (or reports a missing one) and counts
+/// the starts. Build a pool over it with [`FakeServers::pool`].
+pub(crate) struct FakeServers {
+    script: Box<dyn Fn(LspLang) -> FakeScript + Send + Sync>,
+    missing: bool,
+    start_delay: Duration,
+    starts: Arc<AtomicUsize>,
+}
+
+impl FakeServers {
+    /// Servers that behave as `script(lang)` says each time one is started.
+    pub(crate) fn new(script: impl Fn(LspLang) -> FakeScript + Send + Sync + 'static) -> Self {
+        Self {
+            script: Box::new(script),
+            missing: false,
+            start_delay: Duration::ZERO,
+            starts: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    /// Servers that take `delay` to finish starting (a server still booting).
+    pub(crate) fn starting_for(mut self, delay: Duration) -> Self {
+        self.start_delay = delay;
+        self
+    }
+
+    /// No server binary exists for any language.
+    pub(crate) fn missing() -> Self {
+        Self {
+            missing: true,
+            ..Self::new(|_| FakeScript::default())
+        }
+    }
+
+    /// Servers started so far (shared with the pool's factory).
+    pub(crate) fn starts(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.starts)
+    }
+
+    /// A pool over these servers with default settings.
+    pub(crate) fn pool(self) -> LspPool {
+        self.pool_with(PoolSettings::default())
+    }
+
+    /// A pool over these servers.
+    pub(crate) fn pool_with(self, settings: PoolSettings) -> LspPool {
+        LspPool::new(Arc::new(self), settings, None).expect("pool")
+    }
+}
+
+impl SessionFactory for FakeServers {
+    fn start(&self, lang: LspLang, _ctx: FactoryContext) -> BoxFuture<'static, StartOutcome> {
+        if self.missing {
+            return Box::pin(async move {
+                StartOutcome::Degraded(Degraded::unavailable(format!(
+                    "{} not found in PATH",
+                    lang.server_program()
+                )))
+            });
+        }
+        self.starts.fetch_add(1, Ordering::SeqCst);
+        let script = (self.script)(lang);
+        let delay = self.start_delay;
+        Box::pin(async move {
+            tokio::time::sleep(delay).await;
+            let spec = test_spec(lang);
+            let init = InitInputs {
+                spec: &spec,
+                repo_root: Path::new("/work/demo"),
+            };
+            let (session, _) = connect(script, init).await;
+            StartOutcome::Ready(Box::new(Started {
+                session,
+                process: None,
+            }))
+        })
+    }
+}
+
+/// A repository on disk that the locations of a fake server point into.
+#[derive(Clone)]
+pub(crate) struct Scene {
+    root: PathBuf,
+}
+
+impl Scene {
+    /// The scene of the repository rooted at `root`.
+    pub(crate) fn new(root: &Path) -> Self {
+        Self {
+            root: root.to_path_buf(),
+        }
+    }
+
+    fn uri(&self, rel: &str) -> Url {
+        path_to_uri(&join_rel(&self.root, rel)).expect("uri")
+    }
+
+    /// A location on 0-based `line0` of `rel`.
+    pub(crate) fn location(&self, rel: &str, line0: u32) -> Location {
+        Location {
+            uri: self.uri(rel),
+            range: Range::new(Position::new(line0, 4), Position::new(line0, 10)),
+        }
+    }
+
+    /// A call-hierarchy item named `name`, declared on `line0` of `rel`.
+    pub(crate) fn item(&self, name: &str, rel: &str, line0: u32) -> CallHierarchyItem {
+        CallHierarchyItem {
+            name: name.to_owned(),
+            kind: SymbolKind::FUNCTION,
+            tags: None,
+            detail: None,
+            uri: self.uri(rel),
+            range: Range::new(Position::new(line0, 0), Position::new(line0 + 2, 1)),
+            selection_range: Range::new(Position::new(line0, 7), Position::new(line0, 13)),
+            data: None,
+        }
+    }
+
+    /// An incoming call from the function `name` declared on `line0` of `rel`.
+    pub(crate) fn call(&self, name: &str, rel: &str, line0: u32) -> CallHierarchyIncomingCall {
+        CallHierarchyIncomingCall {
+            from: self.item(name, rel, line0),
+            from_ranges: vec![Range::default()],
+        }
+    }
 }
 
 /// Start the fake server and run the real handshake against it.
