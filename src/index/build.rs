@@ -15,7 +15,7 @@ use knot::pipeline::parser::{ParseConfig, parse_files_stream};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::graph::containers::ContainerTable;
+use crate::graph::fanin::caller_fanin;
 
 use super::chunk::{chunk_file, tier1_files};
 use super::edges::EdgeLine;
@@ -26,7 +26,7 @@ use super::manifest::{
     IndexCounts, IndexTimings, KNOT_VERSION, LspManifest, Manifest, now_rfc3339, read_manifest,
     write_manifest_atomic,
 };
-use super::record_io::{WriteOutcome, remove_orphans, write_jsonl_if_changed};
+use super::record_io::{WriteOutcome, list_record_files, remove_orphans, write_jsonl_if_changed};
 use super::reuse::{ReuseMap, ReuseSource};
 use super::select::{Selection, select_files};
 use super::shard::{ShardLine, chunk_id, sort_lines, text_hash};
@@ -274,11 +274,7 @@ pub fn build_index(
     vectors.reuse_source = reuse.source;
     timings.embed = elapsed_ms(stage);
 
-    let all_records: Vec<(String, ShardLine)> = records
-        .pending
-        .iter()
-        .map(|r| (r.file.clone(), r.line.clone()))
-        .collect();
+    let lsp_records = lsp_stage_records(&records.pending, opts);
 
     progress(ProgressEvent::Stage { name: "write" });
     let stage = Instant::now();
@@ -297,8 +293,7 @@ pub fn build_index(
             cfg,
             dir: &dir,
             opts,
-            entities: &entities,
-            all_records: &all_records,
+            records: &lsp_records,
             edges: &resolved.edges,
             inventory: &inventory,
         },
@@ -321,6 +316,7 @@ pub fn build_index(
                 shards: &shards,
                 edges: &edges,
                 lsp: lsp_manifest.as_ref(),
+                lsp_edge_shards: list_record_files(&dir.layout.lsp_edges())?.len(),
             }),
             timings,
             lsp: lsp_manifest,
@@ -350,8 +346,7 @@ struct LspStageCtx<'a> {
     cfg: &'a Config,
     dir: &'a RunDir,
     opts: &'a BuildOptions,
-    entities: &'a [ParsedEntity],
-    all_records: &'a [(String, ShardLine)],
+    records: &'a [(String, ShardLine)],
     edges: &'a BTreeSet<(Uuid, Uuid, String)>,
     inventory: &'a Inventory,
 }
@@ -364,9 +359,19 @@ fn run_lsp_stage(
     if ctx.opts.lsp.policy == PrecomputePolicy::None {
         return Ok((None, None));
     }
-    let fanin = compute_heuristic_fanin(ctx.edges, ctx.entities, ctx.all_records);
+    let pairs: Vec<(String, String)> = ctx
+        .edges
+        .iter()
+        .map(|(caller, target, _)| (caller.to_string(), target.to_string()))
+        .collect();
+    let fanin = caller_fanin(
+        pairs
+            .iter()
+            .map(|(caller, target)| (caller.as_str(), target.as_str())),
+        ctx.records,
+    );
     let input = PrecomputeInput {
-        records: ctx.all_records,
+        records: ctx.records,
         heuristic_fanin: &fanin,
         inventory: ctx.inventory,
         previous: ctx.dir.previous.as_ref().and_then(|m| m.lsp.as_ref()),
@@ -389,50 +394,16 @@ fn run_lsp_stage(
     Ok((Some(lsp_m), lsp_ms))
 }
 
-fn compute_heuristic_fanin(
-    edges: &BTreeSet<(Uuid, Uuid, String)>,
-    entities: &[ParsedEntity],
-    all_records: &[(String, ShardLine)],
-) -> HashMap<String, usize> {
-    let entity_files: HashMap<Uuid, &str> = entities
-        .iter()
-        .map(|e| (e.uuid, e.file_path.as_str()))
-        .collect();
-    let entity_lines: HashMap<Uuid, usize> =
-        entities.iter().map(|e| (e.uuid, e.start_line)).collect();
-
-    let container_table = ContainerTable::from_records(
-        all_records
-            .iter()
-            .enumerate()
-            .map(|(idx, (rel, line))| (idx, rel.as_str(), line)),
-    );
-
-    let mut fanin_containers: HashMap<String, BTreeSet<String>> = HashMap::new();
-
-    for (src_uuid, dst_uuid, _rel) in edges {
-        let Some(&src_file) = entity_files.get(src_uuid) else {
-            continue;
-        };
-        let Some(&src_line1) = entity_lines.get(src_uuid) else {
-            continue;
-        };
-
-        let dst_id = dst_uuid.to_string();
-        let (_, container_idx) = container_table.container_at(src_file, src_line1);
-        let container_id = container_idx
-            .map(|idx| all_records[idx].1.id.clone())
-            .unwrap_or_else(|| src_file.to_owned());
-
-        fanin_containers
-            .entry(dst_id)
-            .or_default()
-            .insert(container_id);
+/// The entity records the LSP stage works on (`(file, record)`), empty when the
+/// stage is off. Tier-1 records are left out: they carry vectors and no symbols.
+fn lsp_stage_records(pending: &[PendingRecord], opts: &BuildOptions) -> Vec<(String, ShardLine)> {
+    if opts.lsp.policy == PrecomputePolicy::None {
+        return Vec::new();
     }
-
-    fanin_containers
-        .into_iter()
-        .map(|(dst_id, set)| (dst_id, set.len()))
+    pending
+        .iter()
+        .filter(|record| !record.line.is_tier1())
+        .map(|record| (record.file.clone(), record.line.clone()))
         .collect()
 }
 
@@ -971,21 +942,16 @@ struct CountsInputs<'a> {
     shards: &'a ShardStats,
     edges: &'a EdgeStats,
     lsp: Option<&'a LspManifest>,
+    /// `*.jsonl` files under `lsp-edges/` after the LSP stage.
+    lsp_edge_shards: usize,
 }
 
 fn index_counts(inputs: CountsInputs<'_>) -> IndexCounts {
-    let (lsp_edges, lsp_edge_shards, lsp_targets) = match inputs.lsp {
-        Some(m) => {
-            let mut total_edges = 0;
-            let mut total_targets = 0;
-            for lang_m in m.languages.values() {
-                total_edges += lang_m.edges;
-                total_targets += lang_m.targets_selected;
-            }
-            (total_edges as u64, 0u64, total_targets as u64)
-        }
-        None => (0, 0, 0),
-    };
+    let languages = inputs.lsp.map(|lsp| &lsp.languages);
+    let lsp_edges = languages.map_or(0, |all| all.values().map(|lang| lang.edges).sum());
+    let lsp_targets = languages.map_or(0, |all| {
+        all.values().map(|lang| lang.targets_selected).sum()
+    });
     IndexCounts {
         files_inventoried: count(inputs.inventory.entries.len()),
         files_parsed: count(inputs.selection.parse.len()),
@@ -1002,9 +968,9 @@ fn index_counts(inputs: CountsInputs<'_>) -> IndexCounts {
         edge_shards: count(inputs.edges.files),
         columns_located: count(inputs.stats.columns_located),
         columns_missing: count(inputs.stats.columns_missing),
-        lsp_edges,
-        lsp_edge_shards,
-        lsp_targets,
+        lsp_edges: count(lsp_edges),
+        lsp_edge_shards: count(inputs.lsp_edge_shards),
+        lsp_targets: count(lsp_targets),
     }
 }
 
@@ -1410,6 +1376,57 @@ mod tests {
             },
         );
         assert!(layout.gitignore.exists() && !layout.gitattributes.exists());
+    }
+
+    #[test]
+    fn lsp_policy_none_skips_the_stage_and_the_manifest_table() {
+        let (tmp, cfg) = fixture();
+        let none = BuildOptions {
+            lsp: PrecomputeOptions {
+                policy: PrecomputePolicy::None,
+                ..PrecomputeOptions::default()
+            },
+            ..opts()
+        };
+        let mut stages = Vec::new();
+        let mut fake = FakeEmbedder::new(DIM);
+        let report = build_index(&cfg, &mut fake, &none, None, &mut |event| {
+            if let ProgressEvent::Stage { name } = event {
+                stages.push(name);
+            }
+        })
+        .expect("build");
+
+        assert!(!stages.contains(&"lsp"), "{stages:?}");
+        assert_eq!(report.lsp, None);
+        assert_eq!(report.timings_ms.lsp, None);
+        let manifest =
+            read_manifest(&IndexLayout::for_repo(tmp.path()).manifest).expect("manifest");
+        assert_eq!(manifest.lsp, None);
+        assert_eq!(manifest.counts.lsp_targets, 0);
+    }
+
+    #[test]
+    fn auto_policy_without_java_records_the_languages_as_none() {
+        let (tmp, cfg) = fixture();
+        let report = run(&cfg);
+
+        let lsp = report.lsp.as_ref().expect("the stage ran");
+        assert_eq!(lsp.policy, "auto");
+        assert_eq!(lsp.languages["rust"].status, "none");
+        assert!(!lsp.languages.contains_key("java"));
+        assert_eq!(report.counts.lsp_edges, 0);
+        assert_eq!(report.counts.lsp_edge_shards, 0);
+        assert_eq!(report.counts.lsp_targets, 0);
+        let layout = IndexLayout::for_repo(tmp.path());
+        assert!(!layout.lsp_edges().exists());
+        assert_eq!(
+            read_manifest(&layout.manifest)
+                .expect("manifest")
+                .lsp
+                .as_ref(),
+            Some(lsp)
+        );
     }
 
     #[test]

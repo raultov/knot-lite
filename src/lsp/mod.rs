@@ -27,6 +27,7 @@ pub mod precompute;
 pub mod preopen;
 pub mod process;
 pub mod readiness;
+pub mod request;
 pub mod session;
 pub mod settings;
 pub mod spec;

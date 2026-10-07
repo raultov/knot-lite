@@ -14,9 +14,11 @@ use std::time::{Duration, Instant};
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
-use super::ops::{implementation_relation, ops_for, shape_of};
+use super::normalize::{TargetInfo, group_locations};
+use super::ops::shape_of;
 use super::pool::LspPool;
-use super::target::{DEFAULT_RETRY_PAUSE, LiveOutcome, LiveRequest, LiveStatus};
+use super::request::{Pacing, SourceFiles, Target, live_request};
+use super::target::{LiveOutcome, LiveStatus};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::graph::containers::ContainerTable;
 use crate::index::hash::{sha256_hex, short16};
@@ -30,6 +32,9 @@ use crate::index::shard::ShardLine;
 
 /// Per-target live query cap during pre-computation.
 const PER_TARGET_CAP: Duration = Duration::from_secs(120);
+
+/// Progress is reported every this many targets.
+const PROGRESS_EVERY: usize = 10;
 
 /// Pre-compute policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
@@ -232,7 +237,7 @@ pub fn run(
             continue;
         };
 
-        let (manifest_lang, _edges_written) = precompute_lang(
+        let manifest_lang = precompute_lang(
             &PrecomputeLangCtx {
                 input,
                 opts,
@@ -281,206 +286,203 @@ struct PrecomputeLangCtx<'a> {
     container_table: &'a ContainerTable,
 }
 
-fn query_one_target(
-    ctx: &PrecomputeLangCtx<'_>,
-    rel: &str,
-    line: &ShardLine,
+/// A target selected for pre-computation.
+struct Candidate<'a> {
+    rel: &'a str,
+    line: &'a ShardLine,
     fanin: usize,
-    deadline: Instant,
-) -> LiveOutcome {
-    let abs_file = ctx.input.repo_root.join(rel);
-    let req = LiveRequest {
-        lang: ctx.lang,
-        target_id: line.id.clone(),
-        abs_file,
-        rel_file: rel.to_owned(),
-        position: async_lsp::lsp_types::Position {
-            line: u32::try_from(line.l0.saturating_sub(1)).unwrap_or(0),
-            character: line.col.unwrap_or(0),
-        },
-        ops: ops_for(shape_of(&line.kind)),
-        heuristic_hint: fanin,
-        deadline,
-        retry_pause: DEFAULT_RETRY_PAUSE,
-    };
-
-    ctx.pool.query(req)
 }
 
-fn process_target_outcome(
-    outcome: &LiveOutcome,
-    line: &ShardLine,
-    container_table: &ContainerTable,
-    records: &[(String, ShardLine)],
-    all_shards: &mut BTreeMap<String, Vec<LspEdgeLine>>,
-) {
-    let shape = shape_of(&line.kind);
-    let impl_rel = implementation_relation(shape);
-
-    for loc in &outcome.locations {
-        let line1 = usize::try_from(loc.line0 + 1).unwrap_or(1);
-        let (_, container_idx) = container_table.container_at(&loc.rel, line1);
-        let src = container_idx.and_then(|idx| {
-            let container_id = &records[idx].1.id;
-            (container_id != &line.id).then(|| container_id.clone())
-        });
-
-        let rel_word = match loc.op {
-            super::ops::Op::Incoming => "CALLS",
-            super::ops::Op::References => "REFERENCES",
-            super::ops::Op::Implementation => impl_rel.unwrap_or("IMPLEMENTS"),
-        };
-
-        let edge = LspEdgeLine {
-            src,
-            dst: line.id.clone(),
-            rel: rel_word.to_owned(),
-            n: loc.sites,
-        };
-
-        all_shards.entry(loc.rel.clone()).or_default().push(edge);
-    }
-}
-
+/// Records of `lang` with a located column and at least `min_fanin` caller
+/// containers: highest fan-in first, then by id, at most `max_targets`.
 fn select_candidates<'a>(
     input: &'a PrecomputeInput<'_>,
     lang: LspLang,
-    min_fanin: usize,
-    max_targets: usize,
-) -> Vec<(&'a String, &'a ShardLine, usize)> {
-    let mut candidates: Vec<(&String, &ShardLine, usize)> = input
+    opts: &PrecomputeOptions,
+) -> Vec<Candidate<'a>> {
+    let mut candidates: Vec<Candidate<'a>> = input
         .records
         .iter()
+        .filter(|(rel, line)| {
+            line.col.is_some() && lsp_lang_for_label(label_for(Path::new(rel))) == Some(lang)
+        })
         .filter_map(|(rel, line)| {
-            if lsp_lang_for_label(label_for(Path::new(rel))) != Some(lang) || line.col.is_none() {
-                return None;
-            }
-            let fanin = *input.heuristic_fanin.get(&line.id).unwrap_or(&0);
-            if fanin < min_fanin {
-                return None;
-            }
-            Some((rel, line, fanin))
+            let fanin = input.heuristic_fanin.get(&line.id).copied().unwrap_or(0);
+            (fanin >= opts.min_fanin).then_some(Candidate { rel, line, fanin })
         })
         .collect();
-
-    candidates.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.1.id.cmp(&b.1.id)));
-    candidates.truncate(max_targets);
+    candidates.sort_by(|a, b| {
+        b.fanin
+            .cmp(&a.fanin)
+            .then_with(|| a.line.id.cmp(&b.line.id))
+    });
+    candidates.truncate(opts.max_targets);
     candidates
+}
+
+/// Ask the server about one candidate; a target that cannot be positioned is
+/// answered without a request.
+fn ask_target(
+    ctx: &PrecomputeLangCtx<'_>,
+    files: &mut SourceFiles<'_>,
+    candidate: &Candidate<'_>,
+    deadline: Instant,
+) -> LiveOutcome {
+    let target = Target {
+        rel: candidate.rel,
+        line: candidate.line,
+        lang: ctx.lang,
+        indexed_sha16: None,
+    };
+    let pacing = Pacing {
+        heuristic_hint: candidate.fanin,
+        deadline,
+    };
+    match live_request(files, &target, pacing) {
+        Ok(request) => ctx.pool.query(request),
+        Err(why) => LiveOutcome::without_answer(LiveStatus::NoPosition, why.detail()),
+    }
+}
+
+/// Turn the locations of one answered target into edges, grouped by caller
+/// file: the same grouping a live answer gets (§6.5), one edge per
+/// (container, relationship).
+fn collect_edges(
+    ctx: &PrecomputeLangCtx<'_>,
+    candidate: &Candidate<'_>,
+    outcome: &LiveOutcome,
+    shards: &mut BTreeMap<String, Vec<LspEdgeLine>>,
+) {
+    let line = candidate.line;
+    let target = TargetInfo {
+        shape: shape_of(&line.kind),
+        own: ctx.container_table.container_at(candidate.rel, line.l0).0,
+    };
+    let groups = group_locations(&outcome.locations, &target, ctx.container_table);
+    for (relation, hits) in groups.groups {
+        for hit in hits {
+            shards.entry(hit.key.file).or_default().push(LspEdgeLine {
+                src: hit
+                    .record
+                    .map(|position| ctx.input.records[position].1.id.clone()),
+                dst: line.id.clone(),
+                rel: relation.clone(),
+                n: u32::try_from(hit.sites).unwrap_or(u32::MAX),
+            });
+        }
+    }
+}
+
+/// What asking about the candidates of one language gathered.
+#[derive(Default)]
+struct LangRun {
+    attempted: usize,
+    ok: usize,
+    failed: usize,
+    diagnostic: String,
+    server_version: String,
+    shards: BTreeMap<String, Vec<LspEdgeLine>>,
+    targets: Vec<LspTargetLine>,
+}
+
+impl LangRun {
+    fn record(&mut self, candidate: &Candidate<'_>, outcome: &LiveOutcome) {
+        if outcome.status == LiveStatus::Ok {
+            self.ok += 1;
+        } else {
+            self.failed += 1;
+            if let Some(detail) = &outcome.detail {
+                self.diagnostic.clone_from(detail);
+            }
+        }
+        self.targets.push(LspTargetLine {
+            id: candidate.line.id.clone(),
+            status: outcome.status.as_str().to_owned(),
+            ms: outcome.ms,
+            ops: outcome.op_counts,
+            server: self.server_version.clone(),
+        });
+    }
+
+    /// `computed`, `failed` (nothing answered) or `none` (nothing asked).
+    fn status(&self) -> &'static str {
+        match (self.attempted, self.ok) {
+            (0, _) => "none",
+            (_, 0) => "failed",
+            _ => "computed",
+        }
+    }
 }
 
 fn precompute_lang(
     ctx: &PrecomputeLangCtx<'_>,
     progress: &mut dyn FnMut(ProgressEvent),
-) -> anyhow::Result<(LspLangManifest, usize)> {
-    let input = ctx.input;
-    let opts = ctx.opts;
-    let pool = ctx.pool;
-    let layout = ctx.layout;
-    let lang = ctx.lang;
-    let fp = ctx.fp;
-    let container_table = ctx.container_table;
-    let start_time = Instant::now();
-    let budget_end = start_time + opts.budget;
+) -> anyhow::Result<LspLangManifest> {
+    let started = Instant::now();
+    let budget_end = started + ctx.opts.budget;
+    let candidates = select_candidates(ctx.input, ctx.lang, ctx.opts);
+    let total = candidates.len();
+    let mut files = SourceFiles::new(ctx.input.repo_root);
+    let mut run = LangRun::default();
 
-    let candidates = select_candidates(input, lang, opts.min_fanin, opts.max_targets);
-
-    let total_candidates = candidates.len();
-    let mut attempted = 0;
-    let mut targets_ok = 0;
-    let mut targets_failed = 0;
-    let mut last_diagnostic = String::new();
-
-    let mut all_shards: BTreeMap<String, Vec<LspEdgeLine>> = BTreeMap::new();
-    let mut target_lines = Vec::new();
-    let mut server_version = String::new();
-
-    for (idx, (rel, line, fanin)) in candidates.into_iter().enumerate() {
+    for (index, candidate) in candidates.iter().enumerate() {
         let now = Instant::now();
         if now >= budget_end {
             tracing::info!(
-                "precompute for {} budget exhausted after {}/{} targets",
-                lang.dir_name(),
-                attempted,
-                total_candidates
+                "precompute for {} stopped by its budget after {}/{total} targets",
+                ctx.lang.dir_name(),
+                run.attempted
             );
             break;
         }
-
-        attempted += 1;
-        let per_target_deadline = now + PER_TARGET_CAP;
-        let deadline = per_target_deadline.min(budget_end);
-
-        let outcome = query_one_target(ctx, rel, line, fanin, deadline);
-
-        if server_version.is_empty() {
-            let snap = pool.snapshot();
-            if let Some(slot_snap) = snap.slots.get(lang.dir_name()) {
-                server_version = slot_snap.version.clone();
-            }
+        run.attempted += 1;
+        let deadline = (now + PER_TARGET_CAP).min(budget_end);
+        let outcome = ask_target(ctx, &mut files, candidate, deadline);
+        if run.server_version.is_empty() {
+            run.server_version = server_version(ctx.pool, ctx.lang);
         }
-
         if outcome.status == LiveStatus::Ok {
-            targets_ok += 1;
-            process_target_outcome(
-                &outcome,
-                line,
-                container_table,
-                input.records,
-                &mut all_shards,
-            );
-        } else {
-            targets_failed += 1;
-            if let Some(detail) = &outcome.detail {
-                last_diagnostic = detail.clone();
-            }
+            collect_edges(ctx, candidate, &outcome, &mut run.shards);
         }
-
-        target_lines.push(LspTargetLine {
-            id: line.id.clone(),
-            status: outcome.status.as_str().to_owned(),
-            ms: outcome.ms,
-            ops: outcome.op_counts,
-            server: server_version.clone(),
-        });
-
-        if (idx + 1) % 10 == 0 || (idx + 1) == total_candidates {
+        run.record(candidate, &outcome);
+        if outcome.status == LiveStatus::NoServer {
+            // Terminal for this process: asking the other targets cannot help.
+            break;
+        }
+        if (index + 1) % PROGRESS_EVERY == 0 || index + 1 == total {
             progress(ProgressEvent::LspTargets {
-                lang,
-                done: idx + 1,
-                total: total_candidates,
+                lang: ctx.lang,
+                done: index + 1,
+                total,
             });
         }
     }
 
-    let (total_edges, _) = write_lsp_edge_shards(layout, lang, &all_shards)?;
-    prune_orphan_edge_shards(layout, lang, &all_shards)?;
-    write_lsp_targets(layout, lang, &target_lines)?;
+    let (edges, _) = write_lsp_edge_shards(ctx.layout, ctx.lang, &run.shards)?;
+    prune_orphan_edge_shards(ctx.layout, ctx.lang, &run.shards)?;
+    write_lsp_targets(ctx.layout, ctx.lang, &run.targets)?;
 
-    let ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
+    Ok(LspLangManifest {
+        status: run.status().to_owned(),
+        server: ctx.lang.server_program().to_owned(),
+        version: run.server_version,
+        files_fingerprint: ctx.fp.to_owned(),
+        targets_selected: run.attempted,
+        targets_ok: run.ok,
+        targets_failed: run.failed,
+        edges,
+        ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        diagnostic: run.diagnostic,
+    })
+}
 
-    let status_str = if attempted == 0 && total_candidates == 0 {
-        "none"
-    } else if targets_failed == attempted && attempted > 0 {
-        "failed"
-    } else {
-        "computed"
-    };
-
-    Ok((
-        LspLangManifest {
-            status: status_str.to_owned(),
-            server: lang.server_program().to_owned(),
-            version: server_version,
-            files_fingerprint: fp.to_owned(),
-            targets_selected: attempted,
-            targets_ok,
-            targets_failed,
-            edges: total_edges,
-            ms,
-            diagnostic: last_diagnostic,
-        },
-        total_edges,
-    ))
+/// The version string the server of `lang` reported (empty before it is ready).
+fn server_version(pool: &LspPool, lang: LspLang) -> String {
+    pool.snapshot()
+        .slots
+        .get(lang.dir_name())
+        .map(|slot| slot.version.clone())
+        .unwrap_or_default()
 }
 
 fn prune_orphan_edge_shards(
@@ -514,16 +516,29 @@ fn prune_orphan_edge_shards(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::lsp::fake::{FakeScript, connect, test_spec};
-    use crate::lsp::pool::{FactoryContext, SessionFactory};
-    use crate::lsp::spec::Degraded;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
+    use async_lsp::lsp_types::{
+        CallHierarchyIncomingCall, CallHierarchyItem, Location, Position, Range, SymbolKind,
+    };
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::index::lsp_records::{read_lsp_edge_shard, read_lsp_targets};
+    use crate::lsp::fake::{FakeScript, connect, test_spec};
+    use crate::lsp::pool::{FactoryContext, PoolSettings, SessionFactory};
+    use crate::lsp::process::{StartOutcome, Started};
+    use crate::lsp::spec::Degraded;
+    use crate::lsp::uri::{join_rel, path_to_uri};
+
+    const LIB: &str = "pub fn target() {}\npub fn caller_a() {\n    target();\n}\npub fn caller_b() {\n    target();\n}\n";
+
+    /// Starts a fake server per language and counts the starts.
     struct ScriptedPoolFactory {
         script_fn: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>,
         missing: bool,
+        starts: Arc<AtomicUsize>,
     }
 
     impl SessionFactory for ScriptedPoolFactory {
@@ -531,15 +546,16 @@ mod tests {
             &self,
             lang: LspLang,
             _ctx: FactoryContext,
-        ) -> super::super::pool::BoxFuture<'static, crate::lsp::process::StartOutcome> {
+        ) -> super::super::pool::BoxFuture<'static, StartOutcome> {
             if self.missing {
                 return Box::pin(async move {
-                    crate::lsp::process::StartOutcome::Degraded(Degraded::unavailable(format!(
+                    StartOutcome::Degraded(Degraded::unavailable(format!(
                         "{} not found in PATH",
                         lang.server_program()
                     )))
                 });
             }
+            self.starts.fetch_add(1, Ordering::SeqCst);
             let script = (self.script_fn)(lang);
             Box::pin(async move {
                 let spec = test_spec(lang);
@@ -548,7 +564,7 @@ mod tests {
                     repo_root: Path::new("/work/demo"),
                 };
                 let (session, _) = connect(script, init).await;
-                crate::lsp::process::StartOutcome::Ready(Box::new(crate::lsp::process::Started {
+                StartOutcome::Ready(Box::new(Started {
                     session,
                     process: None,
                 }))
@@ -556,524 +572,488 @@ mod tests {
         }
     }
 
+    fn shard_line(id: &str, name: &str, l0: usize, l1: usize, col: Option<u32>) -> ShardLine {
+        ShardLine {
+            id: id.to_owned(),
+            kind: "rust_function".to_owned(),
+            name: name.to_owned(),
+            fqn: name.to_owned(),
+            lang: "rust".to_owned(),
+            l0,
+            l1,
+            col,
+            sig: None,
+            h: "h".to_owned(),
+            q: None,
+            s: None,
+        }
+    }
+
+    /// A repository on disk plus the index data pre-computation reads.
+    struct Rig {
+        tmp: TempDir,
+        layout: IndexLayout,
+        records: Vec<(String, ShardLine)>,
+        fanin: HashMap<String, usize>,
+        inventory: Inventory,
+        starts: Arc<AtomicUsize>,
+    }
+
+    impl Rig {
+        /// `target` is called by `caller_a` and `caller_b` (ids `t`, `ca`, `cb`).
+        fn new() -> Self {
+            let tmp = tempfile::tempdir().expect("tempdir");
+            std::fs::create_dir_all(tmp.path().join("src")).expect("mkdir");
+            std::fs::write(join_rel(tmp.path(), "src/lib.rs"), LIB).expect("write lib");
+            std::fs::write(join_rel(tmp.path(), "src/main.rs"), "fn main() {}\n")
+                .expect("write main");
+            let records = vec![
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line("t", "target", 1, 1, Some(7)),
+                ),
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line("ca", "caller_a", 2, 4, Some(7)),
+                ),
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line("cb", "caller_b", 5, 7, Some(7)),
+                ),
+            ];
+            let inventory = Inventory::new(vec![
+                InventoryEntry {
+                    rel: "src/lib.rs".to_owned(),
+                    sha: "aaaa".to_owned(),
+                    bytes: 1,
+                },
+                InventoryEntry {
+                    rel: "src/main.rs".to_owned(),
+                    sha: "bbbb".to_owned(),
+                    bytes: 1,
+                },
+            ]);
+            Self {
+                layout: IndexLayout::for_repo(tmp.path()),
+                tmp,
+                records,
+                fanin: HashMap::from([("t".to_owned(), 5)]),
+                inventory,
+                starts: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn uri(&self, rel: &str) -> async_lsp::lsp_types::Url {
+            path_to_uri(&join_rel(self.tmp.path(), rel)).expect("uri")
+        }
+
+        fn location(&self, rel: &str, line: u32) -> Location {
+            Location {
+                uri: self.uri(rel),
+                range: Range::new(Position::new(line, 4), Position::new(line, 10)),
+            }
+        }
+
+        fn item(&self, name: &str, line: u32) -> CallHierarchyItem {
+            CallHierarchyItem {
+                name: name.to_owned(),
+                kind: SymbolKind::FUNCTION,
+                tags: None,
+                detail: None,
+                uri: self.uri("src/lib.rs"),
+                range: Range::new(Position::new(line, 0), Position::new(line + 2, 1)),
+                selection_range: Range::new(Position::new(line, 7), Position::new(line, 13)),
+                data: None,
+            }
+        }
+
+        /// What a Rust server answers for `target` at (0, 7): `caller_a` calls it
+        /// (and references it from the same lines), `caller_b` references it,
+        /// `main.rs` references it outside any function, and the target's own
+        /// body mentions itself.
+        fn script(&self) -> FakeScript {
+            let position = Position::new(0, 7);
+            FakeScript {
+                prepare: vec![(position, vec![self.item("target", 0)])],
+                incoming: vec![(
+                    "target".to_owned(),
+                    vec![CallHierarchyIncomingCall {
+                        from: self.item("caller_a", 1),
+                        from_ranges: vec![Range::default()],
+                    }],
+                )],
+                references: vec![(
+                    position,
+                    vec![
+                        self.location("src/lib.rs", 0),
+                        self.location("src/lib.rs", 2),
+                        self.location("src/lib.rs", 5),
+                        self.location("src/main.rs", 0),
+                    ],
+                )],
+                ..FakeScript::full()
+            }
+        }
+
+        fn pool_with(&self, script: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>) -> LspPool {
+            self.pool(script, false)
+        }
+
+        fn pool(
+            &self,
+            script_fn: Arc<dyn Fn(LspLang) -> FakeScript + Send + Sync>,
+            missing: bool,
+        ) -> LspPool {
+            let factory = Arc::new(ScriptedPoolFactory {
+                script_fn,
+                missing,
+                starts: Arc::clone(&self.starts),
+            });
+            LspPool::new(factory, PoolSettings::default(), None).expect("pool")
+        }
+
+        /// The standard server for this repository.
+        fn standard_pool(&self) -> LspPool {
+            let script = Arc::new(Mutex::new(Some(self.script())));
+            self.pool_with(Arc::new(move |_| {
+                script
+                    .lock()
+                    .expect("lock")
+                    .take()
+                    .expect("one server start")
+            }))
+        }
+
+        fn run(
+            &self,
+            opts: &PrecomputeOptions,
+            pool: Option<&LspPool>,
+            previous: Option<&LspManifest>,
+        ) -> LspManifest {
+            let input = PrecomputeInput {
+                records: &self.records,
+                heuristic_fanin: &self.fanin,
+                inventory: &self.inventory,
+                previous,
+                repo_root: self.tmp.path(),
+            };
+            run(&input, opts, pool, &self.layout, &mut |_| {}).expect("run")
+        }
+
+        fn edges_of(&self, caller_rel: &str) -> Vec<LspEdgeLine> {
+            let path = self
+                .layout
+                .lsp_edges_for(LspLang::Rust, caller_rel)
+                .expect("path");
+            read_lsp_edge_shard(&path).expect("shard")
+        }
+
+        fn targets(&self) -> Vec<LspTargetLine> {
+            read_lsp_targets(&self.layout.lsp_targets_for(LspLang::Rust)).expect("targets")
+        }
+    }
+
+    fn all(min_fanin: usize) -> PrecomputeOptions {
+        PrecomputeOptions {
+            policy: PrecomputePolicy::All,
+            min_fanin,
+            max_targets: 10,
+            budget: Duration::from_secs(600),
+        }
+    }
+
+    fn edge(src: Option<&str>, rel: &str, n: u32) -> LspEdgeLine {
+        LspEdgeLine {
+            src: src.map(str::to_owned),
+            dst: "t".to_owned(),
+            rel: rel.to_owned(),
+            n,
+        }
+    }
+
     #[test]
     fn auto_policy_selects_java_only() {
-        let mut present = BTreeSet::new();
-        present.insert(LspLang::Rust);
-        present.insert(LspLang::Java);
+        let present = BTreeSet::from([LspLang::Rust, LspLang::Java]);
         assert_eq!(
             languages_for(PrecomputePolicy::Auto, &present),
             vec![LspLang::Java]
         );
+        let rust_only = BTreeSet::from([LspLang::Rust]);
+        assert!(languages_for(PrecomputePolicy::Auto, &rust_only).is_empty());
     }
 
     #[test]
     fn all_policy_selects_present_languages() {
-        let mut present = BTreeSet::new();
-        present.insert(LspLang::Rust);
-        present.insert(LspLang::Ts);
+        let present = BTreeSet::from([LspLang::Rust, LspLang::Ts]);
         assert_eq!(
             languages_for(PrecomputePolicy::All, &present),
             vec![LspLang::Rust, LspLang::Ts]
         );
+        assert!(languages_for(PrecomputePolicy::None, &present).is_empty());
     }
 
     #[test]
     fn none_policy_removes_previous_lsp_data() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
-
-        // Create dummy edge and target files
-        let lang_dir = layout.lsp_edges_lang_dir(LspLang::Java);
+        let rig = Rig::new();
+        let lang_dir = rig.layout.lsp_edges_lang_dir(LspLang::Rust);
         std::fs::create_dir_all(&lang_dir).expect("mkdir");
-        std::fs::write(lang_dir.join("Foo.java.jsonl"), "dummy\n").expect("write");
-        std::fs::create_dir_all(layout.lsp_targets()).expect("mkdir");
-        std::fs::write(layout.lsp_targets_for(LspLang::Java), "dummy\n").expect("write");
-
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123456789abcdef".to_owned(),
-                bytes: 50,
-            }],
-        };
-
-        let input = PrecomputeInput {
-            records: &[],
-            heuristic_fanin: &HashMap::new(),
-            inventory: &inv,
-            previous: None,
-            repo_root: tmp.path(),
-        };
+        std::fs::write(lang_dir.join("lib.rs.jsonl"), "dummy\n").expect("write");
+        std::fs::create_dir_all(rig.layout.lsp_targets()).expect("mkdir");
+        std::fs::write(rig.layout.lsp_targets_for(LspLang::Rust), "dummy\n").expect("write");
 
         let opts = PrecomputeOptions {
             policy: PrecomputePolicy::None,
             ..PrecomputeOptions::default()
         };
-
-        let mut events = Vec::new();
-        let manifest = run(&input, &opts, None, &layout, &mut |ev| events.push(ev)).expect("run");
+        let manifest = rig.run(&opts, None, None);
 
         assert_eq!(manifest.policy, "none");
+        assert_eq!(manifest.languages["rust"].status, "none");
         assert!(!lang_dir.exists());
-        assert!(!layout.lsp_targets_for(LspLang::Java).exists());
+        assert!(!rig.layout.lsp_targets_for(LspLang::Rust).exists());
+    }
+
+    #[test]
+    fn edges_are_written_per_caller_file_sorted() {
+        let rig = Rig::new();
+        let manifest = rig.run(&all(2), Some(&rig.standard_pool()), None);
+
+        let rust = &manifest.languages["rust"];
+        assert_eq!(rust.status, "computed");
+        assert_eq!((rust.targets_selected, rust.targets_ok), (1, 1));
+        // `caller_a` calls the target: its reference on the same lines is not repeated.
+        // The target's own mention is recursion and is dropped.
+        assert_eq!(
+            rig.edges_of("src/lib.rs"),
+            vec![
+                edge(Some("ca"), "CALLS", 1),
+                edge(Some("cb"), "REFERENCES", 1)
+            ]
+        );
+        assert_eq!(rust.edges, 3);
+    }
+
+    #[test]
+    fn file_level_callers_have_null_src() {
+        let rig = Rig::new();
+        rig.run(&all(2), Some(&rig.standard_pool()), None);
+        assert_eq!(
+            rig.edges_of("src/main.rs"),
+            vec![edge(None, "REFERENCES", 1)]
+        );
+    }
+
+    #[test]
+    fn targets_file_lists_every_attempt_with_status() {
+        let mut rig = Rig::new();
+        // `ghost` is not in the file: it cannot be positioned and is never asked.
+        rig.records.push((
+            "src/lib.rs".to_owned(),
+            shard_line("g", "ghost", 5, 7, Some(7)),
+        ));
+        rig.fanin.insert("g".to_owned(), 4);
+        rig.run(&all(2), Some(&rig.standard_pool()), None);
+
+        let targets = rig.targets();
+        let statuses: Vec<(&str, &str)> = targets
+            .iter()
+            .map(|line| (line.id.as_str(), line.status.as_str()))
+            .collect();
+        assert_eq!(statuses, vec![("g", "no_position"), ("t", "ok")]);
+        let answered = targets.iter().find(|line| line.id == "t").expect("t");
+        assert_eq!(answered.ops.incoming, Some(1));
+        assert_eq!(answered.ops.references, Some(4));
+        assert_eq!(answered.ops.implementation, None);
     }
 
     #[test]
     fn targets_are_selected_by_fanin_then_id_and_capped() {
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123".to_owned(),
-                bytes: 10,
-            }],
-        };
-
-        let r1 = (
-            "Foo.java".to_owned(),
-            ShardLine {
-                id: "t1".to_owned(),
-                kind: "java_method".to_owned(),
-                name: "m1".to_owned(),
-                fqn: "m1".to_owned(),
-                lang: "java".to_owned(),
-                l0: 1,
-                l1: 5,
-                col: Some(0),
-                sig: None,
-                h: "h".to_owned(),
-                q: None,
-                s: None,
-            },
-        );
-        let r2 = (
-            "Foo.java".to_owned(),
-            ShardLine {
-                id: "t2".to_owned(),
-                kind: "java_method".to_owned(),
-                name: "m2".to_owned(),
-                fqn: "m2".to_owned(),
-                lang: "java".to_owned(),
-                l0: 10,
-                l1: 15,
-                col: Some(0),
-                sig: None,
-                h: "h".to_owned(),
-                q: None,
-                s: None,
-            },
-        );
-        let r3 = (
-            "Foo.java".to_owned(),
-            ShardLine {
-                id: "t3".to_owned(),
-                kind: "java_method".to_owned(),
-                name: "m3".to_owned(),
-                fqn: "m3".to_owned(),
-                lang: "java".to_owned(),
-                l0: 20,
-                l1: 25,
-                col: Some(0),
-                sig: None,
-                h: "h".to_owned(),
-                q: None,
-                s: None,
-            },
-        );
-
-        let records = vec![r1, r2, r3];
-        let mut fanin = HashMap::new();
-        fanin.insert("t1".to_owned(), 25);
-        fanin.insert("t2".to_owned(), 30); // highest fanin
-        fanin.insert("t3".to_owned(), 25); // tie with t1, id "t1" < "t3"
-
-        let input = PrecomputeInput {
-            records: &records,
-            heuristic_fanin: &fanin,
-            inventory: &inv,
-            previous: None,
-            repo_root: Path::new("/demo"),
-        };
-
+        let mut rig = Rig::new();
+        rig.records = ["t1", "t2", "t3"]
+            .iter()
+            .zip([1, 10, 20])
+            .map(|(id, l0)| {
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line(id, id, l0, l0 + 1, Some(0)),
+                )
+            })
+            .collect();
+        rig.fanin = HashMap::from([
+            ("t1".to_owned(), 25),
+            ("t2".to_owned(), 30),
+            ("t3".to_owned(), 25),
+        ]);
         let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 20,
             max_targets: 2,
-            budget: Duration::from_secs(600),
+            ..all(20)
         };
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(|_| FakeScript::full()),
-            missing: false,
-        });
-
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
-        )
-        .expect("pool");
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
-
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
-
-        assert_eq!(java_m.targets_selected, 2);
+        let input = PrecomputeInput {
+            records: &rig.records,
+            heuristic_fanin: &rig.fanin,
+            inventory: &rig.inventory,
+            previous: None,
+            repo_root: rig.tmp.path(),
+        };
+        let ids: Vec<&str> = select_candidates(&input, LspLang::Rust, &opts)
+            .iter()
+            .map(|candidate| candidate.line.id.as_str())
+            .collect();
+        // Highest fan-in first; the tie between `t1` and `t3` goes to the smaller id.
+        assert_eq!(ids, vec!["t2", "t1"]);
     }
 
     #[test]
-    fn records_without_col_are_not_selected() {
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123".to_owned(),
-                bytes: 10,
-            }],
-        };
-
-        let r1 = (
-            "Foo.java".to_owned(),
-            ShardLine {
-                id: "t1".to_owned(),
-                kind: "java_method".to_owned(),
-                name: "m1".to_owned(),
-                fqn: "m1".to_owned(),
-                lang: "java".to_owned(),
-                l0: 1,
-                l1: 5,
-                col: None,
-                sig: None,
-                h: "h".to_owned(),
-                q: None,
-                s: None,
-            },
-        );
-        let records = vec![r1];
-        let mut fanin = HashMap::new();
-        fanin.insert("t1".to_owned(), 100);
-
+    fn records_without_col_and_below_min_fanin_are_not_selected() {
+        let mut rig = Rig::new();
+        rig.records[0].1.col = None;
+        let opts = all(2);
         let input = PrecomputeInput {
-            records: &records,
-            heuristic_fanin: &fanin,
-            inventory: &inv,
+            records: &rig.records,
+            heuristic_fanin: &rig.fanin,
+            inventory: &rig.inventory,
             previous: None,
-            repo_root: Path::new("/demo"),
+            repo_root: rig.tmp.path(),
         };
+        assert!(select_candidates(&input, LspLang::Rust, &opts).is_empty());
 
-        let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 5,
-            max_targets: 10,
-            budget: Duration::from_secs(600),
+        rig.records[0].1.col = Some(7);
+        let input = PrecomputeInput {
+            records: &rig.records,
+            heuristic_fanin: &rig.fanin,
+            inventory: &rig.inventory,
+            previous: None,
+            repo_root: rig.tmp.path(),
         };
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(|_| FakeScript::full()),
-            missing: false,
-        });
-
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
-        )
-        .expect("pool");
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
-
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
-
-        assert_eq!(java_m.targets_selected, 0);
+        assert!(select_candidates(&input, LspLang::Rust, &all(6)).is_empty());
+        assert_eq!(select_candidates(&input, LspLang::Rust, &all(5)).len(), 1);
     }
 
     #[test]
-    fn missing_server_marks_failed_and_removes_stale_data() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
-
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123".to_owned(),
-                bytes: 10,
-            }],
-        };
-
-        let r1 = (
-            "Foo.java".to_owned(),
-            ShardLine {
-                id: "t1".to_owned(),
-                kind: "java_method".to_owned(),
-                name: "m1".to_owned(),
-                fqn: "m1".to_owned(),
-                lang: "java".to_owned(),
-                l0: 1,
-                l1: 5,
-                col: Some(0),
-                sig: None,
-                h: "h".to_owned(),
-                q: None,
-                s: None,
-            },
-        );
-        let records = vec![r1];
-        let mut fanin = HashMap::new();
-        fanin.insert("t1".to_owned(), 50);
-
-        let input = PrecomputeInput {
-            records: &records,
-            heuristic_fanin: &fanin,
-            inventory: &inv,
-            previous: None,
-            repo_root: tmp.path(),
-        };
-
-        let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 10,
-            max_targets: 5,
-            budget: Duration::from_secs(600),
-        };
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(|_| FakeScript::full()),
-            missing: true,
+    fn budget_stops_selection_and_counts_attempted_only() {
+        let mut rig = Rig::new();
+        for id in ["u", "v"] {
+            rig.records.push((
+                "src/lib.rs".to_owned(),
+                shard_line(id, "target", 1, 1, Some(7)),
+            ));
+            rig.fanin.insert(id.to_owned(), 5);
+        }
+        // Every request outlives the whole budget: the first target uses it up.
+        let slow = Arc::new(|_| FakeScript {
+            delay: Duration::from_millis(600),
+            ..FakeScript::full()
         });
+        let pool = rig.pool_with(slow);
+        let opts = PrecomputeOptions {
+            budget: Duration::from_millis(250),
+            ..all(2)
+        };
+        let manifest = rig.run(&opts, Some(&pool), None);
 
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
-        )
-        .expect("pool");
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
-
-        assert_eq!(java_m.status, "failed");
-        assert!(java_m.diagnostic.contains("not found in PATH"));
+        let rust = &manifest.languages["rust"];
+        assert_eq!(rust.targets_selected, 1, "{rust:?}");
+        assert_eq!(rig.targets().len(), 1);
     }
 
     #[test]
     fn unchanged_language_files_reuse_without_starting_server() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
+        let rig = Rig::new();
+        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
+        assert_eq!(rig.starts.load(Ordering::SeqCst), 1);
+        let edges_before = rig.edges_of("src/lib.rs");
 
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123".to_owned(),
-                bytes: 10,
-            }],
-        };
-
-        let fp = fingerprint_for_lang(&inv, LspLang::Java);
-        let mut prev_langs = BTreeMap::new();
-        prev_langs.insert(
-            "java".to_owned(),
-            LspLangManifest {
-                status: "computed".to_owned(),
-                server: "jdtls".to_owned(),
-                version: "1.0".to_owned(),
-                files_fingerprint: fp,
-                targets_selected: 5,
-                targets_ok: 5,
-                targets_failed: 0,
-                edges: 12,
-                ms: 50,
-                diagnostic: String::new(),
-            },
-        );
-
-        let prev_manifest = LspManifest {
-            format: 1,
-            policy: "all".to_owned(),
-            min_fanin: 10,
-            max_targets: 10,
-            budget_secs: 600,
-            languages: prev_langs,
-        };
-
-        let input = PrecomputeInput {
-            records: &[],
-            heuristic_fanin: &HashMap::new(),
-            inventory: &inv,
-            previous: Some(&prev_manifest),
-            repo_root: tmp.path(),
-        };
-
-        let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 10,
-            max_targets: 10,
-            budget: Duration::from_secs(600),
-        };
-
-        let starts = Arc::new(AtomicU64::new(0));
-        let starts_clone = Arc::clone(&starts);
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(move |_| {
-                starts_clone.fetch_add(1, Ordering::SeqCst);
-                FakeScript::full()
-            }),
-            missing: false,
-        });
-
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
-        )
-        .expect("pool");
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
-
-        assert_eq!(java_m.status, "reused");
-        assert_eq!(starts.load(Ordering::SeqCst), 0);
+        let second = rig.run(&all(2), Some(&rig.standard_pool()), Some(&first));
+        assert_eq!(second.languages["rust"].status, "reused");
+        assert_eq!(rig.starts.load(Ordering::SeqCst), 1);
+        assert_eq!(rig.edges_of("src/lib.rs"), edges_before);
     }
 
     #[test]
     fn changed_language_file_recomputes() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
+        let mut rig = Rig::new();
+        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
+        rig.inventory = Inventory::new(vec![InventoryEntry {
+            rel: "src/lib.rs".to_owned(),
+            sha: "changed".to_owned(),
+            bytes: 1,
+        }]);
 
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "NEW_SHA".to_owned(),
-                bytes: 10,
-            }],
-        };
-
-        let mut prev_langs = BTreeMap::new();
-        prev_langs.insert(
-            "java".to_owned(),
-            LspLangManifest {
-                status: "computed".to_owned(),
-                server: "jdtls".to_owned(),
-                version: "1.0".to_owned(),
-                files_fingerprint: "OLD_SHA".to_owned(),
-                targets_selected: 5,
-                targets_ok: 5,
-                targets_failed: 0,
-                edges: 12,
-                ms: 50,
-                diagnostic: String::new(),
-            },
-        );
-
-        let prev_manifest = LspManifest {
-            format: 1,
-            policy: "all".to_owned(),
-            min_fanin: 10,
-            max_targets: 10,
-            budget_secs: 600,
-            languages: prev_langs,
-        };
-
-        let input = PrecomputeInput {
-            records: &[],
-            heuristic_fanin: &HashMap::new(),
-            inventory: &inv,
-            previous: Some(&prev_manifest),
-            repo_root: tmp.path(),
-        };
-
-        let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 10,
-            max_targets: 10,
-            budget: Duration::from_secs(600),
-        };
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(|_| FakeScript::full()),
-            missing: false,
-        });
-
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
-        )
-        .expect("pool");
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
-
-        assert_eq!(java_m.status, "none");
+        let second = rig.run(&all(2), Some(&rig.standard_pool()), Some(&first));
+        assert_eq!(second.languages["rust"].status, "computed");
+        assert_eq!(rig.starts.load(Ordering::SeqCst), 2);
     }
 
     #[test]
     fn parameter_change_recomputes() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let layout = IndexLayout::for_repo(tmp.path());
+        let rig = Rig::new();
+        let first = rig.run(&all(2), Some(&rig.standard_pool()), None);
 
-        let inv = Inventory {
-            entries: vec![InventoryEntry {
-                rel: "Foo.java".to_owned(),
-                sha: "0123".to_owned(),
-                bytes: 10,
-            }],
-        };
+        let second = rig.run(&all(3), Some(&rig.standard_pool()), Some(&first));
+        assert_eq!(second.languages["rust"].status, "computed");
+        assert_eq!(second.min_fanin, 3);
+        assert_eq!(rig.starts.load(Ordering::SeqCst), 2);
+    }
 
-        let fp = fingerprint_for_lang(&inv, LspLang::Java);
-        let mut prev_langs = BTreeMap::new();
-        prev_langs.insert(
-            "java".to_owned(),
-            LspLangManifest {
-                status: "computed".to_owned(),
-                server: "jdtls".to_owned(),
-                version: "1.0".to_owned(),
-                files_fingerprint: fp,
-                targets_selected: 5,
-                targets_ok: 5,
-                targets_failed: 0,
-                edges: 12,
-                ms: 50,
-                diagnostic: String::new(),
-            },
-        );
-
-        let prev_manifest = LspManifest {
-            format: 1,
-            policy: "all".to_owned(),
-            min_fanin: 5, // Old min_fanin
-            max_targets: 10,
-            budget_secs: 600,
-            languages: prev_langs,
-        };
-
-        let input = PrecomputeInput {
-            records: &[],
-            heuristic_fanin: &HashMap::new(),
-            inventory: &inv,
-            previous: Some(&prev_manifest),
-            repo_root: tmp.path(),
-        };
-
-        let opts = PrecomputeOptions {
-            policy: PrecomputePolicy::All,
-            min_fanin: 20, // New min_fanin
-            max_targets: 10,
-            budget: Duration::from_secs(600),
-        };
-
-        let factory = Arc::new(ScriptedPoolFactory {
-            script_fn: Arc::new(|_| FakeScript::full()),
-            missing: false,
-        });
-
-        let pool = crate::lsp::pool::LspPool::new(
-            factory,
-            crate::lsp::pool::PoolSettings::default(),
-            None,
+    #[test]
+    fn missing_server_marks_failed_and_removes_stale_data() {
+        let mut rig = Rig::new();
+        rig.records.push((
+            "src/lib.rs".to_owned(),
+            shard_line("u", "target", 1, 1, Some(7)),
+        ));
+        rig.fanin.insert("u".to_owned(), 5);
+        let stale = rig
+            .layout
+            .lsp_edges_for(LspLang::Rust, "src/old.rs")
+            .expect("path");
+        std::fs::create_dir_all(stale.parent().expect("parent")).expect("mkdir");
+        std::fs::write(
+            &stale,
+            "{\"src\":null,\"dst\":\"x\",\"rel\":\"CALLS\",\"n\":1}\n",
         )
-        .expect("pool");
-        let manifest = run(&input, &opts, Some(&pool), &layout, &mut |_| {}).expect("run");
-        let java_m = &manifest.languages["java"];
+        .expect("write");
 
-        assert_eq!(java_m.status, "none");
+        let pool = rig.pool(Arc::new(|_| FakeScript::full()), true);
+        let manifest = rig.run(&all(2), Some(&pool), None);
+
+        let rust = &manifest.languages["rust"];
+        assert_eq!(rust.status, "failed");
+        assert!(rust.diagnostic.contains("not found in PATH"), "{rust:?}");
+        assert!(!stale.exists(), "stale edge shard survived");
+        // A missing server is terminal: the second target is not tried.
+        assert_eq!(rust.targets_selected, 1);
+        assert_eq!(rig.targets()[0].status, "no_server");
+    }
+
+    #[test]
+    fn disabled_lsp_skips_with_a_diagnostic() {
+        let rig = Rig::new();
+        let manifest = rig.run(&all(2), None, None);
+        let rust = &manifest.languages["rust"];
+        assert_eq!(rust.status, "skipped");
+        assert!(rust.diagnostic.contains("KNOT_LITE_LSP"), "{rust:?}");
+    }
+
+    #[test]
+    fn fingerprint_ignores_other_languages_and_tracks_content() {
+        let rig = Rig::new();
+        let base = fingerprint_for_lang(&rig.inventory, LspLang::Rust);
+        let mut changed = rig.inventory.entries.clone();
+        changed[1].sha = "different".to_owned(); // main.rs is Rust too
+        assert_ne!(
+            base,
+            fingerprint_for_lang(&Inventory::new(changed), LspLang::Rust)
+        );
+        let mut other = rig.inventory.entries.clone();
+        other.push(InventoryEntry {
+            rel: "docs/readme.md".to_owned(),
+            sha: "x".to_owned(),
+            bytes: 1,
+        });
+        assert_eq!(
+            base,
+            fingerprint_for_lang(&Inventory::new(other), LspLang::Rust)
+        );
     }
 }

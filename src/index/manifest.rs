@@ -482,6 +482,73 @@ mod tests {
     }
 
     #[test]
+    fn manifest_without_lsp_table_still_loads() {
+        let text = toml::to_string(&sample_manifest()).expect("serialise");
+        let phase2: String = text
+            .lines()
+            .filter(|line| !line.starts_with("lsp_") && !line.starts_with("columns_"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        assert!(
+            !phase2.contains("lsp"),
+            "fixture must drop every LSP key: {phase2}"
+        );
+        let manifest: Manifest = toml::from_str(&phase2).expect("Phase 2 manifest loads");
+        assert_eq!(manifest.lsp, None);
+        assert_eq!(manifest.timings_ms.lsp, None);
+        assert_eq!(
+            (
+                manifest.counts.lsp_edges,
+                manifest.counts.lsp_edge_shards,
+                manifest.counts.lsp_targets
+            ),
+            (0, 0, 0)
+        );
+        assert_eq!(manifest.counts.entities, 40, "other counters are kept");
+    }
+
+    #[test]
+    fn manifest_lsp_table_round_trips() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let layout = layout_for(&tmp);
+        let language = |status: &str, edges: usize| LspLangManifest {
+            status: status.to_owned(),
+            server: "jdtls".to_owned(),
+            version: "JDT Language Server 1.61".to_owned(),
+            files_fingerprint: "0123456789abcdef".to_owned(),
+            targets_selected: 200,
+            targets_ok: 198,
+            targets_failed: 2,
+            edges,
+            ms: 412_000,
+            diagnostic: String::new(),
+        };
+        let mut manifest = sample_manifest();
+        manifest.counts.lsp_edges = 15_234;
+        manifest.counts.lsp_edge_shards = 911;
+        manifest.counts.lsp_targets = 200;
+        manifest.timings_ms.lsp = Some(412_000);
+        manifest.lsp = Some(LspManifest {
+            format: 1,
+            policy: "auto".to_owned(),
+            min_fanin: 20,
+            max_targets: 200,
+            budget_secs: 600,
+            languages: std::collections::BTreeMap::from([
+                ("java".to_owned(), language("computed", 15_234)),
+                ("rust".to_owned(), language("reused", 0)),
+            ]),
+        });
+
+        write_manifest_atomic(&layout.manifest, &manifest).expect("write");
+        assert_eq!(read_manifest(&layout.manifest).expect("read"), manifest);
+
+        let text = std::fs::read_to_string(&layout.manifest).expect("text");
+        assert!(text.find("[timings_ms]") < text.find("[lsp]"), "{text}");
+        assert!(text.contains("[lsp.languages.java]"), "{text}");
+    }
+
+    #[test]
     fn full_manifest_is_present_for_phase1_reader() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let layout = layout_for(&tmp);
