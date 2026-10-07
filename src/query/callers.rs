@@ -1058,7 +1058,7 @@ mod tests {
 
     use async_lsp::lsp_types::Position;
 
-    use crate::lsp::fake::{FakeScript, FakeServers, Scene};
+    use crate::lsp::fake::{FakeScript, FakeServers, Scene, fixture_target_script};
     use crate::lsp::pool::PoolSettings;
     use crate::lsp::settings::resolve_lsp_settings;
 
@@ -1087,35 +1087,6 @@ mod tests {
         })
     }
 
-    /// What a Rust server answers for the fixture's `target` (src/lib.rs, line 3):
-    /// `caller` and `helper` call it, `run` only mentions it; the mentions inside
-    /// `caller` and `helper` are the call sites themselves.
-    fn target_script(root: &Path) -> impl Fn(LspLang) -> FakeScript + Send + Sync + 'static {
-        let scene = Scene::new(root);
-        move |_| {
-            let position = Position::new(2, 7);
-            FakeScript {
-                prepare: vec![(position, vec![scene.item("target", "src/lib.rs", 2)])],
-                incoming: vec![(
-                    "target".to_owned(),
-                    vec![
-                        scene.call("caller", "src/lib.rs", 6),
-                        scene.call("helper", "src/util.rs", 0),
-                    ],
-                )],
-                references: vec![(
-                    position,
-                    vec![
-                        scene.location("src/lib.rs", 7),
-                        scene.location("src/util.rs", 1),
-                        scene.location("src/util.rs", 8),
-                    ],
-                )],
-                ..FakeScript::full()
-            }
-        }
-    }
-
     fn id_of(index: &LoadedIndex, name: &str) -> String {
         index.records[index.by_name[name][0]].line.id.clone()
     }
@@ -1137,7 +1108,7 @@ mod tests {
     #[test]
     fn live_target_uses_pool() {
         let (tmp, index) = fixture_index();
-        let servers = FakeServers::new(target_script(tmp.path()));
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
         let starts = servers.starts();
         let pool = servers.pool();
         let response = respond(
@@ -1177,7 +1148,7 @@ mod tests {
     #[test]
     fn heuristic_note_dropped_when_all_targets_lsp() {
         let (tmp, index) = fixture_index();
-        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
         let response = respond(
             &index,
             tmp.path(),
@@ -1424,7 +1395,7 @@ mod tests {
         let text = std::fs::read_to_string(&lib).expect("read");
         std::fs::write(&lib, format!("{text}// edited after the index\n")).expect("edit");
 
-        let servers = FakeServers::new(target_script(tmp.path()));
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
         let starts = servers.starts();
         let pool = servers.pool();
         let response = respond(
@@ -1447,7 +1418,7 @@ mod tests {
     #[test]
     fn not_ready_falls_back_with_note() {
         let (tmp, index) = fixture_index();
-        let pool = FakeServers::new(target_script(tmp.path()))
+        let pool = FakeServers::new(fixture_target_script(tmp.path()))
             .starting_for(std::time::Duration::from_millis(600))
             .pool_with(PoolSettings {
                 ready_wait: std::time::Duration::from_millis(50),
@@ -1534,7 +1505,7 @@ mod tests {
     #[test]
     fn render_shows_source_column() {
         let (tmp, index) = fixture_index();
-        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
         let response = respond(
             &index,
             tmp.path(),
@@ -1615,7 +1586,7 @@ mod tests {
     #[test]
     fn v2_schema_and_wire_shape_are_pinned() {
         let (tmp, index) = fixture_index();
-        let pool = FakeServers::new(target_script(tmp.path())).pool();
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
         let response = respond(
             &index,
             tmp.path(),

@@ -20,8 +20,8 @@ use crate::error::IndexUnavailable;
 use crate::index::encode::normalize;
 use crate::index::layout::IndexLayout;
 use crate::index::load::{LoadedIndex, load_index, read_stamp};
-use crate::lsp::pool::{LspPool, PoolSettings, ProcessFactory};
-use crate::lsp::settings::scratch_dir;
+use crate::lsp::launch::start_pool;
+use crate::lsp::pool::{LspPool, PoolSnapshot};
 
 /// Builds a query embedder for a model name (may download the model).
 pub type EmbedderFactory =
@@ -208,25 +208,12 @@ impl QueryServices {
 
     fn create_pool(&self, cfg: &Config, index: &LoadedIndex) -> Option<Arc<LspPool>> {
         let files: Vec<String> = index.file_sha16.keys().cloned().collect();
-        let factory = ProcessFactory::new(
-            cfg.repo_path.clone(),
-            scratch_dir(&cfg.lsp, &cfg.repo_path),
-            cfg.lsp_overrides.clone(),
-            cfg.lsp.build_exec,
-            &files,
-        );
-        let settings = PoolSettings {
-            ready_wait: cfg.lsp.ready_wait.unwrap_or(self.ready_wait),
-            idle: cfg.lsp.idle,
-            ..PoolSettings::default()
-        };
-        match LspPool::new(Arc::new(factory), settings, Some(index.stamp.clone())) {
-            Ok(pool) => Some(Arc::new(pool)),
-            Err(error) => {
-                tracing::warn!("cannot start the language-server pool: {error:#}");
-                None
-            }
-        }
+        start_pool(cfg, &files, self.ready_wait, Some(index.stamp.clone())).map(Arc::new)
+    }
+
+    /// The state of every language server, when a pool exists.
+    pub fn lsp_runtime(&self) -> Option<PoolSnapshot> {
+        self.lsp.get()?.as_ref().map(|pool| pool.snapshot())
     }
 }
 

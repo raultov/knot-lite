@@ -351,12 +351,21 @@ struct LspStageCtx<'a> {
     inventory: &'a Inventory,
 }
 
+/// Whether a previous run left pre-computed language-server data.
+fn has_lsp_data(layout: &IndexLayout) -> bool {
+    [layout.lsp_edges(), layout.lsp_targets()]
+        .iter()
+        .any(|dir| list_record_files(dir).is_ok_and(|files| !files.is_empty()))
+}
+
 fn run_lsp_stage(
     ctx: &LspStageCtx<'_>,
     lsp_pool: Option<&LspPool>,
     progress: &mut dyn FnMut(ProgressEvent),
 ) -> anyhow::Result<(Option<LspManifest>, Option<u64>)> {
-    if ctx.opts.lsp.policy == PrecomputePolicy::None {
+    // `none` still runs when a previous run left data behind: it must go, or
+    // the loader would serve edges of files that have since changed.
+    if ctx.opts.lsp.policy == PrecomputePolicy::None && !has_lsp_data(&ctx.dir.layout) {
         return Ok((None, None));
     }
     let pairs: Vec<(String, String)> = ctx

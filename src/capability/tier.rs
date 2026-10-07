@@ -1,7 +1,8 @@
 //! Tier model (3/2/1/0) and `StatusReport` assembly.
 //!
-//! Phase 1 caveat (§2): tier 3 means the language-server **binary was found**;
-//! servers are never started in 0.2.0.
+//! Tier 3 means the language-server binary was found: `find_callers` then asks
+//! the server (live, or pre-computed at index time) and falls back to the
+//! heuristic edges per target when it is unavailable.
 
 use std::collections::BTreeMap;
 
@@ -12,7 +13,10 @@ use super::lsp_registry::LspStatus;
 use super::scan::{ExcludeReason, FileClass, ScanResult};
 use crate::config::Config;
 use crate::index::layout::{CommitMode, INDEX_DIR, MANIFEST_FILE};
-use crate::index::manifest::{IndexCounts, IndexState};
+use crate::index::manifest::{IndexCounts, IndexState, LspManifest};
+use crate::lsp::pool::{PoolSnapshot, SlotSnapshot};
+use crate::lsp::probe::ProbeResult;
+use crate::lsp::settings::LspSettings;
 
 /// Schema identifier of the `status` report (`schema` key in the JSON).
 pub const STATUS_SCHEMA_V1: &str = "knot-lite/status/v1";
@@ -21,7 +25,7 @@ pub const STATUS_SCHEMA_V1: &str = "knot-lite/status/v1";
 pub const TOP_KEYS_LIMIT: usize = 10;
 
 /// Note attached to tier-3 rows.
-pub const TIER3_NOTE: &str = "Tier 3 means the language server binary was found; knot-lite 0.2.0 does not start language servers — find_callers answers from heuristic edges for every language.";
+pub const TIER3_NOTE: &str = "Tier 3: find_callers asks the language server (live, or pre-computed by knot-lite index for high fan-in targets) and falls back to heuristic edges per target when the server is unavailable.";
 
 /// Freshness state of an index relative to the working tree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -61,10 +65,102 @@ pub struct IndexDetails {
     pub counts: IndexCounts,
     /// Freshness against current file selection.
     pub freshness: Freshness,
+    /// Pre-computed language-server data of the last run, when there was a stage.
+    pub lsp: Option<LspDetails>,
+}
+
+/// The pre-computation summary of the last index run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LspDetails {
+    /// `auto`, `all` or `none`.
+    pub policy: String,
+    /// Per language directory name (`rust`, `ts`, `java`).
+    pub languages: BTreeMap<String, LspLangDetails>,
+}
+
+/// What the last run did for one language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LspLangDetails {
+    /// `computed`, `reused`, `skipped`, `failed` or `none`.
+    pub status: String,
+    /// Targets that produced an answer.
+    pub targets_ok: usize,
+    /// Targets that failed or timed out.
+    pub targets_failed: usize,
+    /// Edges written.
+    pub edges: usize,
+    /// Milliseconds the language took.
+    pub ms: u64,
+}
+
+impl From<&LspManifest> for LspDetails {
+    fn from(manifest: &LspManifest) -> Self {
+        Self {
+            policy: manifest.policy.clone(),
+            languages: manifest
+                .languages
+                .iter()
+                .map(|(language, lang)| {
+                    (
+                        language.clone(),
+                        LspLangDetails {
+                            status: lang.status.clone(),
+                            targets_ok: lang.targets_ok,
+                            targets_failed: lang.targets_failed,
+                            edges: lang.edges,
+                            ms: lang.ms,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The language-server settings in force, as `status` shows them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LspSettingsView {
+    /// Whether language servers may be started.
+    pub enabled: bool,
+    /// Whether the repository's build code may run (rust-analyzer, jdtls).
+    pub build_exec: bool,
+    /// Root of the per-repository scratch directories.
+    pub cache_dir: String,
+    /// Whether the MCP server starts servers eagerly.
+    pub warmup: bool,
+    /// Idle seconds before a server is stopped (0 = never).
+    pub idle_s: u64,
+    /// Live targets per `find_callers` call.
+    pub max_live_targets: usize,
+    /// Live seconds per `find_callers` call.
+    pub deadline_s: u64,
+}
+
+impl From<&LspSettings> for LspSettingsView {
+    fn from(settings: &LspSettings) -> Self {
+        Self {
+            enabled: settings.enabled,
+            build_exec: settings.build_exec,
+            cache_dir: settings.cache_root.display().to_string(),
+            warmup: settings.warmup,
+            idle_s: settings.idle.as_secs(),
+            max_live_targets: settings.max_live_targets,
+            deadline_s: settings.deadline.as_secs(),
+        }
+    }
+}
+
+/// What the report knows about the language servers beyond their binaries.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LspView<'a> {
+    /// The manifest's pre-computation table, when the index has one.
+    pub precompute: Option<&'a LspManifest>,
+    /// The live state of the pool (MCP only; the CLI never starts servers for `status`).
+    pub runtime: Option<&'a PoolSnapshot>,
 }
 
 /// One language row of the capability matrix.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TierRow {
     /// Language label (Appendix B).
     pub language: String,
@@ -80,6 +176,11 @@ pub struct TierRow {
     pub graph: &'static str,
     /// Caveat or install hint.
     pub note: Option<String>,
+    /// What the last index run did for this language (`computed`, `reused`,
+    /// `skipped`, `failed`, `none`); `null` without a pre-computation stage.
+    pub lsp_precompute: Option<String>,
+    /// The live state of this language's server; `null` outside the MCP server.
+    pub lsp_runtime: Option<SlotSnapshot>,
 }
 
 /// Repository identity in the report.
@@ -147,7 +248,7 @@ pub struct Totals {
 }
 
 /// The `knot-lite/status/v1` report.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StatusReport {
     /// Always [`STATUS_SCHEMA_V1`].
     pub schema: String,
@@ -167,23 +268,52 @@ pub struct StatusReport {
     pub totals: Totals,
     /// Fixed caveats.
     pub notes: Vec<String>,
+    /// The language-server settings in force.
+    pub lsp_settings: LspSettingsView,
+    /// Invalid or clamped settings, one line each.
+    pub warnings: Vec<String>,
+    /// What `--probe-lsp` found, per language (only when it ran).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsp_probe: Option<BTreeMap<String, ProbeResult>>,
 }
 
-/// Assemble the report. `detect` is called at most once per [`LspLang`].
+/// Assemble the report without live language-server information.
 pub fn build_report(
     cfg: &Config,
     scan: &ScanResult,
     index: IndexState,
     detect: &dyn Fn(LspLang) -> LspStatus,
 ) -> StatusReport {
+    build_report_with(cfg, scan, index, detect, &LspView::default())
+}
+
+/// Assemble the report. `detect` is called at most once per [`LspLang`].
+pub fn build_report_with(
+    cfg: &Config,
+    scan: &ScanResult,
+    index: IndexState,
+    detect: &dyn Fn(LspLang) -> LspStatus,
+    view: &LspView<'_>,
+) -> StatusReport {
     let (per_label, files_only, excluded) = summarize(&scan.files);
     let mut detected: BTreeMap<LspLang, LspStatus> = BTreeMap::new();
     let mut languages: Vec<TierRow> = per_label
         .iter()
         .map(|(label, files)| {
-            let lsp = lsp_lang_for_label(label)
-                .map(|lang| detected.entry(lang).or_insert_with(|| detect(lang)).clone());
-            tier_row(label, *files, lsp)
+            let lang = lsp_lang_for_label(label);
+            let lsp = lang.map(|lang| detected.entry(lang).or_insert_with(|| detect(lang)).clone());
+            let mut row = tier_row(label, *files, lsp);
+            if let Some(lang) = lang {
+                row.lsp_precompute = view
+                    .precompute
+                    .and_then(|manifest| manifest.languages.get(lang.dir_name()))
+                    .map(|lang| lang.status.clone());
+                row.lsp_runtime = view
+                    .runtime
+                    .and_then(|runtime| runtime.slots.get(lang.dir_name()))
+                    .cloned();
+            }
+            row
         })
         .collect();
     sort_rows(&mut languages);
@@ -209,6 +339,9 @@ pub fn build_report(
             "Gitignored files are not counted.".to_string(),
             TIER3_NOTE.to_string(),
         ],
+        lsp_settings: LspSettingsView::from(&cfg.lsp),
+        warnings: cfg.lsp.warnings.clone(),
+        lsp_probe: None,
     }
 }
 
@@ -284,6 +417,8 @@ fn tier_row(label: &str, files: usize, lsp: Option<LspStatus>) -> TierRow {
         tier,
         graph,
         note,
+        lsp_precompute: None,
+        lsp_runtime: None,
     }
 }
 

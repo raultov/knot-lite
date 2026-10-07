@@ -273,6 +273,10 @@ fn clean_lang_data(layout: &IndexLayout, lang: LspLang) -> anyhow::Result<()> {
         std::fs::remove_file(&targets_file)
             .with_context(|| format!("removing {}", targets_file.display()))?;
     }
+    // The parents go with the last language (`remove_dir` refuses a non-empty one).
+    for parent in [layout.lsp_edges(), layout.lsp_targets()] {
+        let _ = std::fs::remove_dir(parent);
+    }
     Ok(())
 }
 

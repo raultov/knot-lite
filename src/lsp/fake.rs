@@ -379,6 +379,38 @@ impl Scene {
     }
 }
 
+/// What a Rust server answers for the fixture repository's `target`
+/// (`src/lib.rs`, line 3): `caller` and `helper` call it, `Widget::run` only
+/// mentions it, and the mentions inside `caller` and `helper` are the call sites
+/// themselves.
+pub(crate) fn fixture_target_script(
+    root: &Path,
+) -> impl Fn(LspLang) -> FakeScript + Send + Sync + 'static {
+    let scene = Scene::new(root);
+    move |_| {
+        let position = Position::new(2, 7);
+        FakeScript {
+            prepare: vec![(position, vec![scene.item("target", "src/lib.rs", 2)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![
+                    scene.call("caller", "src/lib.rs", 6),
+                    scene.call("helper", "src/util.rs", 0),
+                ],
+            )],
+            references: vec![(
+                position,
+                vec![
+                    scene.location("src/lib.rs", 7),
+                    scene.location("src/util.rs", 1),
+                    scene.location("src/util.rs", 8),
+                ],
+            )],
+            ..FakeScript::full()
+        }
+    }
+}
+
 /// Start the fake server and run the real handshake against it.
 pub(crate) async fn connect(script: FakeScript, init: InitInputs<'_>) -> (LspSession, FakeHandle) {
     let (session, handle) = connect_result(script, init).await;

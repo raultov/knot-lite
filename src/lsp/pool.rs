@@ -681,6 +681,15 @@ async fn check_stale_or_dead(
     }
 }
 
+/// What `ensure_ready` decided while it held the pool lock.
+enum Next {
+    /// Nothing to wait for: ready, or a failure to report.
+    Done(Result<(), Box<LiveOutcome>>),
+    /// A start is in flight: wait for it **without** the pool lock, so a
+    /// snapshot (or another language) is not stuck behind a slow start.
+    Wait(SharedStart),
+}
+
 async fn ensure_ready(
     inner: &Arc<tokio::sync::Mutex<Inner>>,
     factory: &Arc<dyn SessionFactory>,
@@ -688,24 +697,43 @@ async fn ensure_ready(
     settings: &PoolSettings,
     clock: &Arc<dyn Clock>,
 ) -> Result<(), Box<LiveOutcome>> {
+    let next = {
+        let mut guard = inner.lock().await;
+        check_stale_or_dead(&mut guard, lang, settings, clock.as_ref()).await;
+        decide_start(&mut guard, factory, lang, settings, clock)
+    };
+    match next {
+        Next::Done(result) => result,
+        Next::Wait(shared) => {
+            await_start_result(inner, lang, shared, settings.ready_wait, clock).await
+        }
+    }
+}
+
+/// Look at the slot of `lang` and start a server when there is none.
+fn decide_start(
+    guard: &mut Inner,
+    factory: &Arc<dyn SessionFactory>,
+    lang: LspLang,
+    settings: &PoolSettings,
+    clock: &Arc<dyn Clock>,
+) -> Next {
     let ready_wait = settings.ready_wait;
-    let mut guard = inner.lock().await;
-
-    check_stale_or_dead(&mut guard, lang, settings, clock.as_ref()).await;
-
     let now = clock.now();
     let slot = guard.slots.get_mut(&lang).expect("slot");
 
     match slot {
-        Slot::Ready { .. } => Ok(()),
-        Slot::Missing { diagnostic } => Err(Box::new(LiveOutcome::without_answer(
+        Slot::Ready { .. } => Next::Done(Ok(())),
+        Slot::Missing { diagnostic } => Next::Done(Err(Box::new(LiveOutcome::without_answer(
             LiveStatus::NoServer,
             diagnostic.clone(),
-        ))),
-        Slot::Disabled { diagnostic, .. } => Err(Box::new(LiveOutcome::without_answer(
-            LiveStatus::Failed,
-            format!("{} is disabled: {diagnostic}", lang.server_program()),
-        ))),
+        )))),
+        Slot::Disabled { diagnostic, .. } => {
+            Next::Done(Err(Box::new(LiveOutcome::without_answer(
+                LiveStatus::Failed,
+                format!("{} is disabled: {diagnostic}", lang.server_program()),
+            ))))
+        }
         Slot::Failed {
             attempts,
             at,
@@ -719,33 +747,30 @@ async fn ensure_ready(
                     attempts: attempts_val,
                     diagnostic: diag.clone(),
                 };
-                Err(Box::new(LiveOutcome::without_answer(
+                Next::Done(Err(Box::new(LiveOutcome::without_answer(
                     LiveStatus::Failed,
                     format!("{} is disabled: {diag}", lang.server_program()),
-                )))
+                ))))
             } else if now.duration_since(*at) >= backoff {
                 let shared = spawn_start_task(factory, lang, ready_wait, attempts_val, clock);
                 *slot = Slot::Starting(shared.clone());
-                await_start_result(&mut guard, lang, shared, ready_wait, clock).await
+                Next::Wait(shared)
             } else {
-                Err(Box::new(LiveOutcome::without_answer(
+                Next::Done(Err(Box::new(LiveOutcome::without_answer(
                     LiveStatus::Failed,
                     format!(
                         "{} failed previously ({diagnostic}); backoff active",
                         lang.server_program()
                     ),
-                )))
+                ))))
             }
         }
         Slot::NotStarted => {
             let shared = spawn_start_task(factory, lang, ready_wait, 0, clock);
             *slot = Slot::Starting(shared.clone());
-            await_start_result(&mut guard, lang, shared, ready_wait, clock).await
+            Next::Wait(shared)
         }
-        Slot::Starting(shared) => {
-            let shared = shared.clone();
-            await_start_result(&mut guard, lang, shared, ready_wait, clock).await
-        }
+        Slot::Starting(shared) => Next::Wait(shared.clone()),
     }
 }
 
@@ -788,62 +813,63 @@ struct StartTaskCtx<'a> {
     clock: &'a dyn Clock,
 }
 
-async fn await_start_result<'a>(
-    guard: &mut tokio::sync::MutexGuard<'a, Inner>,
+/// The start outcome, if the start task has produced one nobody took yet.
+fn take_start_outcome(
+    rx: &tokio::sync::watch::Receiver<Option<StartCell>>,
+) -> Option<StartOutcome> {
+    let cell = rx.borrow().clone()?;
+    cell.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+}
+
+/// Wait up to `ready_wait` for the start of `lang`, then record its outcome.
+/// The pool lock is held only to read the stamp and to record the result.
+async fn await_start_result(
+    inner: &Arc<tokio::sync::Mutex<Inner>>,
     lang: LspLang,
     shared: SharedStart,
     ready_wait: Duration,
     clock: &Arc<dyn Clock>,
 ) -> Result<(), Box<LiveOutcome>> {
     let mut rx = shared.rx.clone();
-    let current_stamp = guard.current_stamp.clone();
     let attempts = shared.attempts;
     let started_at = shared.started_at;
-
+    let stamp = inner.lock().await.current_stamp.clone();
     let ctx = StartTaskCtx {
         lang,
         attempts,
         started_at,
-        stamp: current_stamp,
+        stamp,
         clock: clock.as_ref(),
     };
 
-    // Check if result is already available before waiting
-    if let Some(cell) = rx.borrow().clone()
-        && let Some(outcome) = cell
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-    {
-        return handle_start_outcome(guard, &ctx, outcome);
-    }
+    let outcome = match take_start_outcome(&rx) {
+        Some(outcome) => Some(Some(outcome)),
+        None => tokio::time::timeout(ready_wait, async {
+            loop {
+                if rx.changed().await.is_err() {
+                    return None;
+                }
+                if let Some(outcome) = take_start_outcome(&rx) {
+                    return Some(outcome);
+                }
+            }
+        })
+        .await
+        .ok(),
+    };
 
-    // Wait for watch notification up to ready_wait
-    let res = tokio::time::timeout(ready_wait, async {
-        loop {
-            if rx.changed().await.is_err() {
-                return None;
-            }
-            if let Some(cell) = rx.borrow().clone()
-                && let Some(outcome) = cell
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .take()
-            {
-                return Some(outcome);
-            }
+    match outcome {
+        Some(Some(outcome)) => {
+            let mut guard = inner.lock().await;
+            handle_start_outcome(&mut guard, &ctx, outcome)
         }
-    })
-    .await;
-
-    match res {
-        Ok(Some(outcome)) => handle_start_outcome(guard, &ctx, outcome),
-        Ok(None) => {
-            let next_attempts = attempts + 1;
-            guard.slots.insert(
+        Some(None) => {
+            inner.lock().await.slots.insert(
                 lang,
                 Slot::Failed {
-                    attempts: next_attempts,
+                    attempts: attempts + 1,
                     at: clock.now(),
                     diagnostic: format!("{} start task closed channel", lang.server_program()),
                 },
@@ -853,7 +879,7 @@ async fn await_start_result<'a>(
                 format!("{} start task ended unexpectedly", lang.server_program()),
             )))
         }
-        Err(_) => {
+        None => {
             let elapsed_s = clock.now().duration_since(started_at).as_secs();
             Err(Box::new(LiveOutcome::without_answer(
                 LiveStatus::NotReady,
@@ -1440,7 +1466,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn languages_run_concurrently() {
+    fn each_language_gets_its_own_server() {
         let repo = setup_repo();
         let pool = LspPool::new(default_factory(), PoolSettings::default(), None).expect("pool");
 
@@ -1449,6 +1475,73 @@ pub(crate) mod tests {
 
         assert_eq!(res_rust.status, LiveStatus::Ok);
         assert_eq!(res_ts.status, LiveStatus::Ok);
+    }
+
+    /// A factory whose Rust server takes `rust_start` to start; the others are instant.
+    fn slow_rust_pool(rust_start: Duration) -> Arc<LspPool> {
+        let factory = Arc::new(ScriptedFactory {
+            script_fn: Arc::new(move |lang| {
+                Box::pin(async move {
+                    if lang == LspLang::Rust {
+                        tokio::time::sleep(rust_start).await;
+                    }
+                    let spec = test_spec(lang);
+                    let init = crate::lsp::session::InitInputs {
+                        spec: &spec,
+                        repo_root: Path::new("/work/demo"),
+                    };
+                    connect(FakeScript::full(), init).await
+                })
+            }),
+            missing_lang: None,
+        });
+        Arc::new(LspPool::new(factory, PoolSettings::default(), None).expect("pool"))
+    }
+
+    /// Ask for the Rust target on another thread and give the start time to begin.
+    fn ask_rust_in_background(
+        pool: &Arc<LspPool>,
+        repo: &Path,
+    ) -> std::thread::JoinHandle<LiveOutcome> {
+        let pool = Arc::clone(pool);
+        let request = dummy_request(LspLang::Rust, repo);
+        let asker = std::thread::spawn(move || pool.query(request));
+        std::thread::sleep(Duration::from_millis(300));
+        asker
+    }
+
+    #[test]
+    fn snapshot_is_answered_while_a_server_is_starting() {
+        let repo = setup_repo();
+        let pool = slow_rust_pool(Duration::from_secs(2));
+        let asker = ask_rust_in_background(&pool, repo.path());
+
+        let started = Instant::now();
+        let snapshot = pool.snapshot();
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "the snapshot waited {:?} for the start",
+            started.elapsed()
+        );
+        assert_eq!(snapshot.slots["rust"].state, "starting", "{snapshot:?}");
+        assert_eq!(asker.join().expect("join").status, LiveStatus::Ok);
+    }
+
+    #[test]
+    fn another_language_is_answered_while_one_is_starting() {
+        let repo = setup_repo();
+        let pool = slow_rust_pool(Duration::from_secs(2));
+        let asker = ask_rust_in_background(&pool, repo.path());
+
+        let started = Instant::now();
+        let ts = pool.query(dummy_request(LspLang::Ts, repo.path()));
+        assert_eq!(ts.status, LiveStatus::Ok);
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "TypeScript waited {:?} for the Rust start",
+            started.elapsed()
+        );
+        assert_eq!(asker.join().expect("join").status, LiveStatus::Ok);
     }
 
     #[tokio::test]

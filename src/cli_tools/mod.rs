@@ -9,12 +9,18 @@ pub use query::{
     format_callers_output, format_explore_output, format_files_output, format_search_output,
     run_explore_file, run_find_callers, run_list_files, run_search_hybrid_context,
 };
-pub use status::{format_status_output, run_status, run_status_with};
+pub use status::{
+    StatusExtras, format_status_output, run_status, run_status_probing, run_status_with,
+    run_status_with_extras,
+};
+
+use std::io::IsTerminal as _;
 
 use anyhow::Result;
 
 use crate::config::Config;
 use crate::error::{CLI_EXIT_QUERY_UNAVAILABLE, QueryUnavailable};
+use crate::lsp::pool::PoolSnapshot;
 use crate::models::cli_args::{Cli, Commands};
 use crate::models::params::{CallersParams, ExploreParams, FilesParams, IndexParams, SearchParams};
 use crate::models::repo_scope::check_repo_scope_str;
@@ -29,8 +35,12 @@ pub fn run_cli(cli: Cli) -> Result<String> {
             let value = run_index(&cfg, &params)?;
             Ok(format_index_output(&value, args.output))
         }
-        Commands::Status { output } => {
-            let report = run_status(&cfg)?;
+        Commands::Status { output, probe_lsp } => {
+            let report = if probe_lsp {
+                run_status_probing(&cfg)?
+            } else {
+                run_status(&cfg)?
+            };
             Ok(format_status_output(&report, output))
         }
         Commands::Search {
@@ -53,12 +63,15 @@ pub fn run_cli(cli: Cli) -> Result<String> {
             ref repo,
             max_targets,
             ref kinds,
+            no_lsp,
             output,
         } => {
             check_scope(&cfg, repo.as_deref())?;
             let services = QueryServices::real(&cfg.embed);
-            let params = CallersParams::from_cli(entity_name.clone(), max_targets, kinds.clone());
+            let params =
+                CallersParams::from_cli(entity_name.clone(), max_targets, kinds.clone(), no_lsp);
             let value = run_find_callers(&cfg, &services, &params)?;
+            report_started_servers(&services);
             Ok(format_callers_output(&value, output))
         }
         Commands::Explore {
@@ -85,6 +98,34 @@ pub fn run_cli(cli: Cli) -> Result<String> {
             Ok(format_files_output(&value, output))
         }
     }
+}
+
+/// Tell a person at a terminal which language servers this call had to start
+/// (they take seconds; the answer alone would not say why it was slow).
+fn report_started_servers(services: &QueryServices) {
+    if !std::io::stderr().is_terminal() {
+        return;
+    }
+    for line in services.lsp_runtime().iter().flat_map(started_server_lines) {
+        eprintln!("{line}");
+    }
+}
+
+/// `lsp: rust-analyzer ready in 12.4 s` for every server that is running.
+fn started_server_lines(snapshot: &PoolSnapshot) -> Vec<String> {
+    snapshot
+        .slots
+        .values()
+        .filter(|slot| slot.state == "ready")
+        .filter_map(|slot| {
+            let ready_ms = slot.ready_ms?;
+            Some(format!(
+                "lsp: {} ready in {:.1} s",
+                slot.server,
+                ready_ms as f64 / 1000.0
+            ))
+        })
+        .collect()
 }
 
 /// Map an error to the process exit code (§9.3).
@@ -121,6 +162,7 @@ mod tests {
         let cli = cli_for(
             &tmp,
             Commands::Status {
+                probe_lsp: false,
                 output: OutputFormat::Json,
             },
         );
@@ -142,6 +184,7 @@ mod tests {
                 repo: None,
                 max_targets: None,
                 kinds: None,
+                no_lsp: false,
                 output: OutputFormat::Table,
             },
         );
@@ -160,12 +203,47 @@ mod tests {
                 repo: Some("other".to_string()),
                 max_targets: None,
                 kinds: None,
+                no_lsp: false,
                 output: OutputFormat::Table,
             },
         );
         let err = run_cli(cli).expect_err("foreign repo");
         assert!(err.to_string().contains("not served here"), "{err}");
         assert_eq!(exit_code_for(&err), 1);
+    }
+
+    #[test]
+    fn started_servers_are_listed_with_their_ready_time() {
+        use crate::lsp::pool::SlotSnapshot;
+
+        let slot = |state: &str, server: &str, ready_ms: Option<u64>| SlotSnapshot {
+            state: state.to_owned(),
+            server: server.to_owned(),
+            version: String::new(),
+            pid: None,
+            ready_ms,
+            uptime_s: None,
+            rss_mib: None,
+            attempts: 0,
+            diagnostic: None,
+        };
+        let snapshot = PoolSnapshot {
+            slots: std::collections::BTreeMap::from([
+                ("java".to_owned(), slot("not_started", "jdtls", None)),
+                (
+                    "rust".to_owned(),
+                    slot("ready", "rust-analyzer", Some(12_400)),
+                ),
+                (
+                    "ts".to_owned(),
+                    slot("failed", "typescript-language-server", None),
+                ),
+            ]),
+        };
+        assert_eq!(
+            started_server_lines(&snapshot),
+            vec!["lsp: rust-analyzer ready in 12.4 s".to_owned()]
+        );
     }
 
     #[test]

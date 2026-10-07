@@ -19,12 +19,14 @@
 
 #[cfg(test)]
 pub(crate) mod fake;
+pub mod launch;
 pub mod normalize;
 pub mod ops;
 pub mod pool;
 pub mod position;
 pub mod precompute;
 pub mod preopen;
+pub mod probe;
 pub mod process;
 pub mod readiness;
 pub mod request;

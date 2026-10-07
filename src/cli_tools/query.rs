@@ -98,7 +98,10 @@ pub fn run_find_callers(
     let max_targets = clamp_i64(params.max_targets, DEFAULT_MAX_TARGETS, MAX_TARGETS_CAP);
     let filter = KindFilter::parse(params.kinds.as_deref());
     with_index(cfg, services, CALLERS_TOOL, |index| {
-        let pool = services.lsp_pool(cfg, index);
+        let pool = params
+            .live_lsp
+            .then(|| services.lsp_pool(cfg, index))
+            .flatten();
         let response = callers_response(&CallersContext {
             index,
             repo: &cfg.repo_name,
@@ -616,6 +619,7 @@ mod tests {
             entity_name: name.to_owned(),
             max_targets: None,
             kinds: None,
+            live_lsp: true,
         }
     }
 
@@ -634,6 +638,24 @@ mod tests {
         let markdown = format_callers_output(&value, OutputFormat::Markdown);
         assert!(markdown.starts_with("## knot-lite callers"), "{markdown}");
         assert!(markdown.contains("### rust_function target"), "{markdown}");
+    }
+
+    #[test]
+    fn no_lsp_never_creates_a_pool_and_reports_the_targets_as_disabled() {
+        let (_tmp, mut cfg) = indexed();
+        // Servers are allowed; `--no-lsp` is what keeps this call away from them.
+        cfg.lsp.enabled = true;
+        let services = services();
+        let params = CallersParams {
+            live_lsp: false,
+            ..callers("target")
+        };
+        let value = run_find_callers(&cfg, &services, &params).expect("callers");
+        assert!(services.lsp_runtime().is_none(), "no pool may be created");
+        assert_eq!(value["provenance"], "heuristic");
+        assert_eq!(value["targets"][0]["lsp"]["status"], "disabled");
+        assert_eq!(value["targets"][0]["caller_count"], 3);
+        assert!(value["lsp"].is_null());
     }
 
     #[test]

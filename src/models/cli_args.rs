@@ -7,6 +7,7 @@
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::{CommonArgs, OutputFormat};
+use crate::lsp::precompute::PrecomputePolicy;
 
 #[derive(Parser)]
 #[command(name = "knot-lite")]
@@ -52,6 +53,23 @@ pub struct IndexArgs {
     #[arg(short, long)]
     pub quiet: bool,
 
+    /// Pre-compute language-server callers for widely used targets: auto = Java
+    /// only (default), all = every language with a server, none = skip
+    #[arg(long, value_enum, default_value_t = PrecomputePolicy::Auto)]
+    pub lsp_precompute: PrecomputePolicy,
+
+    /// Minimum heuristic caller count for a target to be pre-computed (default 20)
+    #[arg(long, default_value_t = 20)]
+    pub lsp_min_fanin: usize,
+
+    /// Maximum pre-computed targets per language (default 200)
+    #[arg(long, default_value_t = 200)]
+    pub lsp_max_targets: usize,
+
+    /// Time budget for pre-computation per language, in seconds (default 600)
+    #[arg(long, default_value_t = 600)]
+    pub lsp_budget_secs: u64,
+
     /// Output format (default: table)
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Table)]
     pub output: OutputFormat,
@@ -64,6 +82,11 @@ pub enum Commands {
 
     /// Show the capability matrix (tiers per language) and the index state
     Status {
+        /// Start each detected language server once, report readiness time,
+        /// version and memory, then stop it
+        #[arg(long)]
+        probe_lsp: bool,
+
         /// Output format (default: table)
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Table)]
         output: OutputFormat,
@@ -120,6 +143,11 @@ pub enum Commands {
         /// 'config', 'rust_function', ...) comma-separated for more values.
         #[arg(short = 'k', long)]
         kinds: Option<String>,
+
+        /// Do not ask language servers during this call (pre-computed
+        /// language-server results in the index are still used)
+        #[arg(long)]
+        no_lsp: bool,
 
         /// Output format (default: table)
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Table)]
@@ -184,6 +212,7 @@ mod tests {
                 assert_eq!(args.batch_size, 128);
                 assert!(!args.quiet);
                 assert_eq!(args.output, OutputFormat::Table);
+                assert_eq!(args.lsp_precompute, PrecomputePolicy::Auto);
             }
             other => panic!("expected Index, got {other:?}"),
         }
@@ -225,12 +254,69 @@ mod tests {
     }
 
     #[test]
+    fn index_lsp_flags_parse_with_defaults() {
+        match parse(&["index"]).command {
+            Commands::Index(args) => {
+                assert_eq!(
+                    (
+                        args.lsp_precompute,
+                        args.lsp_min_fanin,
+                        args.lsp_max_targets,
+                        args.lsp_budget_secs
+                    ),
+                    (PrecomputePolicy::Auto, 20, 200, 600)
+                );
+            }
+            other => panic!("expected Index, got {other:?}"),
+        }
+        match parse(&[
+            "index",
+            "--lsp-precompute",
+            "all",
+            "--lsp-min-fanin",
+            "5",
+            "--lsp-max-targets",
+            "50",
+            "--lsp-budget-secs",
+            "30",
+        ])
+        .command
+        {
+            Commands::Index(args) => {
+                assert_eq!(
+                    (
+                        args.lsp_precompute,
+                        args.lsp_min_fanin,
+                        args.lsp_max_targets,
+                        args.lsp_budget_secs
+                    ),
+                    (PrecomputePolicy::All, 5, 50, 30)
+                );
+            }
+            other => panic!("expected Index, got {other:?}"),
+        }
+        assert!(Cli::try_parse_from(["knot-lite", "index", "--lsp-precompute", "java"]).is_err());
+    }
+
+    #[test]
     fn status_parses_with_default_output() {
         let cli = parse(&["status"]);
         assert_eq!(
             cli.command,
             Commands::Status {
+                probe_lsp: false,
                 output: OutputFormat::Table
+            }
+        );
+    }
+
+    #[test]
+    fn status_probe_flag_parses() {
+        assert_eq!(
+            parse(&["status", "--probe-lsp", "-o", "json"]).command,
+            Commands::Status {
+                probe_lsp: true,
+                output: OutputFormat::Json
             }
         );
     }
@@ -291,14 +377,24 @@ mod tests {
                 repo,
                 max_targets,
                 kinds,
+                no_lsp,
                 output,
             } => {
                 assert_eq!(entity_name, "E");
                 assert_eq!(repo.as_deref(), Some("demo"));
                 assert_eq!(max_targets, Some(3));
                 assert_eq!(kinds.as_deref(), Some("callable"));
+                assert!(!no_lsp);
                 assert_eq!(output, OutputFormat::Markdown);
             }
+            other => panic!("expected Callers, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn callers_no_lsp_flag_parses() {
+        match parse(&["callers", "E", "--no-lsp"]).command {
+            Commands::Callers { no_lsp, .. } => assert!(no_lsp),
             other => panic!("expected Callers, got {other:?}"),
         }
     }

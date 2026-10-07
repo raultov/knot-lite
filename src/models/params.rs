@@ -5,7 +5,10 @@
 //! function). They are the contract for Phases 3/4: the query runners accept
 //! them unchanged.
 
+use std::time::Duration;
+
 use crate::index::layout::CommitMode;
+use crate::lsp::precompute::PrecomputeOptions;
 use crate::models::cli_args::IndexArgs;
 
 /// Parameters of `index` (CLI subcommand).
@@ -23,6 +26,8 @@ pub struct IndexParams {
     pub batch_size: usize,
     /// Quiet output on stderr.
     pub quiet: bool,
+    /// Language-server pre-computation (policy, selection and budget).
+    pub lsp: PrecomputeOptions,
 }
 
 impl IndexParams {
@@ -42,6 +47,12 @@ impl IndexParams {
             jobs: args.jobs,
             batch_size: args.batch_size,
             quiet: args.quiet,
+            lsp: PrecomputeOptions {
+                policy: args.lsp_precompute,
+                min_fanin: args.lsp_min_fanin,
+                max_targets: args.lsp_max_targets,
+                budget: Duration::from_secs(args.lsp_budget_secs),
+            },
         }
     }
 }
@@ -68,6 +79,9 @@ pub struct CallersParams {
     pub max_targets: Option<i64>,
     /// Optional entity-kind filter, comma-separated.
     pub kinds: Option<String>,
+    /// Whether language servers may be asked now (`--no-lsp` turns it off;
+    /// pre-computed results in the index are used either way).
+    pub live_lsp: bool,
 }
 
 /// Parameters of `explore_file`.
@@ -122,11 +136,13 @@ impl CallersParams {
         entity_name: String,
         max_targets: Option<usize>,
         kinds: Option<String>,
+        no_lsp: bool,
     ) -> Self {
         Self {
             entity_name,
             max_targets: max_targets.map(|n| i64::try_from(n).unwrap_or(i64::MAX)),
             kinds,
+            live_lsp: !no_lsp,
         }
     }
 
@@ -136,6 +152,7 @@ impl CallersParams {
             entity_name: tool.entity_name,
             max_targets: tool.max_targets,
             kinds: tool.kinds,
+            live_lsp: true,
         }
     }
 }
@@ -184,6 +201,10 @@ mod tests {
             jobs: Some(4),
             batch_size: 64,
             quiet: true,
+            lsp_precompute: crate::lsp::precompute::PrecomputePolicy::All,
+            lsp_min_fanin: 7,
+            lsp_max_targets: 70,
+            lsp_budget_secs: 90,
             output: crate::config::OutputFormat::Json,
         };
         let params = IndexParams::from_cli(&args);
@@ -196,6 +217,12 @@ mod tests {
                 jobs: Some(4),
                 batch_size: 64,
                 quiet: true,
+                lsp: PrecomputeOptions {
+                    policy: crate::lsp::precompute::PrecomputePolicy::All,
+                    min_fanin: 7,
+                    max_targets: 70,
+                    budget: Duration::from_secs(90),
+                },
             }
         );
 
@@ -226,10 +253,16 @@ mod tests {
 
     #[test]
     fn callers_from_cli_maps_optional_max_targets() {
-        let with_max = CallersParams::from_cli("handle".to_string(), Some(15), None);
+        let with_max = CallersParams::from_cli("handle".to_string(), Some(15), None, false);
         assert_eq!(with_max.max_targets, Some(15));
-        let without_max = CallersParams::from_cli("handle".to_string(), None, None);
+        let without_max = CallersParams::from_cli("handle".to_string(), None, None, false);
         assert_eq!(without_max.max_targets, None);
+    }
+
+    #[test]
+    fn no_lsp_turns_live_queries_off() {
+        assert!(CallersParams::from_cli("x".to_string(), None, None, false).live_lsp);
+        assert!(!CallersParams::from_cli("x".to_string(), None, None, true).live_lsp);
     }
 
     #[test]
