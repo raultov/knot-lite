@@ -11,7 +11,7 @@ use super::record_io::atomic_write;
 
 /// knot version knot-lite is built and measured against (P2-D1). Drift-tested
 /// against `Cargo.lock`, so a bump forces a deliberate re-measure.
-pub const KNOT_VERSION: &str = "1.11.2";
+pub const KNOT_VERSION: &str = "1.11.3";
 
 /// The only embedding encoding this version writes (P2-D5).
 pub const ENCODING_I8PV_B64: &str = "i8pv_b64";

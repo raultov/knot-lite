@@ -39,7 +39,7 @@ path = "src/bin/knot-lite-mcp.rs"
 # crates.io release pinning the entity-identity fix (P2-D1). Default features
 # are required: knot's src/ does not cfg-gate fastembed/ort behind `indexer`.
 # The const index::manifest::KNOT_VERSION must match the locked version.
-knot = "1.11.2"
+knot = "1.11.3"
 
 # --- MCP server (stateless MCP 2026-07-28, stdio only) ---
 rust-mcp-sdk = { version = "2.0", default-features = false, features = ["server", "macros", "stdio"] }

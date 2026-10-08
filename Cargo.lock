@@ -1944,9 +1944,9 @@ dependencies = [
 
 [[package]]
 name = "knot"
-version = "1.11.2"
+version = "1.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5728fc0c74bc8570fca960d12558808d3f6b3447bc28cbcbf731bc16bed8a42"
+checksum = "176cc79f8fbf5af588e900143cec24d04cc350c5ffac8ca547431d0dd3107220"
 dependencies = [
  "anyhow",
  "async-trait",
