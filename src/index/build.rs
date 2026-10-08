@@ -373,6 +373,7 @@ fn run_lsp_stage(
         .iter()
         .map(|(caller, target, _)| (caller.to_string(), target.to_string()))
         .collect();
+    let stage = Instant::now();
     let fanin = caller_fanin(
         pairs
             .iter()
@@ -399,8 +400,8 @@ fn run_lsp_stage(
         &ctx.dir.layout,
         &mut adapter,
     )?;
-    let lsp_ms = lsp_m.languages.values().map(|l| l.ms).max();
-    Ok((Some(lsp_m), lsp_ms))
+    // This run's time: a reused language carries the `ms` of the run that computed it.
+    Ok((Some(lsp_m), Some(elapsed_ms(stage))))
 }
 
 /// The entity records the LSP stage works on (`(file, record)`), empty when the

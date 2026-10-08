@@ -264,7 +264,9 @@ fn java_options(inputs: &SpecInputs<'_>) -> Value {
                 ]
             },
             "configuration": { "updateBuildConfiguration": "automatic" },
-            "autobuild": { "enabled": true },
+            // JDT's builder compiles into `target/` of every Maven module: a write into
+            // the repository (L5). References and call hierarchy do not need a build.
+            "autobuild": { "enabled": false },
             "maxConcurrentBuilds": 4,
             "referencesCodeLens": { "enabled": false },
             "implementationsCodeLens": { "enabled": false }

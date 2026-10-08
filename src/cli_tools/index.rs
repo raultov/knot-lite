@@ -323,6 +323,38 @@ mod tests {
     }
 
     #[test]
+    fn a_reused_language_does_not_inflate_the_stage_time() {
+        use crate::index::manifest::{read_manifest, write_manifest_atomic};
+
+        let (tmp, cfg, params) = precompute_setup();
+        index_with_fake_pool(tmp.path(), &cfg, &params);
+        // Pretend the run that computed Rust took ten minutes.
+        let layout = IndexLayout::for_repo(tmp.path());
+        let mut manifest = read_manifest(&layout.manifest).expect("manifest");
+        manifest
+            .lsp
+            .as_mut()
+            .expect("lsp table")
+            .languages
+            .get_mut("rust")
+            .expect("rust")
+            .ms = 600_000;
+        write_manifest_atomic(&layout.manifest, &manifest).expect("write");
+
+        let (second, started) = index_with_fake_pool(tmp.path(), &cfg, &params);
+        assert_eq!(started, 0);
+        assert_eq!(second["lsp"]["languages"]["rust"]["status"], "reused");
+        // The language keeps the time of the run that computed it...
+        assert_eq!(second["lsp"]["languages"]["rust"]["ms"], 600_000);
+        // ...but this run's stage took no such time.
+        assert!(
+            second["timings_ms"]["lsp"].as_u64().unwrap() < 60_000,
+            "{}",
+            second["timings_ms"]
+        );
+    }
+
+    #[test]
     fn index_lsp_off_env_forces_none() {
         let (tmp, mut cfg, params) = precompute_setup();
         cfg.lsp.enabled = false;
