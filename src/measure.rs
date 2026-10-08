@@ -17,6 +17,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use knot::models::ParsedEntity;
 use knot::pipeline::parser::{ParseConfig, parse_files_stream};
@@ -1411,6 +1413,198 @@ fn l7_indexed_answers(
             }
         })
         .collect()
+}
+
+/// Live Java target known to be slow (18.8 s in L7) and the Rust target of the
+/// polyglot fixture.
+const L11_JAVA: &str = "org.springframework.ai.model.MutableResponseMetadata.put";
+const L11_RUST: &str = "total_area";
+
+/// What the parallel run of L11 produced.
+struct L11Parallel {
+    java_ms: u64,
+    rust_rows: Vec<u64>,
+    snapshots: Vec<(u64, String)>,
+    java_end_at: Instant,
+    rust_end_at: Instant,
+}
+
+/// Load the polyglot index, start the pool, and wait for the Java slot.
+fn l11_setup() -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
+    let root = std::env::var("KNOT_LITE_L11_REPO").expect("KNOT_LITE_L11_REPO is required");
+    let root = PathBuf::from(root).canonicalize().expect("polyglot repo");
+    let index = load_index(&IndexLayout::for_repo(&root)).expect("load the polyglot index");
+    let settings = measurement_settings();
+    let files: Vec<String> = index.file_sha16.keys().cloned().collect();
+    let mut cfg = crate::config::test_support::config_for(root.clone());
+    cfg.lsp = settings.clone();
+    let pool = start_pool(&cfg, &files, CLI_READY_WAIT, Some(index.stamp.clone())).expect("pool");
+    l11_wait_for_java_ready(&pool);
+    (index, settings, root, pool)
+}
+
+/// Wait until the Java pool slot reaches `ready` (jdtls Gradle import).
+fn l11_wait_for_java_ready(pool: &crate::lsp::pool::LspPool) {
+    let ready_deadline = Instant::now() + Duration::from_secs(120);
+    while Instant::now() < ready_deadline {
+        let snap = pool.snapshot();
+        if snap.slots.get("java").map(|s| s.state.as_str()) == Some("ready") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
+/// Warm both languages (the cold starts are not part of the assertion);
+/// returns the Java warm-up wall time.
+fn l11_warm_up(
+    index: &LoadedIndex,
+    settings: &LspSettings,
+    root: &Path,
+    pool: &crate::lsp::pool::LspPool,
+) -> u64 {
+    let _ = timed_callers(index, settings, root, L11_RUST, Some(pool));
+    let (warm, warm_ms) = timed_callers(index, settings, root, L11_JAVA, Some(pool));
+    assert_eq!(
+        warm.targets.first().map(|t| t.provenance),
+        Some("lsp-live"),
+        "the Java warm-up is a live answer"
+    );
+    warm_ms
+}
+
+/// Run the slow Java query and the Rust queries in parallel, sampling the pool.
+fn l11_run_parallel(
+    index: &LoadedIndex,
+    settings: &LspSettings,
+    root: &Path,
+    pool: &crate::lsp::pool::LspPool,
+) -> L11Parallel {
+    let java_done = AtomicBool::new(false);
+    let mut snapshots: Vec<(u64, String)> = Vec::new();
+    let mut rust_rows: Vec<u64> = Vec::new();
+    let (java_ms, java_end_at, rust_end_at) = std::thread::scope(|scope| {
+        let java = scope.spawn(|| {
+            let (response, ms) = timed_callers(index, settings, root, L11_JAVA, Some(pool));
+            assert_eq!(
+                response.targets.first().map(|t| t.provenance),
+                Some("lsp-live"),
+                "the slow Java target is answered live"
+            );
+            java_done.store(true, Ordering::SeqCst);
+            (ms, Instant::now())
+        });
+        std::thread::sleep(Duration::from_secs(1));
+        let rust = scope.spawn(|| {
+            let mut ms_list = Vec::new();
+            for _ in 0..5 {
+                let (response, ms) = timed_callers(index, settings, root, L11_RUST, Some(pool));
+                assert_eq!(
+                    response.targets.first().map(|t| t.provenance),
+                    Some("lsp-live"),
+                    "the Rust targets are answered live while Java runs"
+                );
+                ms_list.push(ms);
+            }
+            (ms_list, Instant::now())
+        });
+
+        // A snapshot every 200 ms while Java runs: it must not wait for it.
+        while !java_done.load(Ordering::SeqCst) {
+            let started = Instant::now();
+            let snap = pool.snapshot();
+            let state = snap
+                .slots
+                .get("java")
+                .map(|slot| slot.state.clone())
+                .unwrap_or_default();
+            snapshots.push((
+                u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                state,
+            ));
+            std::thread::sleep(Duration::from_millis(200));
+        }
+
+        let (java_ms, java_end) = java.join().expect("java thread");
+        let (rust_times, rust_end) = rust.join().expect("rust thread");
+        rust_rows.extend(rust_times);
+        (java_ms, java_end, rust_end)
+    });
+    L11Parallel {
+        java_ms,
+        rust_rows,
+        snapshots,
+        java_end_at,
+        rust_end_at,
+    }
+}
+
+/// Persist the L11 measurement as `l11.json` in the measure-out directory.
+fn l11_write_report(parallel: &L11Parallel) {
+    let finished_before_java = parallel.rust_end_at <= parallel.java_end_at;
+    let report = serde_json::json!({
+        "java_ms": parallel.java_ms,
+        "rust_ms": parallel.rust_rows,
+        "snapshot_ms": parallel.snapshots.iter().map(|(ms, _)| ms).collect::<Vec<_>>(),
+        "java_state_during_query": parallel.snapshots.first().map(|(_, s)| s.clone()),
+        "java_finished_last": finished_before_java,
+    });
+    let text = serde_json::to_string_pretty(&report).expect("json");
+    std::fs::write(measure_out_dir().join("l11.json"), text).expect("write");
+}
+
+/// The five invariants the L11 measurement must satisfy.
+fn l11_check_invariants(parallel: &L11Parallel) {
+    let worst_rust = parallel.rust_rows.iter().copied().max().unwrap_or(0);
+    let worst_snapshot = parallel
+        .snapshots
+        .iter()
+        .map(|(ms, _)| *ms)
+        .max()
+        .unwrap_or(0);
+    let ready_while_ran = parallel.snapshots.iter().all(|(_, state)| state == "ready");
+    let finished_before_java = parallel.rust_end_at <= parallel.java_end_at;
+    assert!(
+        worst_rust <= 2000,
+        "a Rust query waited for Java: {worst_rust} ms ({:?})",
+        parallel.rust_rows
+    );
+    assert!(
+        finished_before_java,
+        "the Rust queries outlived the Java target ({} ms)",
+        parallel.java_ms
+    );
+    assert!(
+        worst_snapshot <= 250,
+        "snapshot waited for the running query: {worst_snapshot} ms"
+    );
+    assert!(
+        ready_while_ran,
+        "the Java slot is ready while it answers: {:?}",
+        parallel.snapshots
+    );
+    assert!(
+        parallel.java_ms >= 1500,
+        "the Java target must actually be slow: {} ms",
+        parallel.java_ms
+    );
+    assert!(
+        parallel.snapshots.len() >= 3,
+        "the snapshot loop ran: {:?}",
+        parallel.snapshots
+    );
+}
+
+#[test]
+#[ignore = "L11: needs the polyglot repository (KNOT_LITE_L11_REPO) and real rust-analyzer + jdtls (minutes)"]
+fn l11_languages_run_in_parallel() {
+    let (index, settings, root, pool) = l11_setup();
+    let warm_ms = l11_warm_up(&index, &settings, &root, &pool);
+    let parallel = l11_run_parallel(&index, &settings, &root, &pool);
+    drop(index);
+    let _ = warm_ms;
+    l11_write_report(&parallel);
+    l11_check_invariants(&parallel);
 }
 
 #[test]
