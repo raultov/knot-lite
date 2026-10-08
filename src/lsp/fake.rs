@@ -241,7 +241,9 @@ struct FakeState {
 
 /// A launch spec for `lang` over a made-up repository (nothing is spawned).
 pub(crate) fn test_spec(lang: LspLang) -> ServerSpec {
-    let owner = crate::lsp::owner::OwnerToken::new_for(lang);
+    // A fixed token: two `test_spec` calls must produce the same spec (the
+    // session tests compare one against the other).
+    let owner = crate::lsp::owner::OwnerToken::with_owner(1, 2, lang, 3);
     spec_for(&SpecInputs {
         lang,
         program: Path::new("fake-server"),

@@ -86,7 +86,9 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   and the note says so — retry for language-server answers.
 - **When they stop.** The CLI stops them when it exits. The MCP server stops a server unused for
   `KNOT_LITE_LSP_IDLE_SECS` (default 900) and restarts it on demand; a server that dies is restarted after a
-  back-off (5 s, then 30 s, 120 s) and disabled after three failures.
+  back-off (5 s, then 30 s, 120 s) and disabled after three failures. Stopping a server also stops the helper
+  processes it started on our behalf (a Gradle daemon): they carry the server's ownership mark and are swept with
+  it (see Security).
 - **Where they write.** Only under `<repo>/.knot-lite/` (the index) and the per-repository scratch directory
   `$KNOT_LITE_LSP_CACHE_DIR/<repo key>/` (rust-analyzer's target dir, jdtls's workspace, the last 5 stderr logs
   per language). Measured: the repository is left byte-identical (see Security for the one thing this relies on).
@@ -105,10 +107,16 @@ you would open in an editor. Set `KNOT_LITE_LSP_BUILD_EXEC=off` to disable rust-
 proc-macros and jdtls's Gradle import (accuracy drops where code is generated), or `KNOT_LITE_LSP=off` to never
 start a server (pre-computed results are still read). jdtls is started with its auto-build off so that it does
 not compile into `target/` of your modules, and with Eclipse metadata files disabled; on a Maven repository
-(`spring-ai`) the working tree was measured byte-identical before and after. **Gradle projects are the
-exception while build execution is on**: jdtls runs Gradle on them, which writes a `.gradle/` project cache
-into the project, may download a Gradle distribution into `~/.gradle` and starts a Gradle daemon that outlives
-knot-lite. Use `KNOT_LITE_LSP_BUILD_EXEC=off` on repositories with Gradle projects you do not want touched. The
+(`spring-ai`) the working tree was measured byte-identical before and after. **Gradle projects while build execution is on**:
+jdtls runs Gradle on them, which writes a `.gradle/` project cache into the project and may download a Gradle
+distribution into `~/.gradle` (as any IDE does). The Gradle daemon it starts is **private to that jdtls session**
+(a unique JVM argument of ours makes it incompatible with your own builds, so one never attaches to it) and is
+**stopped with the server** — on idle, on re-index, on exit. If knot-lite is killed, the first start of the next
+knot-lite removes it. Everything a language server starts on our behalf carries an ownership mark (an environment
+entry, and where it survives on the command line `-Dknot.lite.lsp.owner=<token>`, plus
+`-XX:ErrorFile=<scratch>/gradle-owner-<token>.log` for the Gradle daemon, whose `-D` options never reach its
+command line): only processes carrying that exact mark are ever signalled, never a process by name. Use
+`KNOT_LITE_LSP_BUILD_EXEC=off` on repositories with Gradle projects you do not want touched. The
 servers' own global caches (`~/.m2`, `~/.cargo/registry`, jdtls's install-local configuration) are written as by
 any editor.
 

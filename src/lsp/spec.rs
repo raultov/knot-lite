@@ -255,13 +255,14 @@ fn java_args(scratch: &Path, owner: &OwnerToken) -> Vec<String> {
 /// Gradle import only when build-code execution is allowed (P3-D14).
 fn java_options(inputs: &SpecInputs<'_>) -> Value {
     let root_uri = path_to_uri(inputs.repo_root).map_or(Value::Null, |url| json!(url.as_str()));
+    let gradle_jvm = gradle_jvm_arguments(inputs);
     json!({
         "bundles": [],
         "workspaceFolders": [root_uri],
         "settings": { "java": {
             "import": {
                 "maven": { "enabled": true },
-                "gradle": { "enabled": inputs.build_exec },
+                "gradle": { "enabled": inputs.build_exec, "jvmArguments": gradle_jvm },
                 "generatesMetadataFilesAtProjectRoot": false,
                 "exclusions": [
                     "**/node_modules/**",
@@ -283,6 +284,47 @@ fn java_options(inputs: &SpecInputs<'_>) -> Value {
             "classFileContentsSupport": false
         }
     })
+}
+
+/// JVM arguments of the Gradle daemon jdtls starts (P4-D10).
+///
+/// `jvmArguments` **replaces** the project's `org.gradle.jvmargs` (measured,
+/// Appendix D P4.4), so those are prepended. The unique `-XX:ErrorFile` both
+/// marks the daemon (its command line keeps `-XX` options, unlike `-D`
+/// properties) and makes it incompatible with any other client: a Gradle build
+/// of the user never attaches to it, so stopping it cannot break one.
+fn gradle_jvm_arguments(inputs: &SpecInputs<'_>) -> String {
+    let marker = format!(
+        "-XX:ErrorFile={}",
+        text(
+            &inputs
+                .scratch
+                .join(format!("{}.log", inputs.owner.scratch_marker()))
+        )
+    );
+    match project_gradle_jvmargs(inputs.repo_root) {
+        Some(args) => format!("{args} {marker}"),
+        None => marker,
+    }
+}
+
+/// `org.gradle.jvmargs` of `<repo>/gradle.properties` (single line).
+fn project_gradle_jvmargs(repo_root: &Path) -> Option<String> {
+    let contents = std::fs::read_to_string(repo_root.join("gradle.properties")).ok()?;
+    for line in contents.lines() {
+        let Some(value) = line.trim().strip_prefix("org.gradle.jvmargs=") else {
+            continue;
+        };
+        let value = value.trim();
+        if value.ends_with('\\') {
+            tracing::warn!(
+                "gradle.properties: org.gradle.jvmargs spans several lines; only the ownership mark is passed to the Gradle daemon"
+            );
+            return None;
+        }
+        return Some(value.to_owned());
+    }
+    None
 }
 
 fn rust_language_id(_path: &Path) -> &'static str {
@@ -580,6 +622,144 @@ mod tests {
         assert_eq!(
             program_from_status(LspLang::Rust, status),
             Ok(tmp.path().join("custom-ra"))
+        );
+    }
+
+    #[test]
+    fn java_args_carry_the_owner_property() {
+        let owner = OwnerToken::new_for(LspLang::Java);
+        let spec = spec_for(&SpecInputs {
+            lang: LspLang::Java,
+            program: Path::new("/bin/jdtls"),
+            repo_root: Path::new(ROOT),
+            scratch: Path::new(SCRATCH),
+            build_exec: true,
+            preopen: &PreopenPlan::default(),
+            owner: &owner,
+        });
+        assert_eq!(
+            spec.args,
+            vec![
+                "--jvm-arg=-Xmx8g".to_owned(),
+                "--jvm-arg=-Djava.import.generatesMetadataFilesAtProjectRoot=false".to_owned(),
+                format!("--jvm-arg={}", owner.jvm_property()),
+                "-data".to_owned(),
+                text(&Path::new(SCRATCH).join("jdtls-ws")),
+            ]
+        );
+    }
+
+    #[test]
+    fn java_options_pass_the_marker_to_the_gradle_daemon() {
+        for build_exec in [true, false] {
+            let spec = spec(LspLang::Java, build_exec, &PreopenPlan::default());
+            let jvm =
+                spec.initialization_options["settings"]["java"]["import"]["gradle"]["jvmArguments"]
+                    .as_str()
+                    .expect("jvmArguments");
+            assert!(
+                jvm.contains("-XX:ErrorFile=") && jvm.contains("gradle-owner-"),
+                "the daemon marker is missing ({build_exec}): {jvm}"
+            );
+            assert_eq!(
+                spec.initialization_options["settings"]["java"]["import"]["gradle"]["enabled"],
+                json!(build_exec)
+            );
+        }
+    }
+
+    #[test]
+    fn project_gradle_jvmargs_are_kept() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            repo.path().join("gradle.properties"),
+            "org.gradle.jvmargs=-Xmx512m -Dfile.encoding=UTF-8\n",
+        )
+        .expect("write properties");
+        let owner = OwnerToken::new_for(LspLang::Java);
+        let spec = spec_for(&SpecInputs {
+            lang: LspLang::Java,
+            program: Path::new("/bin/jdtls"),
+            repo_root: repo.path(),
+            scratch: Path::new(SCRATCH),
+            build_exec: true,
+            preopen: &PreopenPlan::default(),
+            owner: &owner,
+        });
+        let jvm =
+            spec.initialization_options["settings"]["java"]["import"]["gradle"]["jvmArguments"]
+                .as_str()
+                .expect("jvmArguments");
+        assert!(
+            jvm.starts_with("-Xmx512m -Dfile.encoding=UTF-8 -XX:ErrorFile="),
+            "the project's org.gradle.jvmargs are lost: {jvm}"
+        );
+    }
+
+    #[test]
+    fn multiline_gradle_jvmargs_fall_back_to_the_marker() {
+        let repo = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            repo.path().join("gradle.properties"),
+            "org.gradle.jvmargs=-Xmx1g \\\n  -Dfile.encoding=UTF-8\n",
+        )
+        .expect("write properties");
+        let owner = OwnerToken::new_for(LspLang::Java);
+        let spec = spec_for(&SpecInputs {
+            lang: LspLang::Java,
+            program: Path::new("/bin/jdtls"),
+            repo_root: repo.path(),
+            scratch: Path::new(SCRATCH),
+            build_exec: true,
+            preopen: &PreopenPlan::default(),
+            owner: &owner,
+        });
+        let jvm =
+            spec.initialization_options["settings"]["java"]["import"]["gradle"]["jvmArguments"]
+                .as_str()
+                .expect("jvmArguments");
+        assert!(
+            jvm.starts_with("-XX:ErrorFile="),
+            "a multi-line property must fall back to the marker only: {jvm}"
+        );
+    }
+
+    #[test]
+    fn rust_and_ts_specs_are_unchanged() {
+        let rust = spec(LspLang::Rust, true, &PreopenPlan::default());
+        assert!(rust.args.is_empty(), "rust-analyzer takes no arguments");
+        assert_eq!(rust.initialization_options["checkOnSave"], json!(false));
+        assert_eq!(
+            rust.initialization_options["cachePriming"]["enable"],
+            json!(true)
+        );
+        assert_eq!(
+            rust.initialization_options["cargo"]["buildScripts"]["enable"],
+            json!(true)
+        );
+        assert_eq!(
+            rust.initialization_options["procMacro"]["enable"],
+            json!(true)
+        );
+        assert_eq!(
+            rust.initialization_options["files"]["watcher"],
+            json!("server")
+        );
+
+        let ts = spec(LspLang::Ts, true, &PreopenPlan::default());
+        assert_eq!(ts.args, vec!["--stdio".to_owned()]);
+        assert_eq!(
+            ts.initialization_options["tsserver"]["logVerbosity"],
+            json!("off")
+        );
+        assert_eq!(ts.initialization_options["maxTsServerMemory"], json!(4096));
+        assert_eq!(
+            ts.initialization_options["disableAutomaticTypingAcquisition"],
+            json!(true)
+        );
+        assert_eq!(
+            ts.initialization_options["preferences"]["includeCompletionsForModuleExports"],
+            json!(false)
         );
     }
 }
