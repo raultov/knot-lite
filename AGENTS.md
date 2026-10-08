@@ -70,7 +70,7 @@ src/
 ├── embed/            EmbedBatch trait, EmbedSettings, FakeEmbedder, KnotEmbedder
 ├── graph/            containers (ContainerTable), heuristic (resolve_edges), fanin (caller_fanin)
 ├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters, render, search, callers + sources (indexed / live / heuristic per target), explore, files
-├── lsp/              pool (own thread + runtime), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
+├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
 ├── capability/       language labels, which(), lsp_registry, scan, tier model
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)
