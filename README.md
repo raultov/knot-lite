@@ -145,7 +145,7 @@ Measured with the release build on the same three repositories (see `docs/PLAN_P
 - **Pure Vector Search:** `search_hybrid_context` ranks by cosine similarity over int8 vectors. No BM25 keyword channel, no kind-aware re-ranking, and no graph boost.
 - **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again; unsaved edits are not sent to servers.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a call are asked; `explore_file` and `search_hybrid_context` do not use servers. Pre-computed answers do not report self-references.
-- **A query in flight holds the pool:** while a live query runs, `status` (MCP) may show no server rows for up to 2 s and another language waits for it.
+- **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
 - **Prefix Filters Only:** Path filters accept repo-relative directory prefixes (e.g. `src/api`). Glob patterns are rejected with a pinned diagnostic.
 
 ## Install

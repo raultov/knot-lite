@@ -10,10 +10,11 @@
 //! before being disabled for the process lifetime. Inactive `Ready` servers are
 //! stopped after `idle` duration.
 //!
-//! Layout (P4.2): the public API lives here, [`factory`] builds real sessions,
-//! [`slot`] holds the slot state machine, [`start`] the start flow of one server
-//! and [`worker`] the dispatcher loop. Split mechanically in P4.2; P4.3 reworks
-//! the locking.
+//! Layout: the public API lives here, [`factory`] builds real sessions,
+//! [`slot`] holds one cell per language (slot + published view), [`start`] the
+//! start flow of one server and [`worker`] the dispatcher loop. Since P4.3 no
+//! lock covers more than one language: queries of different languages run in
+//! parallel and `snapshot` never waits for a query.
 
 mod factory;
 mod slot;
@@ -39,7 +40,12 @@ use crate::capability::languages::LspLang;
 use crate::index::load::IndexStamp;
 
 pub use factory::ProcessFactory;
-use worker::run_dispatcher;
+use slot::Shared;
+use worker::{TaskCtx, run_dispatcher};
+
+/// How long the shutdown of every server may take before the pool thread is
+/// joined anyway (P4-D7).
+const SHUTDOWN_REPLY_WAIT: Duration = Duration::from_secs(15);
 
 /// How long a server dropped or shut down gets to exit gracefully.
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -211,7 +217,12 @@ impl LspPool {
         clock: Arc<dyn Clock>,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = std::sync::mpsc::channel();
-        let pool_settings = settings.clone();
+        let ctx = TaskCtx {
+            shared: Arc::new(Shared::new(stamp)),
+            factory,
+            settings: settings.clone(),
+            clock,
+        };
 
         let thread = std::thread::Builder::new()
             .name("knot-lite-lsp".to_owned())
@@ -227,7 +238,7 @@ impl LspPool {
                         return;
                     }
                 };
-                rt.block_on(run_dispatcher(rx, factory, pool_settings, stamp, clock));
+                rt.block_on(run_dispatcher(rx, ctx));
             })?;
 
         Ok(Self {
@@ -302,7 +313,7 @@ impl Drop for LspPool {
     fn drop(&mut self) {
         let (reply, reply_rx) = std::sync::mpsc::channel();
         if self.tx.send(Command::Shutdown { reply }).is_ok() {
-            let _ = reply_rx.recv_timeout(Duration::from_secs(8));
+            let _ = reply_rx.recv_timeout(SHUTDOWN_REPLY_WAIT);
         }
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
