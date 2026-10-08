@@ -8,7 +8,13 @@ absent in a fresh clone. This file is the standing contract.
 
 1. **Write only inside** this repository (plus `~/.local/share/knot-lite/`, the
    persistent home of the measurement sandbox, outputs and hand-off notes — never
-   keep useful artefacts in a temp directory). Only `index` writes into the analysed repository and only under `.knot-lite/`.
+   keep useful artefacts in a temp directory, and point `KNOT_LITE_LSP_CACHE_DIR`
+   there for every run that starts a real language server). Only `index` writes into
+   the analysed repository and only under `.knot-lite/`; the language servers' own
+   scratch (`<cache>/<repo key>/`: rust-analyzer target dir, jdtls workspace, logs) is
+   the one other place knot-lite makes them write to. A real language server must never
+   leave a file in the repository: `autobuild` stays off for jdtls (it compiles into
+   `target/` otherwise) and L5 proves it.
    Never write into `../knot`, `~/.knot/repos/*` or any other repository. Read-only
    runs of `knot-lite status` on other checkouts are allowed. Never run `index` against `~/.knot/repos/*`.
 2. **Rust:** edition 2024; **no `unsafe`** (denied in `Cargo.toml`); **no `#[allow]`**;
@@ -16,12 +22,15 @@ absent in a fresh clone. This file is the standing contract.
    Fix clippy/dupes findings by refactoring — never silence them. Never loosen
    `clippy.toml`/`dupes.toml`.
 3. All code, comments and docs in **English**.
-4. **Cross-platform:** paths via `std::path`; no shelling out from Rust (the test
-   fixtures' `git init` is the only exception); Windows executables via `PATHEXT`.
+4. **Cross-platform:** paths via `std::path`; no shelling out from Rust, except
+   `src/lsp/process.rs`, which starts the language servers (the only module allowed to
+   spawn them), and the test fixtures' `git init`; Windows executables via `PATHEXT`.
 5. **Unit tests inside library modules** (`#[cfg(test)] mod tests`). Binaries stay
    thin; their logic lives in the library. The only test outside `src/` is
    `tests/mcp_stdio.rs` (the transport cannot be covered by lib tests). Hermetic gate:
-   tests in `src/` never download models, access network, or read `~/.knot` / the sandbox.
+   tests in `src/` never download models, access network, start a real language server
+   (an in-process scripted fake, `lsp/fake.rs`, speaks LSP instead; `config_for` turns
+   servers off), or read `~/.knot` / the sandbox.
    Measurement tests are `#[ignore]`d in `src/measure.rs` and run explicitly with
    `KNOT_LITE_SANDBOX` and `KNOT_LITE_MEASURE_OUT` set (both required, no default).
 6. After every task `make check` must be green before committing. Commits:
@@ -55,12 +64,13 @@ src/
 ├── config.rs         Config, OutputFormat, CommonArgs, EmbedSettings, pure resolver
 ├── error.rs          IndexUnavailable, QueryUnavailable (typed diagnostics, exit code 2)
 ├── utils.rs          logging (stderr only)
-├── measure.rs        #[cfg(test)] #[ignore] measurement gates M1–M8
+├── measure.rs        #[cfg(test)] #[ignore] measurement gates M1–M8 (Phase 2) and L1–L7 (Phase 3)
 ├── models/           cli_args (clap), params (run_* contracts), repo_scope
-├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, chunk, build, reuse, load
+├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load
 ├── embed/            EmbedBatch trait, EmbedSettings, FakeEmbedder, KnotEmbedder
-├── graph/            containers (ContainerTable), heuristic (resolve_edges)
-├── query/            session (QueryServices, IndexCache, EmbedderCache), filters, render, search, callers, explore, files
+├── graph/            containers (ContainerTable), heuristic (resolve_edges), fanin (caller_fanin)
+├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters, render, search, callers + sources (indexed / live / heuristic per target), explore, files
+├── lsp/              pool (own thread + runtime), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
 ├── capability/       language labels, which(), lsp_registry, scan, tier model
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)
