@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use super::owner::OwnerToken;
 use super::preopen::PreopenPlan;
 use super::readiness::ReadinessKind;
 use super::uri::path_to_uri;
@@ -81,6 +82,8 @@ pub struct SpecInputs<'a> {
     pub build_exec: bool,
     /// Files and projects to hand to the server.
     pub preopen: &'a PreopenPlan,
+    /// Ownership marker of this server (P4.5).
+    pub owner: &'a OwnerToken,
 }
 
 /// The three timeouts that differ per server.
@@ -152,7 +155,7 @@ fn java_spec(inputs: &SpecInputs<'_>) -> ServerSpec {
         JAVA_TIMEOUTS,
         java_language_id,
     );
-    spec.args = java_args(inputs.scratch);
+    spec.args = java_args(inputs.scratch, inputs.owner);
     spec.initialization_options = java_options(inputs);
     spec
 }
@@ -235,10 +238,14 @@ fn ts_options() -> Value {
 
 /// jdtls arguments: heap, no Eclipse metadata files inside the repository
 /// (P3-D12) and the workspace in the scratch directory.
-fn java_args(scratch: &Path) -> Vec<String> {
+fn java_args(scratch: &Path, owner: &OwnerToken) -> Vec<String> {
     vec![
         "--jvm-arg=-Xmx8g".to_owned(),
         "--jvm-arg=-Djava.import.generatesMetadataFilesAtProjectRoot=false".to_owned(),
+        // Identification of the jdtls JVM and of anything that copies its
+        // command line (P4.5): `-D` survives here, unlike in Gradle's daemon
+        // arguments (Appendix D P4.4).
+        format!("--jvm-arg={}", owner.jvm_property()),
         "-data".to_owned(),
         text(&scratch.join("jdtls-ws")),
     ]
@@ -310,11 +317,13 @@ mod tests {
 
     /// Spec of `lang` over the demo repository, with a configurable build-exec switch.
     fn spec(lang: LspLang, build_exec: bool, preopen: &PreopenPlan) -> ServerSpec {
+        let owner = OwnerToken::new_for(lang);
         spec_for(&SpecInputs {
             lang,
             program: Path::new("/bin/server"),
             repo_root: Path::new(ROOT),
             scratch: Path::new(SCRATCH),
+            owner: &owner,
             build_exec,
             preopen,
         })
@@ -416,6 +425,11 @@ mod tests {
             vec![
                 "--jvm-arg=-Xmx8g".to_owned(),
                 "--jvm-arg=-Djava.import.generatesMetadataFilesAtProjectRoot=false".to_owned(),
+                spec.args
+                    .iter()
+                    .find(|arg| arg.starts_with("--jvm-arg=-Dknot.lite.lsp.owner="))
+                    .cloned()
+                    .expect("owner property"),
                 "-data".to_owned(),
                 workspace,
             ]

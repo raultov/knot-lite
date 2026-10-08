@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::config::LspOverrides;
+use crate::lsp::owner::OwnerToken;
 use crate::lsp::preopen::{PreopenPlan, plan};
 use crate::lsp::process::{StartContext, Started, start_or_degrade, stop};
 use crate::lsp::readiness::wait_ready;
@@ -25,6 +26,8 @@ pub struct ProcessFactory {
     pub preopen: PreopenPlan,
     /// Number of stderr logs kept.
     pub logs_keep: usize,
+    /// The orphan sweep runs once per factory (P4.5).
+    orphans_swept: Arc<std::sync::OnceLock<()>>,
 }
 
 impl ProcessFactory {
@@ -44,6 +47,7 @@ impl ProcessFactory {
             build_exec,
             preopen,
             logs_keep: 5,
+            orphans_swept: Arc::new(std::sync::OnceLock::new()),
         }
     }
 }
@@ -63,12 +67,22 @@ impl SessionFactory for ProcessFactory {
         let build_exec = self.build_exec;
         let preopen = self.preopen.clone();
         let logs_keep = self.logs_keep;
+        let orphans_swept = Arc::clone(&self.orphans_swept);
 
         Box::pin(async move {
+            if orphans_swept.set(()).is_ok() {
+                // A knot-lite that was killed leaves its servers (and their
+                // helpers) behind; the first start of this process sweeps the
+                // tokens whose owner is gone (P4-D12).
+                tokio::task::spawn_blocking(crate::lsp::owner::sweep_orphans)
+                    .await
+                    .unwrap_or_default();
+            }
             let program = match resolve_program(lang, &overrides) {
                 Ok(prog) => prog,
                 Err(degraded) => return StartOutcome::Degraded(degraded),
             };
+            let owner = OwnerToken::new_for(lang);
             let spec_inputs = SpecInputs {
                 lang,
                 program: &program,
@@ -76,12 +90,14 @@ impl SessionFactory for ProcessFactory {
                 scratch: &scratch,
                 build_exec,
                 preopen: &preopen,
+                owner: &owner,
             };
             let spec = spec_for(&spec_inputs);
             let start_ctx = StartContext {
                 repo_root: &repo_root,
                 scratch: &scratch,
                 logs_keep,
+                owner: &owner,
             };
 
             match start_or_degrade(&spec, &start_ctx).await {

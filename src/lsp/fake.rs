@@ -241,6 +241,7 @@ struct FakeState {
 
 /// A launch spec for `lang` over a made-up repository (nothing is spawned).
 pub(crate) fn test_spec(lang: LspLang) -> ServerSpec {
+    let owner = crate::lsp::owner::OwnerToken::new_for(lang);
     spec_for(&SpecInputs {
         lang,
         program: Path::new("fake-server"),
@@ -248,6 +249,7 @@ pub(crate) fn test_spec(lang: LspLang) -> ServerSpec {
         scratch: Path::new("/cache/demo-0123456789abcdef"),
         build_exec: true,
         preopen: &super::preopen::PreopenPlan::default(),
+        owner: &owner,
     })
 }
 

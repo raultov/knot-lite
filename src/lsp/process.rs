@@ -19,6 +19,7 @@ use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio::process::{Child, Command};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
+use super::owner::{OWNER_ENV, OwnerToken, sweep_owned};
 use super::session::{InitInputs, LspSession, SessionIo, initialize};
 use super::spec::{Degraded, ServerSpec};
 use crate::capability::languages::LspLang;
@@ -39,6 +40,9 @@ pub struct StartContext<'a> {
     pub scratch: &'a Path,
     /// Stderr logs kept per language, the new one included.
     pub logs_keep: usize,
+    /// Ownership marker of this server (P4.5): every helper it starts carries
+    /// it, and stopping the server sweeps them.
+    pub owner: &'a OwnerToken,
 }
 
 /// A running server process.
@@ -48,6 +52,8 @@ pub struct ServerProcess {
     pub pid: Option<u32>,
     /// File receiving the server's stderr.
     pub stderr_log: PathBuf,
+    /// Ownership marker, swept when this process is stopped (P4.5).
+    pub owner: OwnerToken,
 }
 
 impl Drop for ServerProcess {
@@ -58,6 +64,8 @@ impl Drop for ServerProcess {
         if let (Ok(None), Some(pid)) = (self.child.try_wait(), self.pid) {
             kill_process_tree(pid);
         }
+        // Helpers that outlived the tree (a Gradle daemon handed over to init).
+        sweep_owned(&self.owner);
     }
 }
 
@@ -102,7 +110,7 @@ async fn start(spec: &ServerSpec, ctx: &StartContext<'_>) -> Result<Started, Deg
         lsp_started: false,
         diagnostic: format!("{server}: cannot create its stderr log: {error}"),
     })?;
-    let mut child = spawn(spec, ctx.repo_root, stderr_log.file).map_err(|error| Degraded {
+    let mut child = spawn(spec, ctx, stderr_log.file).map_err(|error| Degraded {
         lsp_available: true,
         lsp_started: false,
         diagnostic: format!("failed to spawn {}: {error}", spec.program.display()),
@@ -127,6 +135,7 @@ async fn start(spec: &ServerSpec, ctx: &StartContext<'_>) -> Result<Started, Deg
         child,
         pid,
         stderr_log: stderr_log.path,
+        owner: ctx.owner.clone(),
     };
     match initialize(io, init).await {
         Ok(session) => Ok(Started {
@@ -199,19 +208,29 @@ pub async fn stop(started: Started, timeout: Duration) {
         }
         kill_members(&descendants);
         process.pid = None;
+        // Helpers the tree never saw (re-parented to init): sweep by marker.
+        tokio::task::spawn_blocking({
+            let owner = process.owner.clone();
+            move || sweep_owned(&owner)
+        })
+        .await
+        .unwrap_or_default();
     }
 }
 
 /// A process of a server's tree, identified so a reused pid is never killed.
-struct Member {
-    pid: Pid,
-    start_time: u64,
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Member {
+    /// Operating-system process id.
+    pub(super) pid: Pid,
+    /// Start time of that process (a reused pid never matches).
+    pub(super) start_time: u64,
 }
 
 /// Refresh `system` with the memory of every process (threads excluded: on
 /// Linux each thread reports its whole process' RSS, summing them would
 /// multiply the figure by the thread count).
-fn refresh(system: &mut System) {
+pub(super) fn refresh(system: &mut System) {
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
@@ -337,15 +356,20 @@ fn prune_logs(dir: &Path, lang: LspLang, keep: usize) {
 }
 
 /// The only `Command` construction of the crate.
-fn spawn(spec: &ServerSpec, repo_root: &Path, stderr: std::fs::File) -> std::io::Result<Child> {
+fn spawn(
+    spec: &ServerSpec,
+    ctx: &StartContext<'_>,
+    stderr: std::fs::File,
+) -> std::io::Result<Child> {
     Command::new(&spec.program)
         .args(&spec.args)
+        .env(OWNER_ENV, ctx.owner.render())
         .envs(
             spec.env
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         )
-        .current_dir(repo_root)
+        .current_dir(ctx.repo_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr))
@@ -358,11 +382,26 @@ mod tests {
     use super::*;
     use crate::lsp::fake::test_spec;
 
-    fn context<'a>(repo: &'a Path, scratch: &'a Path) -> StartContext<'a> {
+    /// A token shared by the process tests (never swept: the tests use fake
+    /// sessions, so nothing real carries it).
+    fn test_owner() -> &'static crate::lsp::owner::OwnerToken {
+        static OWNER: std::sync::OnceLock<crate::lsp::owner::OwnerToken> =
+            std::sync::OnceLock::new();
+        OWNER.get_or_init(|| {
+            crate::lsp::owner::OwnerToken::new_for(crate::capability::languages::LspLang::Rust)
+        })
+    }
+
+    fn context<'a>(
+        repo: &'a Path,
+        scratch: &'a Path,
+        owner: &'a crate::lsp::owner::OwnerToken,
+    ) -> StartContext<'a> {
         StartContext {
             repo_root: repo,
             scratch,
             logs_keep: 5,
+            owner,
         }
     }
 
@@ -372,7 +411,7 @@ mod tests {
         let scratch = tmp.path().join("scratch");
         let mut spec = test_spec(LspLang::Rust);
         spec.program = tmp.path().join("no-such-rust-analyzer");
-        let outcome = start_or_degrade(&spec, &context(tmp.path(), &scratch)).await;
+        let outcome = start_or_degrade(&spec, &context(tmp.path(), &scratch, test_owner())).await;
         let StartOutcome::Degraded(degraded) = outcome else {
             panic!("a missing binary must degrade");
         };
@@ -400,7 +439,7 @@ mod tests {
         // client may already have closed.
         spec.program = std::env::current_exe().expect("test binary");
         spec.args = vec!["--test-threads=0".to_owned()];
-        let outcome = start_or_degrade(&spec, &context(tmp.path(), &scratch)).await;
+        let outcome = start_or_degrade(&spec, &context(tmp.path(), &scratch, test_owner())).await;
         let StartOutcome::Degraded(degraded) = outcome else {
             panic!("a process that is not an LSP server must degrade");
         };
@@ -435,7 +474,7 @@ mod tests {
         spec.program = program;
         let scratch = tmp.path().join("scratch");
         let StartOutcome::Degraded(degraded) =
-            start_or_degrade(&spec, &context(tmp.path(), &scratch)).await
+            start_or_degrade(&spec, &context(tmp.path(), &scratch, test_owner())).await
         else {
             panic!("a non-executable file must degrade");
         };
@@ -460,7 +499,7 @@ mod tests {
         std::fs::write(logs.join("ts_1000000000001.stderr.log"), "x").expect("write");
         std::fs::write(logs.join("notes.txt"), "x").expect("write");
 
-        let ctx = context(tmp.path(), tmp.path());
+        let ctx = context(tmp.path(), tmp.path(), test_owner());
         let created = open_stderr_log(LspLang::Rust, &ctx).expect("new log");
         let mut names: Vec<String> = std::fs::read_dir(&logs)
             .expect("read_dir")
@@ -511,5 +550,106 @@ mod tests {
             .find(|member| member.pid == Pid::from_u32(std::process::id()))
             .expect("the root is a member");
         assert!(me.start_time > 0);
+    }
+
+    /// The harness as a sleeping "server": it never answers LSP, so `stop`
+    /// ends up killing its tree.
+    fn sleeper_spec() -> ServerSpec {
+        let mut spec = test_spec(crate::capability::languages::LspLang::Rust);
+        spec.program = std::env::current_exe().expect("exe");
+        spec.args = vec![
+            "--exact".to_owned(),
+            "lsp::owner::tests::sleeper".to_owned(),
+            "--ignored".to_owned(),
+            "--nocapture".to_owned(),
+        ];
+        spec.env = vec![("KNOT_LITE_TEST_SLEEPER".to_owned(), "1".to_owned())];
+        spec
+    }
+
+    #[tokio::test]
+    async fn spawn_sets_the_owner_environment() {
+        use crate::lsp::owner::OWNER_ENV;
+        let owner =
+            crate::lsp::owner::OwnerToken::new_for(crate::capability::languages::LspLang::Rust);
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let scratch = tmp.path().join("scratch");
+        std::fs::create_dir_all(&scratch).expect("scratch");
+        let err = std::fs::File::create(tmp.path().join("server.err")).expect("err log");
+        let mut child = spawn(&sleeper_spec(), &context(tmp.path(), &scratch, &owner), err)
+            .expect("spawn sleeper");
+
+        let mut system = System::new();
+        crate::lsp::owner::refresh_full(&mut system);
+        let environ = system
+            .process(Pid::from_u32(child.id().expect("pid")))
+            .map(|process| process.environ().to_vec());
+        let _ = child.start_kill();
+        let _ = child.wait().await;
+
+        let environ = environ.expect("the child is readable while it sleeps");
+        assert!(
+            environ.iter().any(|entry| entry
+                .to_string_lossy()
+                .starts_with(&format!("{OWNER_ENV}="))),
+            "the child environment carries the owner mark: {environ:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stop_sweeps_helpers_of_the_server() {
+        use crate::lsp::fake::{FakeScript, connect};
+        use crate::lsp::owner::{OWNER_ENV, OwnerToken};
+        let owner = OwnerToken::new_for(crate::capability::languages::LspLang::Rust);
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let scratch = tmp.path().join("scratch");
+        std::fs::create_dir_all(&scratch).expect("scratch");
+        let err = std::fs::File::create(tmp.path().join("server.err")).expect("err log");
+
+        // The "server" is the harness sleeper (killed as a process tree)...
+        let child = spawn(&sleeper_spec(), &context(tmp.path(), &scratch, &owner), err)
+            .expect("spawn sleeper");
+        let pid = child.id().expect("pid");
+        // ...and this helper is outside that tree, carrying the same token.
+        let mut helper = std::process::Command::new(std::env::current_exe().expect("exe"))
+            .args([
+                "--exact",
+                "lsp::owner::tests::sleeper",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("KNOT_LITE_TEST_SLEEPER", "1")
+            .env(OWNER_ENV, owner.render())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn helper");
+        std::thread::sleep(Duration::from_millis(300));
+
+        let spec = test_spec(crate::capability::languages::LspLang::Rust);
+        let init = super::super::session::InitInputs {
+            spec: &spec,
+            repo_root: tmp.path(),
+        };
+        let (session, _handle) = connect(FakeScript::full(), init).await;
+        let started = Started {
+            session,
+            process: Some(ServerProcess {
+                child,
+                pid: Some(pid),
+                stderr_log: scratch.join("server.err"),
+                owner,
+            }),
+        };
+        stop(started, Duration::from_millis(300)).await;
+
+        let helper_gone = helper.try_wait().ok().flatten().is_some() || {
+            std::thread::sleep(Duration::from_millis(500));
+            helper.try_wait().ok().flatten().is_some()
+        };
+        let _ = helper.kill();
+        let _ = helper.wait();
+        assert!(helper_gone, "the helper outside the tree was not swept");
     }
 }

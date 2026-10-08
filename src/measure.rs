@@ -516,6 +516,7 @@ struct L5SmokeReport {
 async fn l5_smoke_rust(repo: &Path, scratch: &Path) -> L5SmokeReport {
     let program = resolve_program(LspLang::Rust, &LspOverrides::default())
         .unwrap_or_else(|degraded| panic!("{}", degraded.diagnostic));
+    let owner = crate::lsp::owner::OwnerToken::new_for(LspLang::Rust);
     let spec = spec_for(&SpecInputs {
         lang: LspLang::Rust,
         program: &program,
@@ -523,11 +524,13 @@ async fn l5_smoke_rust(repo: &Path, scratch: &Path) -> L5SmokeReport {
         scratch,
         build_exec: true,
         preopen: &PreopenPlan::default(),
+        owner: &owner,
     });
     let ctx = StartContext {
         repo_root: repo,
         scratch,
         logs_keep: 5,
+        owner: &owner,
     };
     let StartOutcome::Ready(mut started) = start_or_degrade(&spec, &ctx).await else {
         panic!("rust-analyzer did not start (see the stderr log under {scratch:?}/logs)");
@@ -1120,6 +1123,7 @@ async fn start_ready_server(
     let program = resolve_program(lang, &LspOverrides::default())
         .unwrap_or_else(|degraded| panic!("{}", degraded.diagnostic));
     let preopen = crate::lsp::preopen::plan(repo, files);
+    let owner = crate::lsp::owner::OwnerToken::new_for(lang);
     let spec = spec_for(&SpecInputs {
         lang,
         program: &program,
@@ -1127,11 +1131,13 @@ async fn start_ready_server(
         scratch,
         build_exec: true,
         preopen: &preopen,
+        owner: &owner,
     });
     let ctx = StartContext {
         repo_root: repo,
         scratch,
         logs_keep: 5,
+        owner: &owner,
     };
     let StartOutcome::Ready(mut started) = start_or_degrade(&spec, &ctx).await else {
         panic!(
