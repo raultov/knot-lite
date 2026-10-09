@@ -171,7 +171,7 @@ if mcp_wait 8 60; then
     elif jq -e '.targets[0].lsp.status == "not_ready" and ((.notes|join(" ")) | contains("is still starting"))' "$sc" >/dev/null; then pass T28 "first find_callers: not_ready, the note says the server is still starting"
     else fail T28 "first find_callers is neither live nor not_ready" "file: $sc"; fi
     assert_jq T28 "the first answer is not an error" "$E2E_MCP_DIR/8.json" '.result.isError != true'
-  else skip T28 "first find_callers: typescript-language-server or the typescript package is unavailable"; fi
+  else lsp_or_skip T28 "first find_callers" ts || true; fi
 else fail T28 "no answer to the first find_callers"; fi
 if lsp_available ts; then
   mcp_call 9 find_callers '{"entity_name":"formatName"}'

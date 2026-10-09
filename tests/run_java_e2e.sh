@@ -107,9 +107,21 @@ if lsp_or_skip V20 "stale target" java; then
   assert_jq V20 "the edited file's target is stale and falls back" "$(J V20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   text_in V20 "a note says the file changed since the last index" "$(J V20)" 'changed since the last index'
   rc="$(cli V21a -- index -o json)"; assert_rc V21a "re-index exits 0" 0 "$rc"
-  rc="$(cli V21b -- callers Order.getItems -o json)"; assert_rc V21b "callers after the re-index exits 0" 0 "$rc"
+  # jdtls updates its index in the background, so the first live answer after an edit can still describe the
+  # file as it was (measured: the call hierarchy missed the new caller in 6 of 8 sessions and the merged answer
+  # in 3 of 8; the next session was complete every time). Up to three attempts, each a fresh
+  # server; the row states how many it took (README Limitations).
+  attempt=0
+  while :; do
+    attempt=$((attempt + 1))
+    rc="$(cli V21b -- callers Order.getItems -o json)"
+    jq -e -n --argjson e "$EXACT_GETITEMS_AFTER_EDIT" --argjson a "$(function_set "$(J V21b)")" '($e | sort) == ($a | sort)' >/dev/null 2>&1 && break
+    [ "$attempt" -ge 3 ] && break
+  done
+  assert_rc V21b "callers after the re-index exits 0" 0 "$rc"
   assert_jq V21b "answered live again" "$(J V21b)" '.targets[0].provenance == "lsp-live"'
-  assert_set_eq V21b "the new caller is found" "$EXACT_GETITEMS_AFTER_EDIT" "$(function_set "$(J V21b)")"
+  assert_set_eq V21b "the new caller is found (attempt $attempt of 3)" "$EXACT_GETITEMS_AFTER_EDIT" "$(function_set "$(J V21b)")"
+  if [ "$attempt" -gt 1 ]; then pass V21b "note: the first live answer after the edit was stale, attempt $attempt was complete"; fi
   rc="$(cli V22 -- status --probe-lsp -o json)"; assert_rc V22 "status --probe-lsp exits 0" 0 "$rc"
   assert_jq V22 "jdtls probes ok" "$(J V22)" '.lsp_probe.java.ok == true and .lsp_probe.java.ready_ms > 0'
 else
@@ -168,7 +180,7 @@ if mcp_wait 8 60; then
     elif jq -e '.targets[0].lsp.status == "not_ready" and ((.notes|join(" ")) | contains("is still starting"))' "$sc" >/dev/null; then pass V28 "first find_callers: not_ready, the note says the server is still starting"
     else fail V28 "first find_callers is neither live nor not_ready" "file: $sc"; fi
     assert_jq V28 "the first answer is not an error" "$E2E_MCP_DIR/8.json" '.result.isError != true'
-  else skip V28 "first find_callers: jdtls not found in PATH"; fi
+  else lsp_or_skip V28 "first find_callers" java || true; fi
 else fail V28 "no answer to the first find_callers"; fi
 if lsp_available java; then
   mcp_call 9 find_callers '{"entity_name":"Order.getItems"}'

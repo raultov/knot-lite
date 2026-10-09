@@ -166,7 +166,7 @@ if mcp_wait 8 60; then
     elif jq -e '.targets[0].lsp.status == "not_ready" and ((.notes|join(" ")) | contains("is still starting"))' "$sc" >/dev/null; then pass R28 "first find_callers: not_ready, the note says the server is still starting"
     else fail R28 "first find_callers is neither live nor not_ready" "file: $sc"; fi
     assert_jq R28 "the first answer is not an error" "$E2E_MCP_DIR/8.json" '.result.isError != true'
-  else skip R28 "first find_callers: rust-analyzer not found in PATH"; fi
+  else lsp_or_skip R28 "first find_callers" rust || true; fi
 else fail R28 "no answer to the first find_callers"; fi
 if lsp_available rust; then
   mcp_call 9 find_callers '{"entity_name":"total_area"}'
