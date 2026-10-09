@@ -77,8 +77,7 @@ install: build
 	@echo "Installed binaries to $(DESTDIR):"
 	@for b in $(BINS); do echo "  - $$b$(EXT)"; done
 
-# Run E2E integration tests (no databases needed). The suite arrives in
-# Phase 7; until then the target reports that it was skipped.
+# Run the E2E suites (real language servers; Linux and macOS). See README > End-to-end tests.
 E2E_SCRIPT ?= tests/run_all_e2e.sh
 e2e:
 	@if [ -x "$(E2E_SCRIPT)" ]; then ./$(E2E_SCRIPT); else echo "e2e: $(E2E_SCRIPT) not present yet - skipped"; fi
@@ -101,4 +100,4 @@ help:
 	@echo "  make dupes-cleanup - Show stale duplication suppressions"
 	@echo "  make build         - Build release binaries"
 	@echo "  make install       - Build release binaries and copy them to ~/.cargo/bin (Phase 1+)"
-	@echo "  make e2e           - Run all E2E integration tests (Phase 7+, skipped before)"
+	@echo "  make e2e           - Run the E2E suites (tests/run_all_e2e.sh)"
