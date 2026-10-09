@@ -84,6 +84,12 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   `KNOT_LITE_LSP_WARMUP=on` (MCP: start the indexed languages at launch). A query waits for a starting server
   up to its ready timeout on the CLI and 20 s on MCP; after that the target is answered from heuristic edges
   and the note says so — retry for language-server answers.
+- **When a server counts as ready.** jdtls announces `ServiceReady` and then keeps sending `Starting` status
+  reports for its initialization jobs; a Gradle import goes on after `ServiceReady`. A Java server is ready once it
+  has announced `ServiceReady` **at any time** and those reports have stopped for the idle window (it is not the
+  last report that counts). Before 0.4.0 the last report was compared, so a Gradle project never became ready and
+  always fell back to heuristic edges. Measured on a one-class Gradle project: `lsp-live` in 7 s with a warm
+  jdtls workspace and about 45 s on the first run.
 - **When they stop.** The CLI stops them when it exits. The MCP server stops a server unused for
   `KNOT_LITE_LSP_IDLE_SECS` (default 900) and restarts it on demand; a server that dies is restarted after a
   back-off (5 s, then 30 s, 120 s) and disabled after three failures. Stopping a server also stops the helper

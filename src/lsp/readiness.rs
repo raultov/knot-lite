@@ -58,6 +58,11 @@ pub struct ReadinessState {
     pub ra_indexing_ended: bool,
     /// Last `language/status` type (jdtls).
     pub jdtls_status: Option<String>,
+    /// Whether jdtls has announced `ServiceReady` at least once. Sticky: jdtls
+    /// keeps sending `Starting` status reports for the progress of its
+    /// initialization jobs (a Gradle import goes on after `ServiceReady`), so
+    /// the *last* type says nothing about readiness.
+    pub jdtls_service_ready: bool,
     /// Every distinct `language/status.type` with its unix-ms timestamp.
     pub jdtls_status_timeline: Vec<(u64, String)>,
     /// Why the fed state considers itself ready (set when a signal arrives).
@@ -119,6 +124,7 @@ impl ReadinessState {
 
     /// A `language/status` notification (jdtls).
     pub fn on_language_status(&mut self, typ: &str) {
+        tracing::debug!(typ, "language/status");
         self.note_activity();
         self.jdtls_status = Some(typ.to_owned());
         let ts = u64::try_from(
@@ -136,6 +142,7 @@ impl ReadinessState {
             self.jdtls_status_timeline.push((ts, typ.to_owned()));
         }
         if typ == "ServiceReady" {
+            self.jdtls_service_ready = true;
             self.ready_reason = Some("ServiceReady".to_owned());
         }
     }
@@ -216,11 +223,9 @@ fn evaluate(
             (silent_long_enough && state.ra_indexing_ended && progress_idle(state, idle, now))
                 .then_some("fallback progress-idle after indexing")
         }
-        ReadinessKind::JdtlsServiceReady => {
-            let service_ready = state.jdtls_status.as_deref() == Some("ServiceReady");
-            (service_ready && progress_quiet(state, idle, now))
-                .then_some("ServiceReady and progress idle")
-        }
+        ReadinessKind::JdtlsServiceReady => (state.jdtls_service_ready
+            && progress_quiet(state, idle, now))
+        .then_some("ServiceReady and progress idle"),
         ReadinessKind::ProgressIdle => progress_idle(state, idle, now).then_some("progress idle"),
     }
 }
@@ -364,6 +369,42 @@ mod tests {
         assert_eq!(
             evaluate(&state, ReadinessKind::JdtlsServiceReady, IDLE, now, now),
             Some("ServiceReady and progress idle")
+        );
+    }
+
+    #[test]
+    fn jdtls_stays_ready_when_starting_reports_follow_service_ready() {
+        // A Gradle import: jdtls announces `ServiceReady`, then keeps reporting
+        // the progress of its initialization jobs as `Starting` (measured,
+        // Appendix D P4.7). Readiness waits for the reports to stop, no more.
+        let now = Instant::now();
+        let mut state = base();
+        state.on_language_status("Starting");
+        state.on_language_status("ServiceReady");
+        state.on_language_status("Starting");
+        assert_eq!(state.jdtls_status.as_deref(), Some("Starting"));
+        // A report just arrived: still settling.
+        assert_eq!(
+            evaluate(&state, ReadinessKind::JdtlsServiceReady, IDLE, now, now),
+            None
+        );
+        state.last_activity = Some(old(now, IDLE * 2));
+        assert_eq!(
+            evaluate(&state, ReadinessKind::JdtlsServiceReady, IDLE, now, now),
+            Some("ServiceReady and progress idle")
+        );
+    }
+
+    #[test]
+    fn jdtls_is_not_ready_before_service_ready_however_quiet() {
+        let now = Instant::now();
+        let mut state = base();
+        state.on_language_status("Starting");
+        state.last_activity = Some(old(now, IDLE * 10));
+        assert!(!state.jdtls_service_ready);
+        assert_eq!(
+            evaluate(&state, ReadinessKind::JdtlsServiceReady, IDLE, now, now),
+            None
         );
     }
 
