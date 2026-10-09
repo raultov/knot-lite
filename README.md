@@ -5,12 +5,14 @@ language-server call graph, built on [knot](../knot)'s parsers. No Qdrant, no Ne
 no services to run — an index lives in a single `.knot-lite/` directory inside the
 repository it describes.
 
-> **Project status — Phase 3.** All five tools (`status`, `search_hybrid_context`, `find_callers`,
-> `explore_file`, `list_files`) answer from the index. `find_callers` now asks the **language
+> **Project status — Phase 4.** All five tools (`status`, `search_hybrid_context`, `find_callers`,
+> `explore_file`, `list_files`) answer from the index. `find_callers` asks the **language
 > server** (rust-analyzer, typescript-language-server, jdtls) per target — live, or from edges
 > pre-computed by `knot-lite index` for widely used targets — and falls back to knot's heuristic
 > edges per target when a server is unavailable. Vectors use `i8pv_b64` int8 product-quantisation
-> with text-hash reuse.
+> with text-hash reuse. Phase 4 hardened the servers: languages are queried in parallel, every
+> process a server starts (a Gradle daemon) is owned by it and stopped with it, and a shell
+> end-to-end suite runs the real servers on small fixtures (`make e2e`).
 
 ## Quick start
 
@@ -25,7 +27,7 @@ knot-lite explore src/pipeline/parser/mod.rs  # file anatomy and entity list
 knot-lite files -p src/                       # list indexed files
 ```
 
-## Tools & Capabilities (0.3.0)
+## Tools & Capabilities (0.4.0)
 
 | Tool | Capability | Provenance |
 |---|---|---|
@@ -88,8 +90,8 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   reports for its initialization jobs; a Gradle import goes on after `ServiceReady`. A Java server is ready once it
   has announced `ServiceReady` **at any time** and those reports have stopped for the idle window (it is not the
   last report that counts). Before 0.4.0 the last report was compared, so a Gradle project never became ready and
-  always fell back to heuristic edges. Measured on a one-class Gradle project: `lsp-live` in 7 s with a warm
-  jdtls workspace and about 45 s on the first run.
+  always fell back to heuristic edges. Measured on a one-class Gradle project: `lsp-live` in 7–13 s with a warm
+  jdtls workspace (one run, right after the project was first imported, took 43 s).
 - **When they stop.** The CLI stops them when it exits. The MCP server stops a server unused for
   `KNOT_LITE_LSP_IDLE_SECS` (default 900) and restarts it on demand; a server that dies is restarted after a
   back-off (5 s, then 30 s, 120 s) and disabled after three failures. Stopping a server also stops the helper
@@ -169,7 +171,7 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
   Warm re-index: 8.9 s, no server started.
 - **Parallel languages:** while a Java target took 16 s live, five Rust queries on the same repository answered in
   40–75 ms each, and `status` took at most 42 ms (63 samples) with the Java server `ready`.
-- **Gradle:** a Gradle project answers `lsp-live` (7 s warm, 43 s on the first run). In every scenario the Gradle
+- **Gradle:** a Gradle project answers `lsp-live` (7–13 s warm). In every scenario the Gradle
   daemon carried the ownership mark while the server ran and none was left afterwards: 10 s after the CLI exited,
   3.6 s after the MCP idle reaper stopped Java, immediately after the MCP server exited, and — after `kill -9` of the
   MCP server, which leaves jdtls and the daemon running — at once on the next knot-lite start.
@@ -181,6 +183,7 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
 - **Pure Vector Search:** `search_hybrid_context` ranks by cosine similarity over int8 vectors. No BM25 keyword channel, no kind-aware re-ranking, and no graph boost.
 - **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again — except for a target that was pre-computed: it keeps its pre-computed answer (the note says when it was computed) until the next index. Unsaved edits are not sent to servers.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a call are asked; `explore_file` and `search_hybrid_context` do not use servers. Pre-computed answers do not report self-references.
+- **Java right after an edit:** jdtls updates its index in the background, so the first live answer after a Java file was edited (and `knot-lite index` re-run) can still describe the file as it was — measured on a one-module Maven project, the call hierarchy missed the new caller in 6 of 8 first sessions and the merged answer in 3 of 8; the next session was complete every time (8 of 8). Ask again, or use the heuristic edges (`--no-lsp`), which are rebuilt by the index.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
 - **Prefix Filters Only:** Path filters accept repo-relative directory prefixes (e.g. `src/api`). Glob patterns are rejected with a pinned diagnostic.
 
@@ -250,6 +253,8 @@ repository per instance. Example for opencode 2 (`opencode.jsonc`):
 make check                                  # fmt-check, clippy, every cargo test target, dupes
 make test-lib                               # fast loop: library unit tests only (not a gate)
 make check CRATE_DIR=docs/spikes/phase0     # the Phase 0 spike crate's own gate
+make e2e                                    # the end-to-end suites (real language servers, see below)
+make check-all                              # make check + make e2e
 ```
 
 The measurement gates (M1/M4/M5/M6 and the Phase 3 L1/L2/L3/L7, `#[ignore]`d in `src/measure.rs`) run
@@ -261,6 +266,38 @@ KNOT_LITE_SANDBOX=~/.local/share/knot-lite/sandbox \
 KNOT_LITE_MEASURE_OUT=~/.local/share/knot-lite/measure \
 cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
 ```
+
+## End-to-end tests
+
+`make e2e` runs `tests/run_all_e2e.sh`: four suites — `tests/run_{rust,typescript,javascript,java}_e2e.sh` — each on a
+small fixture (`tests/e2e/fixtures/`) that is **copied** to `$KNOT_LITE_E2E_HOME/work/<suite>/` and indexed there.
+Every suite drives the release binaries through the CLI and through an MCP stdio session, with the real language
+server: `index`, `status`, `files`, `explore`, `search`, `callers` (heuristic, live, pre-computed, stale target,
+unresolvable server), the MCP tools and their error paths. The Java suite also runs a Gradle project and proves that
+the Gradle daemon is stopped after a CLI exit, after the MCP idle stop, after the MCP exit, and — after `kill -9` of
+the MCP server — by the next start. A suite ends with a check that no process was left behind. They are not part of
+`make check` (they start real servers and take about 5 minutes with warm caches — Java dominates — and longer the first time); a suite also runs alone,
+e.g. `./tests/run_rust_e2e.sh`.
+
+Needs: bash (3.2+), `jq`, a release build (made unless `KNOT_LITE_E2E_SKIP_BUILD=1`), and the servers —
+`rust-analyzer`, `typescript-language-server` with a `typescript` package that ships `lib/tsserver.js`, `jdtls` and a
+cached Gradle 8.9 (`~/.gradle/wrapper/dists/gradle-8.9-bin`). Linux and macOS; no network. A missing server skips only
+the language-server rows of its suite (`SKIP` with the reason); `KNOT_LITE_E2E_REQUIRE_LSP=1` and
+`KNOT_LITE_E2E_REQUIRE_GRADLE=1` turn skips into failures.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `KNOT_LITE_E2E_HOME` | `~/.local/share/knot-lite/e2e` | work copies, outputs (`run/<suite>/`), language-server cache, empty config |
+| `KNOT_LITE_E2E_SKIP_BUILD` | `0` | `1`: use the existing `target/release/knot-lite{,-mcp}` |
+| `KNOT_LITE_E2E_REQUIRE_LSP` | `0` | `1`: a missing server or TypeScript package fails instead of skipping |
+| `KNOT_LITE_E2E_REQUIRE_GRADLE` | `0` | `1`: a missing cached Gradle 8.9 fails the Gradle rows |
+| `KNOT_LITE_E2E_TYPESCRIPT` | global install | a `typescript` package directory to link into the TS/JS work copies; the global TypeScript 7 has no `lib/tsserver.js` and `typescript-language-server` cannot start with it |
+| `KNOT_LITE_E2E_KEEP` | `1` | `0`: delete `work/<suite>` after a green suite |
+| `KNOT_LITE_E2E_LSP_TIMEOUT` | `300` | seconds the MCP checks poll for an `lsp-live` answer |
+
+Each check prints one line (`PASS` / `FAIL` / `SKIP`), a failure adds the expected and the actual value and the file
+under `$KNOT_LITE_E2E_HOME/run/<suite>/` that holds the answer, and a suite ends with
+`-- <suite>: N passed, N failed, N skipped (N s)`. The exit status is 0 only when nothing failed.
 
 ## Plans & Conventions
 

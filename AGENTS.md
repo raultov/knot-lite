@@ -7,14 +7,16 @@ absent in a fresh clone. This file is the standing contract.
 ## Ground rules
 
 1. **Write only inside** this repository (plus `~/.local/share/knot-lite/`, the
-   persistent home of the measurement sandbox, outputs and hand-off notes — never
+   persistent home of the measurement sandbox, outputs, hand-off notes and the E2E home
+   `e2e/` with its work copies — never
    keep useful artefacts in a temp directory, and point `KNOT_LITE_LSP_CACHE_DIR`
    there for every run that starts a real language server). Only `index` writes into
    the analysed repository and only under `.knot-lite/`; the language servers' own
    scratch (`<cache>/<repo key>/`: rust-analyzer target dir, jdtls workspace, logs) is
    the one other place knot-lite makes them write to. A real language server must never
    leave a file in the repository: `autobuild` stays off for jdtls (it compiles into
-   `target/` otherwise) and L5 proves it.
+   `target/` otherwise) and L5 proves it. (jdtls may create the two empty output
+   directories of a Maven module; no file.)
    Never write into `../knot`, `~/.knot/repos/*` or any other repository. Read-only
    runs of `knot-lite status` on other checkouts are allowed. Never run `index` against `~/.knot/repos/*`.
 2. **Rust:** edition 2024; **no `unsafe`** (denied in `Cargo.toml`); **no `#[allow]`**;
@@ -25,9 +27,13 @@ absent in a fresh clone. This file is the standing contract.
 4. **Cross-platform:** paths via `std::path`; no shelling out from Rust, except
    `src/lsp/process.rs`, which starts the language servers (the only module allowed to
    spawn them), and the test fixtures' `git init`; Windows executables via `PATHEXT`.
+   Process signalling happens only in `src/lsp/process.rs` and `src/lsp/owner.rs`, and only
+   for processes carrying the ownership mark of the server that started them (never by name).
 5. **Unit tests inside library modules** (`#[cfg(test)] mod tests`). Binaries stay
-   thin; their logic lives in the library. The only test outside `src/` is
-   `tests/mcp_stdio.rs` (the transport cannot be covered by lib tests). Hermetic gate:
+   thin; their logic lives in the library. The only Rust test outside `src/` is
+   `tests/mcp_stdio.rs` (the transport cannot be covered by lib tests). The shell E2E
+   suites (`tests/run_*_e2e.sh`, `tests/e2e/lib.sh`) start real language servers and are
+   not part of `make check`; run them with `make e2e`. Hermetic gate:
    tests in `src/` never download models, access network, start a real language server
    (an in-process scripted fake, `lsp/fake.rs`, speaks LSP instead; `config_for` turns
    servers off), or read `~/.knot` / the sandbox.
@@ -64,18 +70,23 @@ src/
 ├── config.rs         Config, OutputFormat, CommonArgs, EmbedSettings, pure resolver
 ├── error.rs          IndexUnavailable, QueryUnavailable (typed diagnostics, exit code 2)
 ├── utils.rs          logging (stderr only)
-├── measure.rs        #[cfg(test)] #[ignore] measurement gates M1–M8 (Phase 2) and L1–L7 (Phase 3)
+├── measure.rs        #[cfg(test)] #[ignore] measurement gates M1–M8 (Phase 2) and L1–L12 (Phases 3–4)
 ├── models/           cli_args (clap), params (run_* contracts), repo_scope
 ├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load
 ├── embed/            EmbedBatch trait, EmbedSettings, FakeEmbedder, KnotEmbedder
 ├── graph/            containers (ContainerTable), heuristic (resolve_edges), fanin (caller_fanin)
 ├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters, render, search, callers + sources (indexed / live / heuristic per target), explore, files
-├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
+├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker; one lock per language), owner (ownership mark + sweeps), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
 ├── capability/       language labels, which(), lsp_registry, scan, tier model
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)
 ├── mcp_handler.rs    tools() + dispatch() + ServerHandler
 └── bin/              knot-lite (CLI), knot-lite-mcp (stdio server)
+tests/
+├── mcp_stdio.rs      the stdio transport (Rust, part of `make check`)
+├── run_all_e2e.sh    orchestrator of the E2E suites (`make e2e`)
+├── run_{rust,typescript,javascript,java}_e2e.sh   one suite per language (Java also runs Gradle)
+└── e2e/              lib.sh (helpers, sourced) and fixtures/ (copied to the E2E home, never used in place)
 ```
 
 ## Gates
@@ -85,6 +96,8 @@ make check                                  # fmt-check, clippy, cargo test (all
 make test-lib                               # fast loop, not a gate
 make check CRATE_DIR=docs/spikes/phase0     # the Phase 0 spike crate
 make dupes-cleanup                          # stale duplication suppressions
+make e2e                                    # the end-to-end suites (real servers; not in `make check`)
+make check-all                              # make check + make e2e
 ```
 
 Duplication must stay at **0** (see `dupes.toml`): extract a shared, parameterised

@@ -25,6 +25,7 @@
 # Measured curve: 4 -> 45 | 5 -> 19 | 6 -> 6 | 7 -> 0
 # knot-lite measured curve (Phase 1, 2026-10-04): 3 -> 12 | 4 -> 6 | 5 -> 0
 # knot-lite measured curve (Phase 3, 2026-10-07, with the LSP layer and its tests): 4 -> 33 | 5 -> 0
+# knot-lite measured curve (Phase 4, 2026-10-09; root crate / Phase 0 spike): 3 -> 72 / 47 | 4 -> 27 / 16 | 5 -> 0 / 0
 # Unchanged: 5 stays the only value with zero violations.
 # The repo's real maximum is 7, so the distribution is narrow. 4 is
 # disproportionate, 6 barely helps. 5 is the useful point.
@@ -34,6 +35,7 @@ too-many-arguments-threshold = 5
 # Measured curve: 150 -> 10 | 200 -> 1 | 250 -> 0
 # knot-lite measured curve (Phase 1, 2026-10-04): 100 -> 10 | 150 -> 6 | 200 -> 0
 # knot-lite measured curve (Phase 3, 2026-10-07): 150 -> 17 | 200 -> 0 (unchanged)
+# knot-lite measured curve (Phase 4, 2026-10-09; root / spike): 100 -> 68 / 23 | 150 -> 17 / 4 | 200 -> 0 / 0 (unchanged)
 # 200 costs a single violation and already improves on the default.
 # Later target: 150 — NOT yet applied: the knot-lite measurement at 150 is 6
 # violations, and this file only ever tightens to a value with 0 violations.
@@ -45,6 +47,7 @@ type-complexity-threshold = 200
 # Measured curve: 3 -> 519 | 4 -> 220 | 5 -> 77 | 6 -> 26
 # knot-lite measured curve (Phase 1, 2026-10-04): 4 -> 0 | 5 -> 0 | 6 -> 0
 # knot-lite measured curve (Phase 3, 2026-10-07): 4 -> 21 | 5 -> 0 (unchanged)
+# knot-lite measured curve (Phase 4, 2026-10-09; root / spike): 3 -> 113 / 37 | 4 -> 17 / 5 | 5 -> 0 / 0 (unchanged)
 # 6 is the only manageable entry point for knot. Later target: 5 — applied for
 # knot-lite (0 violations at 5; the code nests at most 4 deep).
 excessive-nesting-threshold = 5
@@ -56,6 +59,7 @@ excessive-nesting-threshold = 5
 #   50 -> 103 | 80 -> 17 | 100 -> 0
 # knot-lite measured curve (Phase 1, 2026-10-04): 50 -> 1 | 80 -> 0 | 100 -> 0
 # knot-lite measured curve (Phase 3, 2026-10-07): 80 -> 5 | 90 -> 5 | 95 -> 0 | 100 -> 0 (longest function: 94 lines).
+# knot-lite measured curve (Phase 4, 2026-10-09; root / spike): 80 -> 3 / 6 | 90 -> 3 / 2 | 95 -> 0 / 2 | 100 -> 0 / 0 (unchanged).
 # Threshold matches clippy's own default. After the 2026-09 refactor pass
 # no function exceeds 100 lines: the previous backlog (worst offender 421)
 # was split into helpers instead of suppressed, and the blanket
@@ -70,6 +74,7 @@ too-many-lines-threshold = 100
 #   15 -> 28 | 20 -> 8 | 25 -> 6 | 30 -> 4 | 40 -> 2
 # knot-lite measured curve (Phase 1, 2026-10-04): 10 -> 2 | 15 -> 0 | 20 -> 0
 # knot-lite measured curve (Phase 3, 2026-10-07): 15 -> 1 | 20 -> 0 (unchanged; the single function above 15 scores 19, a stdio test session)
+# knot-lite measured curve (Phase 4, 2026-10-09; root / spike): 10 -> 17 / 3 | 15 -> 2 / 0 | 20 -> 0 / 0 (unchanged).
 #
 # NOTE: tracing macros inflate the score by +7 per macro call because the
 # `tracing/log` feature is enabled transitively (axum → tower/log → tracing/log) via
