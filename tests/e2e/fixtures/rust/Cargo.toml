@@ -1,0 +1,11 @@
+[package]
+name = "e2e_shapes"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Standalone: never part of the knot-lite package.
+[workspace]
+
+[lib]
+path = "src/lib.rs"

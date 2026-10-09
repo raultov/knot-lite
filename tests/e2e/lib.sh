@@ -29,6 +29,7 @@ e2e_init() {
   mkdir -p "$E2E_RUN/cli" "$E2E_RUN/mcp" "$E2E_WORK" "$E2E_HOME/config" "$E2E_HOME/lsp-cache"
   export KNOT_LITE_CONFIG_DIR="$E2E_HOME/config" KNOT_LITE_LSP_CACHE_DIR="$E2E_HOME/lsp-cache"
   unset KNOT_LITE_REPO_PATH KNOT_LITE_REPO_NAME KNOT_LITE_LSP KNOT_LITE_LSP_RUST KNOT_LITE_LSP_TS KNOT_LITE_LSP_JAVA RUST_LOG
+  E2E_FIXTURES_SUM="$(fixtures_sum)"
   echo "== knot-lite E2E: $E2E_SUITE =="
   trap 'e2e_on_exit' EXIT
 }
@@ -39,10 +40,13 @@ prepare_work() {
   rm -rf "$dst"; mkdir -p "$dst"; cp -R "$src/." "$dst/"; printf '%s\n' "$dst"
 }
 
-# link_typescript <work dir>: node_modules/typescript → global install; returns 1 when unavailable.
+# link_typescript <work dir>: node_modules/typescript → a TypeScript package that ships lib/tsserver.js, taken from
+# KNOT_LITE_E2E_TYPESCRIPT or else the global install; returns 1 when none qualifies. The file matters:
+# typescript-language-server cannot start with a package without it (the native TypeScript 7 package has none).
 link_typescript() {
-  command -v npm >/dev/null 2>&1 || return 1
-  local g; g="$(npm root -g 2>/dev/null)/typescript"; [ -d "$g" ] || return 1
+  local g="${KNOT_LITE_E2E_TYPESCRIPT:-}"
+  if [ -z "$g" ] && command -v npm >/dev/null 2>&1; then g="$(npm root -g 2>/dev/null)/typescript"; fi
+  [ -n "$g" ] && [ -f "$g/lib/tsserver.js" ] || return 1
   mkdir -p "$1/node_modules"; ln -s "$g" "$1/node_modules/typescript"
 }
 
@@ -58,12 +62,26 @@ lsp_available() {
 lsp_or_skip() {
   local why=""
   if ! lsp_available "$3"; then why="$E2E_LSP_WHY"
-  elif [ "$3" = ts ] && [ -n "${E2E_TS_MISSING:-}" ]; then why="typescript package not resolvable"
+  elif [ "$3" = ts ] && [ -n "${E2E_TS_MISSING:-}" ]; then why="no TypeScript package with lib/tsserver.js (global install or KNOT_LITE_E2E_TYPESCRIPT)"
   else return 0; fi
   if [ "${KNOT_LITE_E2E_REQUIRE_LSP:-0}" = "1" ]; then
     fail "$1" "$2" "$why (KNOT_LITE_E2E_REQUIRE_LSP=1)"
   else
     skip "$1" "$2: $why (set KNOT_LITE_E2E_REQUIRE_LSP=1 to fail)"
+  fi
+  return 1
+}
+
+# gradle_or_skip <id> <title> → 0 run the check; 1 skipped (or failed in strict mode). Needs jdtls
+# (KNOT_LITE_E2E_REQUIRE_LSP rule) and a cached Gradle 8.9 distribution (KNOT_LITE_E2E_REQUIRE_GRADLE rule).
+gradle_or_skip() {
+  lsp_or_skip "$1" "$2" java || return 1
+  local dists="${GRADLE_USER_HOME:-$HOME/.gradle}/wrapper/dists/gradle-8.9-bin"
+  if ls -d "$dists"/*/gradle-8.9 >/dev/null 2>&1; then return 0; fi
+  if [ "${KNOT_LITE_E2E_REQUIRE_GRADLE:-0}" = "1" ]; then
+    fail "$1" "$2" "Gradle 8.9 is not cached in $dists (KNOT_LITE_E2E_REQUIRE_GRADLE=1)"
+  else
+    skip "$1" "$2: Gradle 8.9 is not cached in $dists (set KNOT_LITE_E2E_REQUIRE_GRADLE=1 to fail)"
   fi
   return 1
 }
@@ -75,6 +93,32 @@ run_cli() {
   local rc=0
   env ${envs[@]+"${envs[@]}"} "$KL" "$@" > "$E2E_RUN/cli/$id.json" 2> "$E2E_RUN/cli/$id.err" || rc=$?
   printf '%s\n' "$rc" > "$E2E_RUN/cli/$id.rc"; printf '%s\n' "$rc"
+}
+
+# ---- shortcuts for the language suites (not in Appendix C; they only remove copy-paste) ----
+# use_repo <dir>: the work copy the shortcuts below operate on.
+use_repo() { E2E_REPO="$1"; }
+# cli <id> [ENV=VAL ...] -- <args...>: run_cli on $E2E_REPO.
+cli() {
+  local id="$1"; shift; local envs=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
+  run_cli "$id" ${envs[@]+"${envs[@]}"} -- --repo-path "$E2E_REPO" "$@"
+}
+# J <id> / E <id> → the stdout / stderr file of a CLI run.
+J() { printf '%s\n' "$E2E_RUN/cli/$1.json"; }
+E() { printf '%s\n' "$E2E_RUN/cli/$1.err"; }
+# text_in <id> <title> <file> <extended regex>
+text_in() { if grep -Eq -- "$4" "$3"; then pass "$1" "$2"; else fail "$1" "$2" "no match for: $4" "file: $3"; fi; }
+# live_exact <id> <query> <expected function-level set> [<allowed file rows JSON, default none>]
+live_exact() {
+  local id="$1" query="$2" expected="$3" allowed="${4:-[]}" rc
+  rc="$(cli "$id" -- callers "$query" -o json)"; assert_rc "$id" "callers $query exits 0" 0 "$rc"
+  assert_jq "$id" "$query is answered live (lsp.status ok)" "$(J "$id")" \
+    '.targets[0].provenance == "lsp-live" and .targets[0].lsp.status == "ok"'
+  assert_set_eq "$id" "$query: function-level callers equal the exact set" "$expected" "$(function_set "$(J "$id")")"
+  assert_jq "$id" "$query: file-level rows only where allowed" "$(J "$id")" \
+    '([.targets[0].callers[]?[]? | select(.name == "<file>" or .name == "<module>") | .file] - $allowed) == []' \
+    --argjson allowed "$allowed"
 }
 
 # assert_rc <id> <title> <expected> <actual>
@@ -89,9 +133,11 @@ assert_jq() {
 
 # caller_set <file> [target index] → JSON array of sorted unique "file#name" (all relations).
 caller_set() { jq -c --argjson i "${2:-0}" '[.targets[$i].callers[]?[]? | "\(.file)#\(.name)"] | unique' "$1"; }
-# function_set: caller_set without file-level rows; file_rows: only "<file>" rows' files.
-function_set() { jq -c --argjson i "${2:-0}" '[.targets[$i].callers[]?[]? | select(.name != "<file>") | "\(.file)#\(.name)"] | unique' "$1"; }
-file_rows() { jq -c --argjson i "${2:-0}" '[.targets[$i].callers[]?[]? | select(.name == "<file>") | .file] | unique' "$1"; }
+# function_set: caller_set without file-level rows; file_rows: the files of the file-level rows only. A reference
+# outside any function (an import, a `use`) is attributed to the file: as "<file>" when nothing encloses it, as
+# "<module>" when the parser made a module-level entity for the file (TypeScript and JavaScript do).
+function_set() { jq -c --argjson i "${2:-0}" '[.targets[$i].callers[]?[]? | select(.name != "<file>" and .name != "<module>") | "\(.file)#\(.name)"] | unique' "$1"; }
+file_rows() { jq -c --argjson i "${2:-0}" '[.targets[$i].callers[]?[]? | select(.name == "<file>" or .name == "<module>") | .file] | unique' "$1"; }
 
 # assert_set_eq <id> <title> <expected JSON array> <actual JSON array>
 assert_set_eq() {
@@ -119,7 +165,7 @@ mcp_send() { ( printf '%s\n' "$1" >&9 ) 2>/dev/null || { echo "mcp: the server i
 mcp_meta() { jq -n -c --arg pv "$E2E_PROTOCOL" '{"io.modelcontextprotocol/protocolVersion":$pv,"io.modelcontextprotocol/clientCapabilities":{}}'; }
 # mcp_request <id> <method>
 mcp_request() { mcp_send "$(jq -n -c --argjson id "$1" --arg m "$2" --argjson meta "$(mcp_meta)" '{jsonrpc:"2.0",id:$id,method:$m,params:{_meta:$meta}}')"; }
-# mcp_call <id> <tool> <arguments JSON>
+# mcp_call <id> <tool> <arguments JSON> (ids are unique within a session: mcp_wait returns the first answer with that id)
 mcp_call() { mcp_send "$(jq -n -c --argjson id "$1" --arg t "$2" --argjson a "$3" --argjson meta "$(mcp_meta)" '{jsonrpc:"2.0",id:$id,method:"tools/call",params:{name:$t,arguments:$a,_meta:$meta}}')"; }
 # mcp_wait <id> <timeout s> → writes $E2E_MCP_DIR/<id>.json; returns 1 on timeout or when the server died.
 mcp_wait() {
@@ -134,6 +180,21 @@ mcp_wait() {
 }
 # mcp_structured <id> → path of a file holding the structuredContent of the response.
 mcp_structured() { jq '.result.structuredContent' "$E2E_MCP_DIR/$1.json" > "$E2E_MCP_DIR/$1.sc.json"; printf '%s\n' "$E2E_MCP_DIR/$1.sc.json"; }
+E2E_MCP_SEQ=100
+# mcp_wait_live <entity> <timeout s> → 0 once find_callers answers lsp-live; sets E2E_LIVE_SECS and the
+# structuredContent file E2E_LAST_SC of the last answer. Polls every 2 s (a starting server answers not_ready).
+mcp_wait_live() {
+  local entity="$1" limit="$2" t0; t0=$(date +%s); E2E_LAST_SC=""; E2E_LIVE_SECS=0
+  while [ $(( $(date +%s) - t0 )) -lt "$limit" ]; do
+    E2E_MCP_SEQ=$((E2E_MCP_SEQ + 1))
+    mcp_call "$E2E_MCP_SEQ" find_callers "$(jq -n -c --arg e "$entity" '{entity_name:$e}')" || return 1
+    mcp_wait "$E2E_MCP_SEQ" 90 || return 1
+    E2E_LAST_SC="$(mcp_structured "$E2E_MCP_SEQ")"; E2E_LIVE_SECS=$(( $(date +%s) - t0 ))
+    if jq -e '.targets[0].provenance == "lsp-live"' "$E2E_LAST_SC" >/dev/null 2>&1; then return 0; fi
+    sleep 2
+  done
+  return 1
+}
 # mcp_stop [timeout s] → 0 exited by itself after EOF; 1 had to be killed.
 mcp_stop() {
   exec 9>&-
@@ -161,6 +222,13 @@ server_procs_in() {
     case "$(proc_cwd "$pid")" in "$1"*) printf '%s\n' "$pid";; esac
   done
 }
+# marked_gradle_daemons → pids of Gradle daemons that carry our ownership mark. Gradle strips -D options from a
+# daemon's command line, so the mark is the `gradle-owner-<token>` of its -XX:ErrorFile path.
+marked_gradle_daemons() { pgrep -f '[g]radle-owner-.*GradleDaemon' 2>/dev/null | sort || true; }
+# force_gradle_sync <project dir>: jdtls only calls Gradle (and so starts a daemon) when the project changed since
+# its workspace last saw it; a warm workspace with an untouched build file never does, and a check about the
+# daemon would pass without exercising anything. Removing .gradle/ alone is not enough (measured, P4.7).
+force_gradle_sync() { rm -rf "$1/.gradle"; touch "$1/build.gradle" "$1/settings.gradle"; }
 gradle_daemons() { pgrep -f '[G]radleDaemon' 2>/dev/null | sort || true; }
 e2e_baseline() { gradle_daemons > "$E2E_RUN/gradle-baseline.txt"; }
 # assert_no_orphans <id> [grace s]: polls up to grace for servers under the suite's work dir,
@@ -174,10 +242,15 @@ assert_no_orphans() {
     sleep 0.2; n=$((n + 1))
   done
 }
-# fixtures_unchanged <id>
+# fixtures_sum → checksum of every file under tests/e2e/fixtures (POSIX cksum: Linux and macOS).
+fixtures_sum() {
+  (cd "$E2E_FIXTURES" 2>/dev/null && find . -type f | LC_ALL=C sort | while IFS= read -r f; do cksum "$f"; done | cksum)
+}
+# fixtures_unchanged <id>: the committed fixtures are exactly what they were when the suite started (a suite
+# works on copies; a changed or added file means something was pointed at the fixture itself). Taken against the
+# start of the suite instead of `git status`, so it also holds while the fixtures are not committed yet.
 fixtures_unchanged() {
-  local changed; changed="$(cd "$E2E_REPO_ROOT" && git status --porcelain -- tests/e2e/fixtures)"
-  if [ -z "$changed" ]; then pass "$1" "fixtures untouched"; else fail "$1" "fixtures changed" "$changed"; fi
+  if [ "$(fixtures_sum)" = "$E2E_FIXTURES_SUM" ]; then pass "$1" "fixtures untouched"; else fail "$1" "fixtures changed during the suite" "in $E2E_FIXTURES"; fi
 }
 
 e2e_on_exit() {
