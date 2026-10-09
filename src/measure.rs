@@ -1429,30 +1429,18 @@ struct L11Parallel {
     rust_end_at: Instant,
 }
 
-/// Load the polyglot index, start the pool, and wait for the Java slot.
-fn l11_setup() -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
-    let root = std::env::var("KNOT_LITE_L11_REPO").expect("KNOT_LITE_L11_REPO is required");
-    let root = PathBuf::from(root).canonicalize().expect("polyglot repo");
-    let index = load_index(&IndexLayout::for_repo(&root)).expect("load the polyglot index");
+/// Load the index of the repository named by `var` and create the pool. The pool
+/// starts no server: the first query of a language does.
+fn pool_for_repo(var: &str) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
+    let root = std::env::var(var).unwrap_or_else(|_| panic!("{var} is required"));
+    let root = PathBuf::from(root).canonicalize().expect("measured repo");
+    let index = load_index(&IndexLayout::for_repo(&root)).expect("load the measured index");
     let settings = measurement_settings();
     let files: Vec<String> = index.file_sha16.keys().cloned().collect();
     let mut cfg = crate::config::test_support::config_for(root.clone());
     cfg.lsp = settings.clone();
     let pool = start_pool(&cfg, &files, CLI_READY_WAIT, Some(index.stamp.clone())).expect("pool");
-    l11_wait_for_java_ready(&pool);
     (index, settings, root, pool)
-}
-
-/// Wait until the Java pool slot reaches `ready` (jdtls Gradle import).
-fn l11_wait_for_java_ready(pool: &crate::lsp::pool::LspPool) {
-    let ready_deadline = Instant::now() + Duration::from_secs(120);
-    while Instant::now() < ready_deadline {
-        let snap = pool.snapshot();
-        if snap.slots.get("java").map(|s| s.state.as_str()) == Some("ready") {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    }
 }
 
 /// Warm both languages (the cold starts are not part of the assertion);
@@ -1598,13 +1586,127 @@ fn l11_check_invariants(parallel: &L11Parallel) {
 #[test]
 #[ignore = "L11: needs the polyglot repository (KNOT_LITE_L11_REPO) and real rust-analyzer + jdtls (minutes)"]
 fn l11_languages_run_in_parallel() {
-    let (index, settings, root, pool) = l11_setup();
+    let (index, settings, root, pool) = pool_for_repo("KNOT_LITE_L11_REPO");
     let warm_ms = l11_warm_up(&index, &settings, &root, &pool);
     let parallel = l11_run_parallel(&index, &settings, &root, &pool);
     drop(index);
     let _ = warm_ms;
     l11_write_report(&parallel);
     l11_check_invariants(&parallel);
+}
+
+/// The Gradle daemons running now: `(pid, carries a knot-lite owner mark)`. The
+/// mark is on the command line (`gradle-owner-<token>` in the `-XX:ErrorFile`
+/// path) and in the environment (`KNOT_LITE_LSP_OWNER`).
+fn gradle_daemons() -> Vec<(u32, bool)> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_cmd(UpdateKind::Always)
+            .with_environ(UpdateKind::Always)
+            .without_tasks(),
+    );
+    let owner_env = format!("{}=", crate::lsp::owner::OWNER_ENV);
+    let mut found: Vec<(u32, bool)> = system
+        .processes()
+        .iter()
+        .filter(|(_, p)| {
+            p.cmd().iter().any(|arg| {
+                arg.to_string_lossy()
+                    .contains("org.gradle.launcher.daemon.bootstrap.GradleDaemon")
+            })
+        })
+        .map(|(pid, p)| {
+            let on_cmd = p
+                .cmd()
+                .iter()
+                .any(|arg| arg.to_string_lossy().contains("gradle-owner-"));
+            let in_env = p
+                .environ()
+                .iter()
+                .any(|entry| entry.to_string_lossy().starts_with(&owner_env));
+            (pid.as_u32(), on_cmd || in_env)
+        })
+        .collect();
+    found.sort_unstable();
+    found
+}
+
+/// A warm jdtls workspace with an unchanged build file never calls Gradle, so no
+/// daemon would start: drop the project's `.gradle/` and touch its build files,
+/// which makes jdtls synchronise the project again.
+fn force_gradle_sync(project: &Path) {
+    let _ = std::fs::remove_dir_all(project.join(".gradle"));
+    for name in ["build.gradle", "settings.gradle"] {
+        if let Ok(file) = std::fs::File::options()
+            .write(true)
+            .open(project.join(name))
+        {
+            file.set_modified(std::time::SystemTime::now())
+                .expect("touch the build file");
+        }
+    }
+}
+
+/// Poll until no Gradle daemon is left beyond `baseline`; the seconds it took.
+fn wait_daemons_gone(baseline: &[u32], limit: Duration) -> Option<f64> {
+    let started = Instant::now();
+    while started.elapsed() < limit {
+        if gradle_daemons()
+            .iter()
+            .all(|(pid, _)| baseline.contains(pid))
+        {
+            return Some(started.elapsed().as_secs_f64());
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    None
+}
+
+#[test]
+#[ignore = "L12: needs a Gradle project jdtls can import (KNOT_LITE_L12_REPO, indexed) and its Java entity (KNOT_LITE_L12_TARGET); real jdtls + Gradle (minutes)"]
+fn l12_gradle_daemon_is_stopped() {
+    let target = std::env::var("KNOT_LITE_L12_TARGET").expect("KNOT_LITE_L12_TARGET is required");
+    force_gradle_sync(Path::new(
+        &std::env::var("KNOT_LITE_L12_REPO").expect("KNOT_LITE_L12_REPO is required"),
+    ));
+    let baseline: Vec<u32> = gradle_daemons().into_iter().map(|(pid, _)| pid).collect();
+    let (index, settings, root, pool) = pool_for_repo("KNOT_LITE_L12_REPO");
+
+    let (response, live_ms) = timed_callers(&index, &settings, &root, &target, Some(&pool));
+    let provenance = response.targets.first().map(|t| t.provenance);
+    let marked: Vec<u32> = gradle_daemons()
+        .into_iter()
+        .filter(|(_, carries_mark)| *carries_mark)
+        .map(|(pid, _)| pid)
+        .collect();
+    // Stopping the pool is what a CLI exit does.
+    drop(pool);
+    let gone_after = wait_daemons_gone(&baseline, Duration::from_secs(20));
+    let report = serde_json::json!({
+        "target": target,
+        "provenance": provenance,
+        "live_ms": live_ms,
+        "baseline_daemons": baseline,
+        "marked_daemons_while_running": marked,
+        "daemons_gone_after_s": gone_after,
+    });
+    let text = serde_json::to_string_pretty(&report).expect("json");
+    std::fs::write(measure_out_dir().join("l12_inprocess.json"), text).expect("write");
+
+    assert_eq!(provenance, Some("lsp-live"), "the target is answered live");
+    assert!(
+        !marked.is_empty(),
+        "no GradleDaemon carrying the owner mark was seen while jdtls ran"
+    );
+    assert!(
+        gone_after.is_some(),
+        "a marked GradleDaemon outlived the pool: {:?}",
+        gradle_daemons()
+    );
 }
 
 #[test]

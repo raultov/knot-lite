@@ -113,7 +113,9 @@ you would open in an editor. Set `KNOT_LITE_LSP_BUILD_EXEC=off` to disable rust-
 proc-macros and jdtls's Gradle import (accuracy drops where code is generated), or `KNOT_LITE_LSP=off` to never
 start a server (pre-computed results are still read). jdtls is started with its auto-build off so that it does
 not compile into `target/` of your modules, and with Eclipse metadata files disabled; on a Maven repository
-(`spring-ai`) the working tree was measured byte-identical before and after. **Gradle projects while build execution is on**:
+(`spring-ai`) the working tree was measured byte-identical before and after (every file; directories are not
+compared). On a one-module Maven project jdtls does create its two empty output directories, `target/classes` and
+`target/test-classes` — no file is written there, and Maven repositories ignore `target/`. **Gradle projects while build execution is on**:
 jdtls runs Gradle on them, which writes a `.gradle/` project cache into the project and may download a Gradle
 distribution into `~/.gradle` (as any IDE does). The Gradle daemon it starts is **private to that jdtls session**
 (a unique JVM argument of ours makes it incompatible with your own builds, so one never attaches to it) and is
@@ -154,10 +156,30 @@ Measured with the release build on the same three repositories (see `docs/PLAN_P
   (`KNOT_LITE_LSP=off`) the Phase 2 numbers hold: hit@5 75.0 / 80.0 / 83.3 %, load median 17 ms (`knot`), 3 ms
   (`knot-site`), 176 ms (`spring-ai`).
 
+## Performance & Baselines (Phase 4 Measurements)
+
+Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories, plus a polyglot repository
+(`spring-ai` and a Rust crate) and a one-class Gradle project (see `docs/PLAN_PHASE4_HARDENING_E2E.md`, Appendix D):
+
+- **Pre-computed (`lsp-indexed`), re-measured:** p95 13 ms per target and 10/10 targets identical to the live answer.
+  The default `auto` policy computed 141 of 144 Java targets (17 850 edges) inside its 600 s budget on an otherwise
+  idle machine (Phase 3: 176 of 178, 18 277 edges — the budget is wall-clock, so how far the ranked list gets
+  depends on the machine). The selection is reproducible: with a 1 500 s budget two independent runs selected the
+  same 200 targets (197 answered, 20 956 edges both times), and the 144 of the 600 s run are a prefix of them.
+  Warm re-index: 8.9 s, no server started.
+- **Parallel languages:** while a Java target took 16 s live, five Rust queries on the same repository answered in
+  40–75 ms each, and `status` took at most 42 ms (63 samples) with the Java server `ready`.
+- **Gradle:** a Gradle project answers `lsp-live` (7 s warm, 43 s on the first run). In every scenario the Gradle
+  daemon carried the ownership mark while the server ran and none was left afterwards: 10 s after the CLI exited,
+  3.6 s after the MCP idle reaper stopped Java, immediately after the MCP server exited, and — after `kill -9` of the
+  MCP server, which leaves jdtls and the daemon running — at once on the next knot-lite start.
+- **Live latency after the pool rewrite:** unchanged — p95 46 ms (Rust, `knot`) and 28 ms (TypeScript, `knot-site`),
+  20/20 and 21/21 targets identical to the independent client.
+
 ## Limitations
 
 - **Pure Vector Search:** `search_hybrid_context` ranks by cosine similarity over int8 vectors. No BM25 keyword channel, no kind-aware re-ranking, and no graph boost.
-- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again; unsaved edits are not sent to servers.
+- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again — except for a target that was pre-computed: it keeps its pre-computed answer (the note says when it was computed) until the next index. Unsaved edits are not sent to servers.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a call are asked; `explore_file` and `search_hybrid_context` do not use servers. Pre-computed answers do not report self-references.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
 - **Prefix Filters Only:** Path filters accept repo-relative directory prefixes (e.g. `src/api`). Glob patterns are rejected with a pinned diagnostic.
