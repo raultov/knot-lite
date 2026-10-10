@@ -5,8 +5,7 @@ edition = "2024"
 description = "Database-free code intelligence for one repository: file-based vectors + language-server call graph (built on knot's parsers)"
 authors = ["Raul Tovar <raultov@protonmail.com>"]
 license = "MIT"
-# Not published yet: the first crates.io release is the human's decision.
-publish = false
+repository = "https://github.com/raultov/knot-lite"
 
 [lints.rust]
 # Enforces the no-unsafe policy stated in AGENTS.md. `deny` rather than

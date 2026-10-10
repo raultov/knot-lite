@@ -3,7 +3,7 @@
 [![CI](https://github.com/raultov/knot-lite/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/raultov/knot-lite/actions/workflows/ci.yml)
 
 Database-free code intelligence for **one repository**: file-based vectors plus a
-language-server call graph, built on [knot](../knot)'s parsers. No Qdrant, no Neo4j,
+language-server call graph, built on [knot](https://github.com/raultov/knot)'s parsers. No Qdrant, no Neo4j,
 no services to run — an index lives in a single `.knot-lite/` directory inside the
 repository it describes.
 

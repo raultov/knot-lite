@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - unreleased
+## [0.5.0] - 2026-10-10
 
 ### Added
 - **Glob path filters:** `path` of `search_hybrid_context` and `list_files` accepts knot's glob language (`*` within a segment, `**` across segments, `?`); plain paths stay directory prefixes. Responses report `path_mode` (`prefix` / `glob`).
