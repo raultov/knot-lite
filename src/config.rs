@@ -23,14 +23,15 @@ pub const CONFIG_DIR_ENV: &str = "KNOT_LITE_CONFIG_DIR";
 /// Key selecting the ranking of `search_hybrid_context` (P5-D12).
 pub const SEARCH_ENV: &str = "KNOT_LITE_SEARCH";
 
-/// How `search_hybrid_context` ranks.
+/// How `search_hybrid_context` ranks. `vector` is the default: the hybrid
+/// ranking missed gate H1 on the held-out split (P5-D18) and ships opt-in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchMode {
     /// Recall pool, knot's kind-aware re-rank and the BM25 keyword channel.
-    #[default]
     Hybrid,
     /// Cosine only (the 0.4.x ranking).
+    #[default]
     Vector,
 }
 
@@ -39,24 +40,24 @@ pub enum SearchMode {
 pub struct SearchSettings {
     /// The mode in force.
     pub mode: SearchMode,
-    /// One line per invalid value (it falls back to `hybrid`).
+    /// One line per invalid value (it falls back to `vector`).
     pub warnings: Vec<String>,
 }
 
 /// Resolve [`SEARCH_ENV`]: `hybrid` or `vector` (trimmed, case-insensitive);
-/// unset or empty means `hybrid`; anything else warns and uses `hybrid`.
+/// unset or empty means `vector`; anything else warns and uses `vector`.
 pub fn resolve_search_settings(lookup: &dyn Fn(&str) -> Option<String>) -> SearchSettings {
     let raw = lookup(SEARCH_ENV).unwrap_or_default();
     match raw.trim().to_ascii_lowercase().as_str() {
-        "" | "hybrid" => SearchSettings::default(),
-        "vector" => SearchSettings {
-            mode: SearchMode::Vector,
+        "" | "vector" => SearchSettings::default(),
+        "hybrid" => SearchSettings {
+            mode: SearchMode::Hybrid,
             warnings: Vec::new(),
         },
         _ => SearchSettings {
-            mode: SearchMode::Hybrid,
+            mode: SearchMode::Vector,
             warnings: vec![format!(
-                "{SEARCH_ENV} = '{}' is not 'hybrid' or 'vector'; using hybrid",
+                "{SEARCH_ENV} = '{}' is not 'hybrid' or 'vector'; using vector",
                 raw.trim()
             )],
         },
@@ -600,16 +601,17 @@ mod tests {
             })
         };
         assert_eq!(with(None), SearchSettings::default());
-        assert_eq!(with(Some("  ")).mode, SearchMode::Hybrid);
-        assert_eq!(with(Some("Hybrid")).mode, SearchMode::Hybrid);
-        let vector = with(Some(" VECTOR "));
-        assert_eq!(vector.mode, SearchMode::Vector);
-        assert!(vector.warnings.is_empty());
+        assert_eq!(with(None).mode, SearchMode::Vector);
+        assert_eq!(with(Some("  ")).mode, SearchMode::Vector);
+        assert_eq!(with(Some("Vector")).mode, SearchMode::Vector);
+        let hybrid = with(Some(" HYBRID "));
+        assert_eq!(hybrid.mode, SearchMode::Hybrid);
+        assert!(hybrid.warnings.is_empty());
         let bad = with(Some("bm25"));
-        assert_eq!(bad.mode, SearchMode::Hybrid);
+        assert_eq!(bad.mode, SearchMode::Vector);
         assert_eq!(
             bad.warnings,
-            vec!["KNOT_LITE_SEARCH = 'bm25' is not 'hybrid' or 'vector'; using hybrid"]
+            vec!["KNOT_LITE_SEARCH = 'bm25' is not 'hybrid' or 'vector'; using vector"]
         );
     }
 }

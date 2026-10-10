@@ -246,13 +246,14 @@ mod tests {
 
     #[test]
     fn hybrid_mode_recalls_exact_text_with_both_channels() {
-        let (_tmp, cfg) = indexed();
+        let (_tmp, mut cfg) = indexed();
+        cfg.search.mode = crate::config::SearchMode::Hybrid;
         let value =
             run_search_hybrid_context(&cfg, &services(), &search(MAKEFILE_CHUNK)).expect("search");
         assert_eq!(value["provenance"], "hybrid");
         assert_eq!(value["ranking"]["mode"], "hybrid");
         assert_eq!(value["ranking"]["lexicon"], "full");
-        assert_eq!(value["ranking"]["keyword_weight"], 0.5);
+        assert_eq!(value["ranking"]["keyword_weight"], 1.0);
         let hits = value["results"].as_array().expect("results");
         let chunk = hits
             .iter()
@@ -284,7 +285,11 @@ mod tests {
         );
         assert_eq!(
             value["notes"][0],
-            "Hybrid ranking: cosine + BM25 keyword channel, knot's kind-aware re-rank and call-graph entry-point signal (weighted reciprocal-rank fusion)."
+            "Pure vector ranking (cosine over int8 vectors); no keyword channel or re-ranking."
+        );
+        assert_eq!(
+            value["provenance"], "vector",
+            "vector is the default (P5-D18)"
         );
     }
 
@@ -448,7 +453,8 @@ mod tests {
 
     #[test]
     fn search_v2_shape_and_internal_fields_never_serialised() {
-        let (_tmp, cfg) = indexed();
+        let (_tmp, mut cfg) = indexed();
+        cfg.search.mode = crate::config::SearchMode::Hybrid;
         let params = SearchParams {
             max_results: Some(8),
             ..search("helper calls target")

@@ -33,7 +33,7 @@ knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 | Tool | Capability | Provenance |
 |---|---|---|
 | `status` | Capability matrix (tiers 3/2/1/0 per language) + index details, counts, model, freshness; language-server state (running, version, memory, pre-computed or not) | — |
-| `search_hybrid_context` | Hybrid search over entities and tier-1 line-window chunks: recall pool + BM25 keyword channel, knot's kind-aware re-rank, reciprocal-rank fusion (`KNOT_LITE_SEARCH=vector`: cosine only) | `hybrid` / `vector` |
+| `search_hybrid_context` | Cosine top-k over entities and tier-1 line-window chunks (default), or opt-in hybrid ranking with `KNOT_LITE_SEARCH=hybrid`: recall pool + BM25 keyword channel, knot's kind-aware re-rank, reciprocal-rank fusion | `vector` / `hybrid` |
 | `find_callers` | knot's target tiers (exact FQN → FQN suffix → exact name → signature prefix → name prefix / fuzzy substring), container-level callers grouped by relationship; per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
 | `explore_file` | File entities grouped by family, with incoming-reference counts and markup summaries | — |
 | `list_files` | Indexed files with entity and chunk counts, prefix or glob filter | — |
@@ -182,7 +182,7 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
 
 ## Limitations
 
-- **Hybrid search without a database:** `search_hybrid_context` builds knot's candidate pool in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, orders it with knot's own re-rank (`rerank`, called from the knot crate) and fuses that order with the keyword order. The call-graph signal uses the heuristic `CALLS` edges only (not the pre-computed language-server edges). Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`. `KNOT_LITE_SEARCH=vector` restores the cosine-only ranking.
+- **Hybrid search is opt-in:** by default `search_hybrid_context` ranks by cosine similarity (as in 0.4.x). `KNOT_LITE_SEARCH=hybrid` turns on knot's candidate pool built in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, ordered by knot's own re-rank (`rerank`, called from the knot crate) and fused with the keyword order. On the Phase 5 query set the hybrid ranking gained 6.6 points of hit@5 over cosine on the held-out queries (83.3 % vs 76.7 %) — short of the 10-point bar this release required to make it the default — and lost one `knot-site` query; it is stronger on identifier queries and weaker on documentation/config questions, where knot's re-rank prefers definitions. The call-graph signal uses the heuristic `CALLS` edges only. Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`.
 - **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again — except for a target that was pre-computed: it keeps its pre-computed answer (the note says when it was computed) until the next index. Unsaved edits are not sent to servers.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a call are asked; `explore_file` and `search_hybrid_context` do not use servers. Pre-computed answers do not report self-references.
 - **Java right after an edit:** jdtls updates its index in the background, so the first live answer after a Java file was edited (and `knot-lite index` re-run) can still describe the file as it was — measured on a one-module Maven project, the call hierarchy missed the new caller in 6 of 8 first sessions and the merged answer in 3 of 8; the next session was complete every time (8 of 8). Ask again, or use the heuristic edges (`--no-lsp`), which are rebuilt by the index.
@@ -211,7 +211,7 @@ modified and the `.env` file is never written.
 | `KNOT_LITE_EMBED_MODEL` | embedding model name (`AllMiniLML6V2` default, fallback: `KNOT_EMBED_MODEL`) |
 | `KNOT_LITE_FASTEMBED_CACHE_DIR` | fastembed model cache directory (fallback: `KNOT_FASTEMBED_CACHE_DIR`, then `$HOME/.cache/knot-lite/fastembed`) |
 | `KNOT_LITE_CONFIG_DIR` | directory holding the `.env` file |
-| `KNOT_LITE_SEARCH` | `hybrid` (default) / `vector`: ranking of `search_hybrid_context` (`vector` = the 0.4.x cosine top-k); `status` shows the mode in force |
+| `KNOT_LITE_SEARCH` | `vector` (default, the 0.4.x cosine top-k) / `hybrid` (opt-in hybrid ranking): ranking of `search_hybrid_context`; `status` shows the mode in force |
 | `KNOT_LITE_LSP` | `on` (default) / `off`: master switch for starting language servers (pre-computed data is still read when `off`) |
 | `KNOT_LITE_LSP_BUILD_EXEC` | `on` (default) / `off`: no rust-analyzer build scripts or proc-macros, no jdtls Gradle import |
 | `KNOT_LITE_LSP_CACHE_DIR` | root of the per-repository scratch directories (default `$HOME/.cache/knot-lite/lsp`) |

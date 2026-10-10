@@ -5,8 +5,9 @@
 /// The rank offset of reciprocal-rank fusion.
 pub const RRF_K: f64 = 60.0;
 
-/// Weight of the keyword order; chosen by gate H1 on the tuning split (P5.10).
-pub const KEYWORD_WEIGHT: f64 = 0.5;
+/// Weight of the keyword order, chosen by gate H1 on the tuning split
+/// (P5.10: hit@5 25/30 at 0.75 and 1.0, MRR@10 0.692 vs 0.704).
+pub const KEYWORD_WEIGHT: f64 = 1.0;
 
 /// Fuse two rankings of the same pool. `rerank_order` lists pool indices
 /// best first; `keyword` holds each pool index's BM25 (`None` or `0` = no

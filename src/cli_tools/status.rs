@@ -991,15 +991,15 @@ mod tests {
     fn status_shows_the_search_mode_and_its_warning() {
         let (_tmp, mut cfg) = fixture_cfg();
         let report = run_status_with(&cfg, &|_| stub_detect()).expect("report");
-        assert_eq!(report["search_mode"], "hybrid");
+        assert_eq!(report["search_mode"], "vector");
         cfg.search = crate::config::resolve_search_settings(&|key: &str| {
             (key == crate::config::SEARCH_ENV).then(|| "bm25".to_owned())
         });
         let report = run_status_with(&cfg, &|_| stub_detect()).expect("report");
-        assert_eq!(report["search_mode"], "hybrid");
+        assert_eq!(report["search_mode"], "vector");
         let table = format_status_output(&report, OutputFormat::Table);
         assert!(
-            table.contains("search: hybrid (KNOT_LITE_SEARCH)"),
+            table.contains("search: vector (KNOT_LITE_SEARCH)"),
             "{table}"
         );
         assert!(
