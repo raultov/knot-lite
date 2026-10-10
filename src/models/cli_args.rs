@@ -70,9 +70,9 @@ pub struct IndexArgs {
     #[arg(long, default_value_t = 600)]
     pub lsp_budget_secs: u64,
 
-    /// How pre-computation targets are chosen: lsp-refs = probe the language
-    /// server's reference counts first (default), heuristic = heuristic fan-in only
-    #[arg(long, value_enum, default_value_t = Selection::LspRefs)]
+    /// How pre-computation targets are chosen: heuristic = heuristic fan-in only
+    /// (default), lsp-refs = probe the language server's reference counts first
+    #[arg(long, value_enum, default_value_t = Selection::Heuristic)]
     pub lsp_selection: Selection,
 
     /// Heuristic caller count a non-type candidate needs to be probed (default 3)
@@ -225,7 +225,7 @@ mod tests {
                 assert!(!args.quiet);
                 assert_eq!(args.output, OutputFormat::Table);
                 assert_eq!(args.lsp_precompute, PrecomputePolicy::Auto);
-                assert_eq!(args.lsp_selection, Selection::LspRefs);
+                assert_eq!(args.lsp_selection, Selection::Heuristic);
                 assert_eq!(args.lsp_probe_min_fanin, 3);
             }
             other => panic!("expected Index, got {other:?}"),

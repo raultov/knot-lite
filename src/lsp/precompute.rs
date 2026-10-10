@@ -7,11 +7,11 @@
 //! Supports reuse (P3-D9): if the language file fingerprint and parameters match the
 //! previous manifest, data is kept untouched without starting a server.
 //!
-//! Targets are chosen in two stages by default (P5-D17, `--lsp-selection lsp-refs`): a
+//! With `--lsp-selection lsp-refs` (P5-D17, opt-in) targets are chosen in two stages: a
 //! cheap `references` probe over a wider candidate pool, within 40 % of the language's
 //! budget, ranks the candidates by the server's own caller count; the full answer of a
-//! selected target reuses the probe's locations. `--lsp-selection heuristic` keeps the
-//! Phase 3 rule (heuristic fan-in only).
+//! selected target reuses the probe's locations. The default, `heuristic`, keeps the
+//! Phase 3 rule (heuristic fan-in only): `lsp-refs` missed gate L13 (P5-D18).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
@@ -48,14 +48,15 @@ const PROBE_POOL_FACTOR: usize = 4;
 /// Share of a language's budget the probe may use (P5-D17).
 const PROBE_BUDGET_SHARE: f64 = 0.4;
 
-/// How pre-computation targets are chosen (P5-D17).
+/// How pre-computation targets are chosen (P5-D17; `heuristic` is the default
+/// because `lsp-refs` missed gate L13, P5-D18).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Selection {
     /// Probe the server's reference counts, then pick the most referenced.
-    #[default]
     LspRefs,
     /// Heuristic fan-in only (the Phase 3 rule).
+    #[default]
     Heuristic,
 }
 
@@ -117,7 +118,7 @@ impl Default for PrecomputeOptions {
             min_fanin: 20,
             max_targets: 200,
             budget: Duration::from_secs(600),
-            selection: Selection::LspRefs,
+            selection: Selection::Heuristic,
             probe_min_fanin: 3,
         }
     }
@@ -779,6 +780,112 @@ fn prune_orphan_edge_shards(
         }
     }
     Ok(())
+}
+
+/// What the Phase 5 gate L13 needs from the selection (measurement only).
+#[cfg(test)]
+pub(crate) mod measure_support {
+    use super::*;
+
+    /// One probe-pool candidate and its unbounded `references` probe.
+    pub(crate) struct OracleRow {
+        /// Record id.
+        pub id: String,
+        /// Heuristic caller containers.
+        pub fanin: usize,
+        /// Server caller containers; `None` when the probe got no answer.
+        pub refs: Option<usize>,
+        /// Milliseconds the probe took.
+        pub ms: u64,
+    }
+
+    /// Probe every candidate of the pool of `lang`, with no budget, in pool order.
+    pub(crate) fn oracle(
+        input: &PrecomputeInput<'_>,
+        opts: &PrecomputeOptions,
+        pool: &LspPool,
+        layout: &IndexLayout,
+        lang: LspLang,
+    ) -> Vec<OracleRow> {
+        let container_table = ContainerTable::from_records(
+            input
+                .records
+                .iter()
+                .enumerate()
+                .map(|(idx, (rel, line))| (idx, rel.as_str(), line)),
+        );
+        let fp = fingerprint_for_lang(input.inventory, lang);
+        let ctx = PrecomputeLangCtx {
+            input,
+            opts,
+            pool,
+            layout,
+            lang,
+            fp: &fp,
+            container_table: &container_table,
+        };
+        let mut files = SourceFiles::new(input.repo_root);
+        probe_pool(input, lang, opts)
+            .iter()
+            .map(|candidate| {
+                let started = Instant::now();
+                let probed = run_probe(
+                    &ctx,
+                    &mut files,
+                    std::slice::from_ref(candidate),
+                    Instant::now() + PER_TARGET_CAP,
+                );
+                OracleRow {
+                    id: candidate.line.id.clone(),
+                    fanin: candidate.fanin,
+                    refs: probed
+                        .probes
+                        .get(&candidate.line.id)
+                        .map(|probe| probe.count),
+                    ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                }
+            })
+            .collect()
+    }
+
+    /// The ids the `heuristic` selection picks.
+    pub(crate) fn heuristic_ids(
+        input: &PrecomputeInput<'_>,
+        lang: LspLang,
+        opts: &PrecomputeOptions,
+    ) -> Vec<String> {
+        select_candidates(input, lang, opts)
+            .iter()
+            .map(|candidate| candidate.line.id.clone())
+            .collect()
+    }
+
+    /// The ids the `lsp-refs` selection picks when the probe reached the
+    /// candidates of `reached` (id → caller containers).
+    pub(crate) fn lsp_refs_ids(
+        input: &PrecomputeInput<'_>,
+        lang: LspLang,
+        opts: &PrecomputeOptions,
+        reached: &HashMap<String, usize>,
+    ) -> Vec<String> {
+        let pool = probe_pool(input, lang, opts);
+        let probes: HashMap<String, Probe> = reached
+            .iter()
+            .map(|(id, count)| {
+                (
+                    id.clone(),
+                    Probe {
+                        outcome: LiveOutcome::without_answer(LiveStatus::Ok, ""),
+                        count: *count,
+                    },
+                )
+            })
+            .collect();
+        select_by_refs(input, lang, opts, &pool, &probes)
+            .iter()
+            .map(|candidate| candidate.line.id.clone())
+            .collect()
+    }
 }
 
 #[cfg(test)]

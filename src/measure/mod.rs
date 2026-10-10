@@ -123,6 +123,8 @@ fn write_gate(name: &str, value: &impl Serialize) {
     std::fs::write(measure_out_dir().join(format!("{name}.json")), text).expect("write gate");
 }
 
+mod explore;
 mod hybrid;
 mod lsp;
 mod phase2;
+mod precompute;

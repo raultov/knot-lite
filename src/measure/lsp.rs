@@ -256,7 +256,7 @@ fn container_label(key: &ContainerKey) -> String {
 }
 
 /// The settings of a measurement run: the environment's, with generous limits.
-fn measurement_settings() -> LspSettings {
+pub(super) fn measurement_settings() -> LspSettings {
     required_env_dir("KNOT_LITE_LSP_CACHE_DIR");
     let settings = LspSettings {
         max_live_targets: 500,
@@ -847,7 +847,7 @@ fn answer_keys(target: &crate::query::callers::CallerTarget) -> BTreeSet<Contain
 }
 
 /// `find_callers` for `query` over `index` (kinds `all`), with its wall time in milliseconds.
-fn timed_callers(
+pub(super) fn timed_callers(
     index: &LoadedIndex,
     settings: &LspSettings,
     root: &Path,
@@ -938,7 +938,15 @@ struct L11Parallel {
 /// starts no server: the first query of a language does.
 fn pool_for_repo(var: &str) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
     let root = std::env::var(var).unwrap_or_else(|_| panic!("{var} is required"));
-    let root = PathBuf::from(root).canonicalize().expect("measured repo");
+    pool_for_root(&PathBuf::from(root))
+}
+
+/// Load the index of the repository at `root` and create the pool (no server
+/// starts until the first query of a language).
+pub(super) fn pool_for_root(
+    root: &Path,
+) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
+    let root = root.canonicalize().expect("measured repo");
     let index = load_index(&IndexLayout::for_repo(&root)).expect("load the measured index");
     let settings = measurement_settings();
     let files: Vec<String> = index.file_sha16.keys().cloned().collect();
@@ -1217,19 +1225,23 @@ fn l12_gradle_daemon_is_stopped() {
 #[test]
 #[ignore = "L7: needs the sandbox `spring-ai` indexed with the Java pre-computation, and starts a real jdtls (KNOT_LITE_LSP_CACHE_DIR; minutes)"]
 fn l7_precompute() {
-    let root = sandbox_path("spring-ai")
-        .canonicalize()
-        .expect("sandbox repo");
+    l7("spring-ai", "java", "l7_precompute");
+}
+
+/// Pre-computed answers of `repo`'s `lang` against live ones (gate L7; L7s in
+/// Phase 5 runs it on the `lsp-refs` selection). Writes `<gate>.json`.
+pub(super) fn l7(repo: &str, lang: &str, gate: &str) {
+    let root = sandbox_path(repo).canonicalize().expect("sandbox repo");
     let mut index = load_index(&IndexLayout::for_repo(&root)).expect("load the sandbox index");
     let settings = measurement_settings();
-    let java = index
+    let measured = index
         .manifest
         .lsp
         .clone()
         .expect("the index was built with a pre-computation stage")
-        .languages["java"]
+        .languages[lang]
         .clone();
-    println!("L7 index: {java:?}");
+    println!("L7 index: {measured:?}");
 
     // 1. The indexed answers, with no pool at all.
     let indexed = l7_indexed_answers(&index, &settings, &root);
@@ -1279,11 +1291,12 @@ fn l7_precompute() {
         indexed.len()
     );
     write_gate(
-        "l7_precompute",
+        gate,
         &serde_json::json!({
-            "java": { "status": java.status, "targets_selected": java.targets_selected,
-                      "targets_ok": java.targets_ok, "targets_failed": java.targets_failed,
-                      "edges": java.edges, "ms": java.ms, "server": java.version },
+            "language": lang,
+            "lsp": { "status": measured.status, "targets_selected": measured.targets_selected,
+                      "targets_ok": measured.targets_ok, "targets_failed": measured.targets_failed,
+                      "edges": measured.edges, "ms": measured.ms, "server": measured.version },
             "measured_targets": indexed.len(),
             "indexed_p95_ms": p95, "parity_identical": identical, "parity_pct": identical_pct,
             "rows": rows,
