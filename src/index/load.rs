@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use super::edges::EdgeLine;
@@ -17,6 +18,7 @@ use super::layout::{
 use super::lsp_records::{LspTargetLine, read_lsp_edge_shard, read_lsp_targets};
 use super::manifest::{IndexState, Manifest, one_line, read_index_state, read_manifest};
 use super::record_io::{list_record_files, read_jsonl};
+use super::search_aux::SearchAux;
 use super::shard::{ShardLine, sort_lines};
 use crate::capability::languages::LspLang;
 use crate::error::IndexUnavailable;
@@ -114,6 +116,19 @@ pub struct LoadedIndex {
     pub file_sha16: HashMap<String, String>,
     /// Milliseconds the load took.
     pub load_ms: u64,
+    /// Where the index was read from (`None` when assembled in memory).
+    pub layout: Option<IndexLayout>,
+    /// Search-only structures, built on the first search ([`Self::search_aux`]).
+    search_aux: OnceLock<SearchAux>,
+}
+
+impl LoadedIndex {
+    /// The keyword index and call graph of this index, built on first use and
+    /// kept for every later search of the same loaded index (P5-D10).
+    pub fn search_aux(&self) -> &SearchAux {
+        self.search_aux
+            .get_or_init(|| SearchAux::build(self, self.layout.as_ref()))
+    }
 }
 
 /// Read only the manifest stamp (cheap): the cache calls this on every query.
@@ -166,6 +181,7 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
         lsp_incoming: load_lsp_incoming(layout)?,
         lsp_targets: load_lsp_targets(layout)?,
         file_sha16: load_file_sha16(layout),
+        layout: Some(layout.clone()),
     };
     Ok(assemble(manifest, loaded, started))
 }
@@ -249,6 +265,7 @@ struct Loaded {
     lsp_incoming: HashMap<String, Vec<LspIncoming>>,
     lsp_targets: HashMap<String, LspTargetLine>,
     file_sha16: HashMap<String, String>,
+    layout: Option<IndexLayout>,
 }
 
 /// Derive the lookup maps, the incoming-edge map and the containers from what
@@ -261,6 +278,7 @@ fn assemble(manifest: Manifest, loaded: Loaded, started: Instant) -> LoadedIndex
         lsp_incoming,
         lsp_targets,
         file_sha16,
+        layout,
     } = loaded;
     let mut by_id = HashMap::with_capacity(records.len());
     let mut by_file: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -296,6 +314,8 @@ fn assemble(manifest: Manifest, loaded: Loaded, started: Instant) -> LoadedIndex
         lsp_targets,
         file_sha16,
         load_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        layout,
+        search_aux: OnceLock::new(),
     }
 }
 

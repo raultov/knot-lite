@@ -15,6 +15,7 @@ pub mod lsp_records;
 pub mod manifest;
 pub mod record_io;
 pub mod reuse;
+pub mod search_aux;
 pub mod select;
 pub mod shard;
 
