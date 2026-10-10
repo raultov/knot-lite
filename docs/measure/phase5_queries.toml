@@ -1,0 +1,427 @@
+# Phase 5 hybrid search query set (PLAN_PHASE5_SEARCH_LSP_CI Appendix A).
+# Written from the sandbox sources pinned by FINGERPRINTS.txt, never from tool output.
+# Frozen after P5.6: do not edit (P5-D13). Odd ids = tuning split, even ids = held-out split.
+#
+# expected: a repo-relative file (any result in it), a prefix ending in '/' (any result under
+# it), or 'file#name' (a result with that file and name). A query hits at rank r when the
+# r-th result matches any entry.
+
+[[query]]
+id = "h01"
+repo = "knot"
+class = "behaviour"
+text = "decide whether a slash-separated path fits a wildcard pattern where a double star spans any number of directories"
+expected = ["src/cli_tools/list_files.rs#glob_match", "src/cli_tools/list_files.rs#segments_match", "src/cli_tools/list_files.rs#path_matches"]
+
+[[query]]
+id = "h02"
+repo = "knot-site"
+class = "behaviour"
+text = "only let browsers from the production domain or local development ports call the endpoint"
+expected = ["functions/mcp.ts#isOriginAllowed", "functions/mcp.ts#makeCorsHeaders"]
+
+[[query]]
+id = "h03"
+repo = "spring-ai"
+class = "behaviour"
+text = "block a prompt that mentions banned terms and answer with a fixed refusal message"
+expected = ["spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/SafeGuardAdvisor.java#SafeGuardAdvisor", "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/SafeGuardAdvisor.java#containsSensitiveWord", "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/SafeGuardAdvisor.java#adviseCall", "spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/SafeGuardAdvisor.java#createFailureResponse"]
+
+[[query]]
+id = "h04"
+repo = "knot"
+class = "behaviour"
+text = "work out the completion fraction of an indexing run across the parsing and ingestion phases"
+expected = ["src/pipeline/progress.rs#compute_percent", "src/pipeline/progress.rs#snapshot"]
+
+[[query]]
+id = "h05"
+repo = "knot-site"
+class = "behaviour"
+text = "forward the visitor's contact form submission through the Resend API"
+expected = ["functions/api/contact.ts#sendEmail", "functions/api/contact.ts#onRequestPost"]
+
+[[query]]
+id = "h06"
+repo = "spring-ai"
+class = "behaviour"
+text = "remove reasoning blocks emitted by models before parsing structured output"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/converter/ThinkingTagCleaner.java#ThinkingTagCleaner"]
+
+[[query]]
+id = "h07"
+repo = "knot"
+class = "behaviour"
+text = "refuse to start indexing or serving when stored vectors were produced by a different embedding model"
+expected = ["src/startup_guard.rs#classify_startup", "src/startup_guard.rs#verify_startup", "src/startup_guard.rs#classify_startup_with_hints", "src/pipeline/runner.rs#ensure_embed_marker_allows_run"]
+
+[[query]]
+id = "h08"
+repo = "knot-site"
+class = "behaviour"
+text = "choose batch size and concurrency from the amount of memory available"
+expected = ["src/webmcp/tools/getInstallCommand.ts#pickProfile", "src/webmcp/tools/getInstallCommand.ts#TUNING_PROFILES", "src/webmcp/tools/getInstallCommand.ts#applyTuning"]
+
+[[query]]
+id = "h09"
+repo = "spring-ai"
+class = "behaviour"
+text = "keep only the latest turns of a dialogue while preserving the system instruction"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/chat/memory/MessageWindowChatMemory.java#MessageWindowChatMemory", "spring-ai-model/src/main/java/org/springframework/ai/chat/memory/MessageWindowChatMemory.java#process"]
+
+[[query]]
+id = "h10"
+repo = "knot"
+class = "behaviour"
+text = "detect which sources were modified since the previous indexing pass by comparing content digests"
+expected = ["src/pipeline/state.rs#classify_files", "src/pipeline/state.rs#compute_file_hash", "src/pipeline/files.rs#classify_files_for_indexing"]
+
+[[query]]
+id = "h11"
+repo = "knot-site"
+class = "behaviour"
+text = "sort release numbers so the newest semantic release comes first"
+expected = ["scripts/fetch-updates.mjs#compareVersionsDesc"]
+
+[[query]]
+id = "h12"
+repo = "spring-ai"
+class = "behaviour"
+text = "group documents so each group stays under the embedding model's input size limit"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/embedding/TokenCountBatchingStrategy.java#TokenCountBatchingStrategy", "spring-ai-model/src/main/java/org/springframework/ai/embedding/TokenCountBatchingStrategy.java#batch"]
+
+[[query]]
+id = "h13"
+repo = "knot"
+class = "behaviour"
+text = "attribute a stray reference to the declaration that starts closest above it in the source"
+expected = ["src/pipeline/parser/languages/rust/utils.rs#find_nearest_entity_by_line", "src/pipeline/parser/orphans.rs#find_nearest_entity_by_line", "src/pipeline/parser/orphans.rs#collect_orphaned_references"]
+
+[[query]]
+id = "h14"
+repo = "knot-site"
+class = "behaviour"
+text = "drop trailing list items until the serialized tool output fits the size budget"
+expected = ["src/toolcore/format.ts#jsonTextFitting"]
+
+[[query]]
+id = "h15"
+repo = "spring-ai"
+class = "behaviour"
+text = "angle-based closeness score between two embedding arrays for the in-memory store"
+expected = ["spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/SimpleVectorStore.java#cosineSimilarity", "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/SimpleVectorStore.java#dotProduct", "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/SimpleVectorStore.java#EmbeddingMath"]
+
+[[query]]
+id = "h16"
+repo = "knot"
+class = "identifier"
+text = "build_embed_text"
+expected = ["src/pipeline/prepare.rs#build_embed_text"]
+
+[[query]]
+id = "h17"
+repo = "knot-site"
+class = "identifier"
+text = "consentStore"
+expected = ["src/state/consentStore.ts#consentStore"]
+
+[[query]]
+id = "h18"
+repo = "spring-ai"
+class = "identifier"
+text = "TokenTextSplitter"
+expected = ["spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java#TokenTextSplitter"]
+
+[[query]]
+id = "h19"
+repo = "knot"
+class = "identifier"
+text = "RepoScope"
+expected = ["src/models/repo_scope.rs#RepoScope"]
+
+[[query]]
+id = "h20"
+repo = "knot-site"
+class = "identifier"
+text = "withLogging"
+expected = ["src/webmcp/invocationLog.ts#withLogging"]
+
+[[query]]
+id = "h21"
+repo = "spring-ai"
+class = "identifier"
+text = "splitCamelCase"
+expected = ["spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java#splitCamelCase", "spring-ai-commons/src/main/java/org/springframework/ai/util/ParsingUtils.java#splitCamelCaseToLower"]
+
+[[query]]
+id = "h22"
+repo = "knot"
+class = "identifier"
+text = "target resolution tiers"
+expected = ["src/db/graph/query.rs#target_resolution_tiers"]
+
+[[query]]
+id = "h23"
+repo = "knot-site"
+class = "identifier"
+text = "toWebMcpTool"
+expected = ["src/webmcp/adapters/toWebMcpTool.ts#toWebMcpTool"]
+
+[[query]]
+id = "h24"
+repo = "spring-ai"
+class = "identifier"
+text = "MarkdownCodeBlockCleaner"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/converter/MarkdownCodeBlockCleaner.java#MarkdownCodeBlockCleaner"]
+
+[[query]]
+id = "h25"
+repo = "knot"
+class = "identifier"
+text = "normalize pool cosines"
+expected = ["src/cli_tools/search_hybrid_context/rank.rs#normalize_pool_cosines"]
+
+[[query]]
+id = "h26"
+repo = "knot-site"
+class = "identifier"
+text = "parse knot changelog"
+expected = ["scripts/fetch-updates.mjs#parseKnotChangelog", "scripts/fetch-updates.mjs#parseKnotServerChangelog"]
+
+[[query]]
+id = "h27"
+repo = "spring-ai"
+class = "identifier"
+text = "purge excess"
+expected = ["spring-ai-client-chat/src/main/java/org/springframework/ai/chat/client/advisor/LastMaxTokenSizeContentPurger.java#purgeExcess"]
+
+[[query]]
+id = "h28"
+repo = "knot"
+class = "identifier"
+text = "link method overrides"
+expected = ["src/pipeline/ingest/resolve/overrides.rs#link_method_overrides"]
+
+[[query]]
+id = "h29"
+repo = "knot-site"
+class = "identifier"
+text = "useMouseTrack"
+expected = ["src/hooks/useMouseTrack.ts#useMouseTrack"]
+
+[[query]]
+id = "h30"
+repo = "spring-ai"
+class = "identifier"
+text = "KeywordMetadataEnricher"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/model/transformer/KeywordMetadataEnricher.java#KeywordMetadataEnricher"]
+
+[[query]]
+id = "h31"
+repo = "knot"
+class = "docs_config"
+text = "clippy thresholds for cognitive complexity and function length"
+expected = ["clippy.toml"]
+
+[[query]]
+id = "h32"
+repo = "knot-site"
+class = "docs_config"
+text = "which pnpm scripts run before the production build"
+expected = ["package.json"]
+
+[[query]]
+id = "h33"
+repo = "spring-ai"
+class = "docs_config"
+text = "SQL table definition for persisting chat memory in PostgreSQL"
+expected = ["memory-repositories/spring-ai-model-chat-memory-repository-jdbc/src/main/resources/org/springframework/ai/chat/memory/repository/jdbc/schema-postgresql.sql"]
+
+[[query]]
+id = "h34"
+repo = "knot"
+class = "docs_config"
+text = "docker compose services for the graph and vector databases"
+expected = ["docker-compose.yml"]
+
+[[query]]
+id = "h35"
+repo = "knot-site"
+class = "docs_config"
+text = "environment variables the contact form backend needs in Cloudflare Pages"
+expected = ["README.md"]
+
+[[query]]
+id = "h36"
+repo = "spring-ai"
+class = "docs_config"
+text = "workflow that deploys the reference documentation"
+expected = [".github/workflows/deploy-docs.yml"]
+
+[[query]]
+id = "h37"
+repo = "knot"
+class = "docs_config"
+text = "release workflow that builds binaries for every platform"
+expected = [".github/workflows/release.yml"]
+
+[[query]]
+id = "h38"
+repo = "knot-site"
+class = "docs_config"
+text = "CI pipeline steps: install, lint, build and audit dependencies"
+expected = [".github/workflows/ci.yml"]
+
+[[query]]
+id = "h39"
+repo = "spring-ai"
+class = "docs_config"
+text = "migrating from the Vertex AI autoconfiguration to the Google GenAI SDK"
+expected = ["auto-configurations/models/spring-ai-autoconfigure-model-google-genai/MIGRATION_GUIDE.md"]
+
+[[query]]
+id = "h40"
+repo = "knot"
+class = "docs_config"
+text = "per-model memory footprint and runtime cost of the embedding models"
+expected = ["docs/measurements/model_cost_1_11.md"]
+
+[[query]]
+id = "h41"
+repo = "knot-site"
+class = "docs_config"
+text = "why the accessibility tree warning in the agentic browsing audit is not caused by the site"
+expected = ["docs/web-mcp-implementation-plan.md"]
+
+[[query]]
+id = "h42"
+repo = "spring-ai"
+class = "docs_config"
+text = "Maven wrapper distribution settings"
+expected = [".mvn/wrapper/maven-wrapper.properties"]
+
+[[query]]
+id = "h43"
+repo = "knot"
+class = "docs_config"
+text = "how to install the pre-compiled binaries on macOS and Linux"
+expected = ["README.md"]
+
+[[query]]
+id = "h44"
+repo = "knot-site"
+class = "docs_config"
+text = "crawler rules and sitemap location for search engines"
+expected = ["public/robots.txt"]
+
+[[query]]
+id = "h45"
+repo = "spring-ai"
+class = "docs_config"
+text = "how to build Spring AI from source"
+expected = ["README.md", "CONTRIBUTING.md"]
+
+[[query]]
+id = "h46"
+repo = "knot"
+class = "mixed"
+text = "how rerank combines cosine similarity with kind boosts"
+expected = ["src/cli_tools/search_hybrid_context/rank.rs#rerank", "src/cli_tools/search_hybrid_context/rank.rs#final_score"]
+
+[[query]]
+id = "h47"
+repo = "knot-site"
+class = "mixed"
+text = "how decodeHeaderValue handles base64 encoded header values"
+expected = ["functions/mcp.ts#decodeHeaderValue"]
+
+[[query]]
+id = "h48"
+repo = "spring-ai"
+class = "mixed"
+text = "getLastPunctuationIndex when splitting text into chunks"
+expected = ["spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java#getLastPunctuationIndex", "spring-ai-commons/src/main/java/org/springframework/ai/transformer/splitter/TokenTextSplitter.java#doSplit"]
+
+[[query]]
+id = "h49"
+repo = "knot"
+class = "mixed"
+text = "auto_link_contains creates containment edges from the enclosing class"
+expected = ["src/db/graph/upsert.rs#auto_link_contains", "src/db/graph/upsert.rs#build_contains_auto_link_cipher"]
+
+[[query]]
+id = "h50"
+repo = "knot-site"
+class = "mixed"
+text = "isWebMcpAvailable checks for a model context on the document or navigator"
+expected = ["src/webmcp/useWebMcp.ts#isWebMcpAvailable", "src/webmcp/useWebMcp.ts#getModelContext"]
+
+[[query]]
+id = "h51"
+repo = "spring-ai"
+class = "mixed"
+text = "default retry template used when a TransientAiException is thrown"
+expected = ["spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java#createDefaultRetryTemplate", "spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java#RetryUtils"]
+
+[[query]]
+id = "h52"
+repo = "knot"
+class = "mixed"
+text = "embed_query adds the query prefix for asymmetric models"
+expected = ["src/pipeline/embed.rs#embed_query"]
+
+[[query]]
+id = "h53"
+repo = "knot-site"
+class = "mixed"
+text = "score capability text against the search query in searchKnotCapabilities"
+expected = ["src/toolcore/definitions/searchKnotCapabilities.ts#score"]
+
+[[query]]
+id = "h54"
+repo = "spring-ai"
+class = "mixed"
+text = "parse a metadata filter string with FilterExpressionTextParser"
+expected = ["spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/filter/FilterExpressionTextParser.java#parse", "spring-ai-vector-store/src/main/java/org/springframework/ai/vectorstore/filter/FilterExpressionTextParser.java#FilterExpressionTextParser"]
+
+[[query]]
+id = "h55"
+repo = "knot"
+class = "mixed"
+text = "setup_watch_mode debounces filesystem events before re-indexing"
+expected = ["src/pipeline/watch.rs#setup_watch_mode", "src/pipeline/watch.rs#setup_watch_mode_with_progress"]
+
+[[query]]
+id = "h56"
+repo = "knot-site"
+class = "mixed"
+text = "injectJsonLd writes the structured data block into index.html"
+expected = ["scripts/generate-agent-assets.mjs#injectJsonLd"]
+
+[[query]]
+id = "h57"
+repo = "spring-ai"
+class = "mixed"
+text = "cap how often each tool may run per request with maxCallsPerTool"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java#maxCallsPerTool"]
+
+[[query]]
+id = "h58"
+repo = "knot"
+class = "mixed"
+text = "seed_roots picks the caller bridge seeds from the merged candidate pool"
+expected = ["src/cli_tools/search_hybrid_context/coverage.rs#seed_roots"]
+
+[[query]]
+id = "h59"
+repo = "knot-site"
+class = "mixed"
+text = "assignSortDates for changelog entries without a release date"
+expected = ["scripts/fetch-updates.mjs#assignSortDates"]
+
+[[query]]
+id = "h60"
+repo = "spring-ai"
+class = "mixed"
+text = "executeToolCalls builds the conversation history after tool execution"
+expected = ["spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java#executeToolCalls", "spring-ai-model/src/main/java/org/springframework/ai/model/tool/DefaultToolCallingManager.java#buildConversationHistoryAfterToolExecution"]
