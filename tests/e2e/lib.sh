@@ -8,6 +8,9 @@ E2E_FIXTURES="$E2E_REPO_ROOT/tests/e2e/fixtures"
 E2E_HOME="${KNOT_LITE_E2E_HOME:-$HOME/.local/share/knot-lite/e2e}"
 KL="$E2E_REPO_ROOT/target/release/knot-lite"
 KLM="$E2E_REPO_ROOT/target/release/knot-lite-mcp"
+# The package version (rows check `--version` against it) and the same as a regex.
+E2E_VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$E2E_REPO_ROOT/Cargo.toml" | head -n 1)"
+E2E_VERSION_RE="$(printf '%s' "$E2E_VERSION" | sed 's/\./\\./g')"
 E2E_PASS=0; E2E_FAIL=0; E2E_SKIP=0; E2E_SUITE=""; E2E_T0=0
 
 if [ -t 1 ]; then C_R=$'\033[0;31m'; C_G=$'\033[0;32m'; C_Y=$'\033[1;33m'; C_N=$'\033[0m'; else C_R=""; C_G=""; C_Y=""; C_N=""; fi

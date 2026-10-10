@@ -19,9 +19,9 @@ use_repo "$R"
 
 # ---- R01 versions ---------------------------------------------------------------------------
 rc="$(run_cli R01a -- --version)"; assert_rc R01a "knot-lite --version exits 0" 0 "$rc"
-text_in R01a "knot-lite --version prints 0.4.0" "$(J R01a)" '0\.4\.0'
+text_in R01a "knot-lite --version prints $E2E_VERSION" "$(J R01a)" "$E2E_VERSION_RE"
 "$KLM" --version > "$E2E_RUN/cli/R01b.json" 2>&1 || true
-text_in R01b "knot-lite-mcp --version prints 0.4.0" "$(J R01b)" '0\.4\.0'
+text_in R01b "knot-lite-mcp --version prints $E2E_VERSION" "$(J R01b)" "$E2E_VERSION_RE"
 
 # ---- R02-R03 before the index -------------------------------------------------------------------
 rc="$(cli R02 -- status -o json)"; assert_rc R02 "status before the index exits 0" 0 "$rc"

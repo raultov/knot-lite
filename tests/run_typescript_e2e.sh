@@ -22,9 +22,9 @@ EXACT_FORMAT_AFTER_EDIT='["src/api/userController.ts#greet","src/services/userSe
 
 # ---- T01 versions ---------------------------------------------------------------------------
 rc="$(run_cli T01a -- --version)"; assert_rc T01a "knot-lite --version exits 0" 0 "$rc"
-text_in T01a "knot-lite --version prints 0.4.0" "$(J T01a)" '0\.4\.0'
+text_in T01a "knot-lite --version prints $E2E_VERSION" "$(J T01a)" "$E2E_VERSION_RE"
 "$KLM" --version > "$E2E_RUN/cli/T01b.json" 2>&1 || true
-text_in T01b "knot-lite-mcp --version prints 0.4.0" "$(J T01b)" '0\.4\.0'
+text_in T01b "knot-lite-mcp --version prints $E2E_VERSION" "$(J T01b)" "$E2E_VERSION_RE"
 
 # ---- T02-T03 before the index -------------------------------------------------------------------
 rc="$(cli T02 -- status -o json)"; assert_rc T02 "status before the index exits 0" 0 "$rc"

@@ -21,9 +21,9 @@ EXACT_DISCOUNT_AFTER_EDIT='["src/cart.js#total","src/checkout.js#quote","src/pri
 
 # ---- J01 versions ---------------------------------------------------------------------------
 rc="$(run_cli J01a -- --version)"; assert_rc J01a "knot-lite --version exits 0" 0 "$rc"
-text_in J01a "knot-lite --version prints 0.4.0" "$(J J01a)" '0\.4\.0'
+text_in J01a "knot-lite --version prints $E2E_VERSION" "$(J J01a)" "$E2E_VERSION_RE"
 "$KLM" --version > "$E2E_RUN/cli/J01b.json" 2>&1 || true
-text_in J01b "knot-lite-mcp --version prints 0.4.0" "$(J J01b)" '0\.4\.0'
+text_in J01b "knot-lite-mcp --version prints $E2E_VERSION" "$(J J01b)" "$E2E_VERSION_RE"
 
 # ---- J02-J03 before the index -------------------------------------------------------------------
 rc="$(cli J02 -- status -o json)"; assert_rc J02 "status before the index exits 0" 0 "$rc"

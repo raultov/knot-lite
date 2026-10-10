@@ -24,9 +24,9 @@ EXACT_GETITEMS_AFTER_EDIT="[\"$P/service/DefaultPriceCalculator.java#total\",\"$
 
 # ---- V01 versions ---------------------------------------------------------------------------
 rc="$(run_cli V01a -- --version)"; assert_rc V01a "knot-lite --version exits 0" 0 "$rc"
-text_in V01a "knot-lite --version prints 0.4.0" "$(J V01a)" '0\.4\.0'
+text_in V01a "knot-lite --version prints $E2E_VERSION" "$(J V01a)" "$E2E_VERSION_RE"
 "$KLM" --version > "$E2E_RUN/cli/V01b.json" 2>&1 || true
-text_in V01b "knot-lite-mcp --version prints 0.4.0" "$(J V01b)" '0\.4\.0'
+text_in V01b "knot-lite-mcp --version prints $E2E_VERSION" "$(J V01b)" "$E2E_VERSION_RE"
 
 # ---- V02-V03 before the index -------------------------------------------------------------------
 rc="$(cli V02 -- status -o json)"; assert_rc V02 "status before the index exits 0" 0 "$rc"
