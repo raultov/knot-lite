@@ -24,7 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        # macOS runs on master only (pushes and manual runs there); every other
+        # ref is checked on Linux.
+        os: ${{ github.ref == 'refs/heads/master' && fromJSON('["ubuntu-24.04", "macos-15"]') || fromJSON('["ubuntu-24.04"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
