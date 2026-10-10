@@ -45,8 +45,8 @@ rc="$(cli R06 -- files -o json)"; assert_rc R06 "files exits 0" 0 "$rc"
 assert_jq R06 "every source file is listed" "$(J R06)" '($want - [.files[].path]) == []' --argjson want "$SRC_FILES"
 rc="$(cli R07 -- files -p src/ -o json)"; assert_rc R07 "files -p src/ exits 0" 0 "$rc"
 assert_jq R07 "non-empty and every path under src/" "$(J R07)" '(.files|length) > 0 and all(.files[]; .path | startswith("src/"))'
-rc="$(cli R08 -- files -p 'src/*' -o json)"; assert_rc R08 "a glob prefix is rejected with rc 1" 1 "$rc"
-text_in R08 "the message names the limitation" "$(E R08)" 'glob patterns are not supported'
+rc="$(cli R08 -- files -p 'src/*' -o json)"; assert_rc R08 "files with a glob exits 0" 0 "$rc"
+assert_jq R08 "glob mode, non-empty, every path matches src/*" "$(J R08)" '.path_mode == "glob" and (.files|length) > 0 and all(.files[]; .path | test("^src/[^/]+$"))'
 rc="$(cli R09 -- files -r other -o json)"; assert_rc R09 "files -r other exits 1" 1 "$rc"
 
 # ---- R10-R12 explore and search -------------------------------------------------------------------

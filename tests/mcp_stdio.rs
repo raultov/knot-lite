@@ -425,14 +425,29 @@ fn mcp_stdio_indexed_session() {
         "target/ must not be indexed"
     );
 
-    let glob_res = result_of(&responses["5"]);
-    let glob_err = error_text(&glob_res);
-    assert!(glob_err.contains("glob"), "{glob_err}");
+    assert_glob_listing(&result_of(&responses["5"]));
 
     let search_res = result_of(&responses["6"]);
     let search_err = error_text(&search_res);
     assert!(search_err.contains("knot-lite-fake-sha256"), "{search_err}");
     assert!(search_err.contains("cannot be loaded"), "{search_err}");
+}
+
+/// `list_files` with `src/**` answers in glob mode with files under `src/` only.
+fn assert_glob_listing(glob_res: &Value) {
+    assert_ne!(glob_res.get("isError").and_then(Value::as_bool), Some(true));
+    let glob_struct = glob_res
+        .get("structuredContent")
+        .expect("structuredContent");
+    assert_eq!(glob_struct["path_mode"], "glob");
+    assert!(
+        glob_struct["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .all(|f| f["path"].as_str().is_some_and(|p| p.starts_with("src/"))),
+        "{glob_struct}"
+    );
 }
 
 /// The language row `language` of a status report.

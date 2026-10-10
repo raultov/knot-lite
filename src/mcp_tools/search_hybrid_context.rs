@@ -9,7 +9,7 @@ use crate::models::params::SearchParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "search_hybrid_context",
     title = "Semantic search",
-    description = "Read-only semantic search over this repository's knot-lite index. The query is embedded with the index's model and every indexed record is ranked by cosine similarity: code entities parsed by knot (functions, methods, types, documentation sections, …) and line-window chunks of files knot cannot parse (scripts, Makefiles, YAML, …). Pure vector ranking: unlike knot, there is no keyword channel, no kind-aware re-ranking and no graph boost. Requires a knot-lite index (built with `knot-lite index`); call `status` to check. \n\nUsage: initial exploration when you do not know the names involved; follow up with explore_file and find_callers. \n\nFilters: 'kinds' accepts exact kinds or the aliases definition, callable, class/type, docs, config, plus 'chunk' and 'file' for the line-window records; 'path' is a repo-relative directory prefix matched on a path boundary (glob patterns are rejected in this version). \n\nResult bound: 'max_results' is clamped to 100; there is no pagination.",
+    description = "Read-only semantic search over this repository's knot-lite index. The query is embedded with the index's model and every indexed record is ranked by cosine similarity: code entities parsed by knot (functions, methods, types, documentation sections, …) and line-window chunks of files knot cannot parse (scripts, Makefiles, YAML, …). Pure vector ranking: unlike knot, there is no keyword channel, no kind-aware re-ranking and no graph boost. Requires a knot-lite index (built with `knot-lite index`); call `status` to check. \n\nUsage: initial exploration when you do not know the names involved; follow up with explore_file and find_callers. \n\nFilters: 'kinds' accepts exact kinds or the aliases definition, callable, class/type, docs, config, plus 'chunk' and 'file' for the line-window records; 'path' is a repo-relative directory prefix matched on a path boundary or a glob (`*` one segment, `**` any depth, `?` one character). \n\nResult bound: 'max_results' is clamped to 100; there is no pagination.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -48,7 +48,7 @@ pub struct SearchHybridContextTool {
     pub kinds: Option<String>,
     /// Optional repo-relative path filter.
     #[json_schema(
-        description = "Optional repo-relative directory prefix ('src/api'), matched on a path boundary. Glob patterns are not supported in this version.",
+        description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary) or glob pattern (segments: `*` segment wildcard, `**` any depth, `?` one char).",
         min_length = 1,
         max_length = 500
     )]

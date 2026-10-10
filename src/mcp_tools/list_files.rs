@@ -9,7 +9,7 @@ use crate::models::params::FilesParams;
 #[rust_mcp_sdk::macros::mcp_tool(
     name = "list_files",
     title = "List indexed files",
-    description = "Read-only listing of the files in this repository's knot-lite index with per-file entity and chunk counts, in path order. 'path' narrows the listing to a repo-relative directory prefix matched on a path boundary ('src/api' never matches 'src/api-notes.md'); glob patterns are rejected in this version. At most 2000 files are listed and the reply states the exact total. Requires a knot-lite index (built with `knot-lite index`); call `status` to check.",
+    description = "Read-only listing of the files in this repository's knot-lite index with per-file entity and chunk counts, in path order. 'path' narrows the listing to a repo-relative directory prefix matched on a path boundary ('src/api' never matches 'src/api-notes.md') or to a glob ('src/**/*.rs': `*` stays inside one path segment, `**` spans any number of segments, `?` is one character; matching is case-sensitive, brackets and braces are literal). At most 2000 files are listed and the reply states the exact total. Requires a knot-lite index (built with `knot-lite index`); call `status` to check.",
     read_only_hint = true,
     destructive_hint = false,
     idempotent_hint = true,
@@ -19,7 +19,7 @@ use crate::models::params::FilesParams;
 pub struct ListFilesTool {
     /// Optional repo-relative directory prefix.
     #[json_schema(
-        description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary). Glob patterns are not supported in this version. Omit to list every indexed file.",
+        description = "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary) or glob pattern (segments: `*` segment wildcard, `**` any depth, `?` one char). Omit to list every indexed file.",
         min_length = 1,
         max_length = 500
     )]

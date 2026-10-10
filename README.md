@@ -25,6 +25,7 @@ knot-lite callers parse_files --no-lsp        # same, without asking language se
 knot-lite status --probe-lsp                  # start each language server once and report readiness
 knot-lite explore src/pipeline/parser/mod.rs  # file anatomy and entity list
 knot-lite files -p src/                       # list indexed files
+knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 ```
 
 ## Tools & Capabilities (0.4.0)
@@ -35,7 +36,7 @@ knot-lite files -p src/                       # list indexed files
 | `search_hybrid_context` | Cosine top-k vector search over entities and tier-1 line-window chunks | `vector` |
 | `find_callers` | 3-tier target resolution, container-level callers grouped by relationship; per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
 | `explore_file` | File entities grouped by family, with incoming-reference counts and markup summaries | — |
-| `list_files` | Indexed files with entity and chunk counts, prefix filter | — |
+| `list_files` | Indexed files with entity and chunk counts, prefix or glob filter | — |
 
 ## Indexing (`knot-lite index`)
 
@@ -185,7 +186,7 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a call are asked; `explore_file` and `search_hybrid_context` do not use servers. Pre-computed answers do not report self-references.
 - **Java right after an edit:** jdtls updates its index in the background, so the first live answer after a Java file was edited (and `knot-lite index` re-run) can still describe the file as it was — measured on a one-module Maven project, the call hierarchy missed the new caller in 6 of 8 first sessions and the merged answer in 3 of 8; the next session was complete every time (8 of 8). Ask again, or use the heuristic edges (`--no-lsp`), which are rebuilt by the index.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
-- **Prefix Filters Only:** Path filters accept repo-relative directory prefixes (e.g. `src/api`). Glob patterns are rejected with a pinned diagnostic.
+- **Path filters:** `path` accepts a repo-relative directory prefix (`src/api`, matched on a path boundary) or knot's glob language: `*` stays inside one path segment (`*.rs` matches root files only; use `**/*.rs`), `**` spans any number of segments, `?` is one character. Matching is case-sensitive; `[`, `]`, `{` and `}` are literal characters (so `app/[id]` works as a prefix), not character classes or alternations.
 
 ## Install
 

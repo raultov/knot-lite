@@ -31,7 +31,7 @@ pub const SERVER_INSTRUCTIONS: &str = "knot-lite answers code-intelligence quest
 2. search_hybrid_context — semantic search over the index.\n\
 3. find_callers — reverse references; provenance per target: lsp-live, lsp-indexed or heuristic.\n\
 4. explore_file — entities declared in one file.\n\
-5. list_files — files in the index, optionally under a directory prefix.\n\
+5. list_files — files in the index, optionally under a directory prefix or matching a glob.\n\
 Tools 2-5 require a knot-lite index; without one they explain what is missing.\n\
 The first find_callers on a language may answer from heuristic edges while its language server starts; retry for language-server answers.\n\
 repo_name is optional: this server serves a single repository; 'all', '*' or its own name are accepted.";
@@ -231,12 +231,11 @@ mod tests {
 2. search_hybrid_context — semantic search over the index.\n\
 3. find_callers — reverse references; provenance per target: lsp-live, lsp-indexed or heuristic.\n\
 4. explore_file — entities declared in one file.\n\
-5. list_files — files in the index, optionally under a directory prefix.\n\
+5. list_files — files in the index, optionally under a directory prefix or matching a glob.\n\
 Tools 2-5 require a knot-lite index; without one they explain what is missing.\n\
 The first find_callers on a language may answer from heuristic edges while its language server starts; retry for language-server answers.\n\
 repo_name is optional: this server serves a single repository; 'all', '*' or its own name are accepted."
         );
-        assert!(!SERVER_INSTRUCTIONS.contains("prefix or glob"));
     }
 
     #[test]

@@ -6,7 +6,8 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use super::filters::PathPrefix;
+use super::files::path_line;
+use super::filters::{PathFilter, PathMode};
 use super::render::{Column, RenderDoc, RenderSection, str_at, u64_at};
 use crate::config::OutputFormat;
 use crate::index::load::{LoadedIndex, Matrix};
@@ -31,8 +32,8 @@ pub struct SearchRequest<'a> {
     pub max_results: usize,
     /// Expanded kind filter; empty = every record, tier-1 included.
     pub kinds: &'a [String],
-    /// Optional path prefix.
-    pub path: Option<&'a PathPrefix>,
+    /// Optional path filter (prefix or glob).
+    pub path: Option<&'a PathFilter>,
 }
 
 /// `index` object of the response.
@@ -49,8 +50,10 @@ pub struct SearchIndexInfo {
 pub struct SearchFilters {
     /// The expanded kinds (empty = no kind filter).
     pub kinds: Vec<String>,
-    /// The normalised path prefix.
+    /// The normalised path filter.
     pub path: Option<String>,
+    /// How `path` matched (`prefix` or `glob`), when one was given.
+    pub path_mode: Option<PathMode>,
 }
 
 /// One ranked result.
@@ -106,7 +109,7 @@ pub struct SearchResponse {
     /// Ranked results.
     pub results: Vec<SearchHit>,
     /// Caveats for the reader.
-    pub notes: Vec<&'static str>,
+    pub notes: Vec<String>,
 }
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
@@ -165,13 +168,25 @@ pub fn search_index(
         },
         filters: SearchFilters {
             kinds: request.kinds.to_vec(),
-            path: request.path.map(|prefix| prefix.as_str().to_owned()),
+            path: request.path.map(|filter| filter.as_str().to_owned()),
+            path_mode: request.path.map(PathFilter::mode),
         },
         max_results: request.max_results,
         candidates: candidates.len(),
         results,
-        notes: vec![PURE_VECTOR_NOTE],
+        notes: search_notes(index, request.path),
     }
+}
+
+/// The ranking note, plus the no-match note when no indexed file passes the path filter.
+fn search_notes(index: &LoadedIndex, path: Option<&PathFilter>) -> Vec<String> {
+    let mut notes = vec![PURE_VECTOR_NOTE.to_owned()];
+    if let Some(filter) = path
+        && !index.by_file.keys().any(|file| filter.matches(file))
+    {
+        notes.push(filter.no_match_note());
+    }
+    notes
 }
 
 fn passes(index: &LoadedIndex, row: usize, request: &SearchRequest<'_>) -> bool {
@@ -263,7 +278,7 @@ fn filter_lines(value: &Value) -> Vec<String> {
         lines.push(format!("kinds: {}", kinds.join(", ")));
     }
     if let Some(path) = str_at(value, &["filters", "path"]) {
-        lines.push(format!("path: {path}"));
+        lines.push(path_line(path, str_at(value, &["filters", "path_mode"])));
     }
     lines
 }

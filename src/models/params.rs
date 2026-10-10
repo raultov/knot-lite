@@ -66,7 +66,7 @@ pub struct SearchParams {
     pub max_results: Option<i64>,
     /// Optional entity-kind filter, comma-separated.
     pub kinds: Option<String>,
-    /// Optional repo-relative path prefix filter.
+    /// Optional repo-relative path prefix or glob.
     pub path: Option<String>,
 }
 

@@ -20,7 +20,7 @@ use crate::query::callers::{
 };
 use crate::query::explore::{explore_doc, explore_response};
 use crate::query::files::{files_doc, files_response};
-use crate::query::filters::{PathPrefix, clamp_i64};
+use crate::query::filters::{PathFilter, clamp_i64};
 use crate::query::render::render;
 use crate::query::search::{
     DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP, SearchRequest, search_doc, search_index,
@@ -65,8 +65,7 @@ pub fn run_search_hybrid_context(
     params: &SearchParams,
 ) -> anyhow::Result<Value> {
     let max_results = clamp_i64(params.max_results, DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
-    let path = PathPrefix::parse(SEARCH_TOOL, params.path.as_deref().unwrap_or(""))
-        .map_err(|message| anyhow::anyhow!(message))?;
+    let path = PathFilter::parse(params.path.as_deref().unwrap_or(""));
     let kinds = parse_kinds(params.kinds.as_deref());
     with_index(cfg, services, SEARCH_TOOL, |index| {
         let query_vector = services
@@ -146,14 +145,13 @@ pub fn format_explore_output(value: &Value, format: OutputFormat) -> String {
     render(&explore_doc(value, format), value, format)
 }
 
-/// `list_files` — the files in the index, optionally under a directory prefix.
+/// `list_files` — the files in the index, optionally under a directory prefix or matching a glob.
 pub fn run_list_files(
     cfg: &Config,
     services: &QueryServices,
     params: &FilesParams,
 ) -> anyhow::Result<Value> {
-    let prefix = PathPrefix::parse(FILES_TOOL, params.path.as_deref().unwrap_or(""))
-        .map_err(|message| anyhow::anyhow!(message))?;
+    let prefix = PathFilter::parse(params.path.as_deref().unwrap_or(""));
     with_index(cfg, services, FILES_TOOL, |index| {
         let response = files_response(index, &cfg.repo_name, prefix.as_ref());
         to_json(&response, FILES_TOOL)
@@ -332,22 +330,56 @@ mod tests {
     }
 
     #[test]
-    fn search_rejects_glob() {
+    fn search_reports_path_mode() {
         let (_tmp, cfg) = indexed();
         let params = SearchParams {
-            path: Some("src/*".to_owned()),
+            path: Some("src/*.rs".to_owned()),
+            max_results: Some(100),
             ..search("x")
         };
-        let error = run_search_hybrid_context(&cfg, &services(), &params).expect_err("glob");
+        let value = run_search_hybrid_context(&cfg, &services(), &params).expect("glob");
+        let files = files_of(&value);
+        assert!(!files.is_empty());
         assert!(
-            error.downcast_ref::<QueryUnavailable>().is_none(),
-            "a plain error, not unavailable"
+            files
+                .iter()
+                .all(|f| f.starts_with("src/") && f.ends_with(".rs")),
+            "{files:?}"
         );
+        assert_eq!(value["filters"]["path"], "src/*.rs");
+        assert_eq!(value["filters"]["path_mode"], "glob");
+        let prefix = run_search_hybrid_context(
+            &cfg,
+            &services(),
+            &SearchParams {
+                path: Some("src".to_owned()),
+                ..search("x")
+            },
+        )
+        .expect("prefix");
+        assert_eq!(prefix["filters"]["path_mode"], "prefix");
+        let table = format_search_output(&value, OutputFormat::Table);
+        assert!(table.contains("path: src/*.rs (glob)"), "{table}");
+    }
+
+    #[test]
+    fn search_no_match_note() {
+        let (_tmp, cfg) = indexed();
+        let params = SearchParams {
+            path: Some("src/**/*.zig".to_owned()),
+            ..search("x")
+        };
+        let value = run_search_hybrid_context(&cfg, &services(), &params).expect("search");
+        assert!(files_of(&value).is_empty());
+        let notes: Vec<&str> = value["notes"]
+            .as_array()
+            .expect("notes")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
         assert!(
-            error
-                .to_string()
-                .starts_with("search_hybrid_context: glob patterns are not supported"),
-            "{error}"
+            notes.contains(&"path 'src/**/*.zig' matched no indexed file"),
+            "{notes:?}"
         );
     }
 
@@ -559,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn files_runner_lists_filters_and_rejects_globs() {
+    fn files_runner_lists_prefixes_and_globs() {
         let (_tmp, cfg) = indexed();
         let all = run_list_files(&cfg, &services(), &FilesParams::default()).expect("files");
         assert_eq!(all["total"], 7);
@@ -574,24 +606,17 @@ mod tests {
         assert_eq!(src["total"], 2);
         assert_eq!(src["path"], "src");
 
-        let error = run_list_files(
+        let glob = run_list_files(
             &cfg,
             &services(),
             &FilesParams {
-                path: Some("src/**/*.rs".to_owned()),
+                path: Some("**/*.rs".to_owned()),
             },
         )
-        .expect_err("glob");
-        assert!(
-            error.downcast_ref::<QueryUnavailable>().is_none(),
-            "a plain error"
-        );
-        assert!(
-            error
-                .to_string()
-                .starts_with("list_files: glob patterns are not supported"),
-            "{error}"
-        );
+        .expect("glob");
+        assert_eq!(glob["total"], 2);
+        assert_eq!(glob["path_mode"], "glob");
+        assert_eq!(src["path_mode"], "prefix");
 
         let table = format_files_output(&src, OutputFormat::Table);
         assert!(

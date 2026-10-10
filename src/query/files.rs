@@ -1,9 +1,10 @@
-//! `list_files`: the files in the index, optionally under a directory prefix.
+//! `list_files`: the files in the index, optionally under a directory prefix
+//! or matching a glob.
 
 use serde::Serialize;
 use serde_json::Value;
 
-use super::filters::PathPrefix;
+use super::filters::{PathFilter, PathMode};
 use super::render::{Column, RenderDoc, RenderSection, str_at, u64_at};
 use crate::config::OutputFormat;
 use crate::index::load::LoadedIndex;
@@ -38,9 +39,11 @@ pub struct FilesResponse {
     pub knot_lite_version: &'static str,
     /// Repository name.
     pub repo: String,
-    /// The normalised prefix, when one was given.
+    /// The normalised path filter, when one was given.
     pub path: Option<String>,
-    /// Files that match the prefix.
+    /// How `path` matched (`prefix` or `glob`), when one was given.
+    pub path_mode: Option<PathMode>,
+    /// Files that match the filter.
     pub total: usize,
     /// Files listed (capped at [`MAX_LISTED_FILES`]).
     pub shown: usize,
@@ -52,11 +55,11 @@ pub struct FilesResponse {
     pub notes: Vec<String>,
 }
 
-/// List the indexed files under `prefix` (every file when `None`).
+/// List the indexed files that pass `prefix` (every file when `None`).
 pub fn files_response(
     index: &LoadedIndex,
     repo: &str,
-    prefix: Option<&PathPrefix>,
+    prefix: Option<&PathFilter>,
 ) -> FilesResponse {
     let matching: Vec<(&String, &Vec<usize>)> = index
         .by_file
@@ -73,7 +76,7 @@ pub fn files_response(
     let mut notes = Vec::new();
     if total == 0 {
         notes.push(match prefix {
-            Some(prefix) => format!("no indexed file under '{}'", prefix.as_str()),
+            Some(prefix) => prefix.no_match_note(),
             None => "the index contains no files".to_owned(),
         });
     }
@@ -82,6 +85,7 @@ pub fn files_response(
         knot_lite_version: env!("CARGO_PKG_VERSION"),
         repo: repo.to_owned(),
         path: prefix.map(|prefix| prefix.as_str().to_owned()),
+        path_mode: prefix.map(PathFilter::mode),
         total,
         shown: files.len(),
         truncated: files.len() < total,
@@ -114,9 +118,9 @@ pub fn files_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);
     let mut summary = vec![
-        format!(
-            "path: {}",
-            str_at(value, &["path"]).unwrap_or("(all files)")
+        str_at(value, &["path"]).map_or_else(
+            || "path: (all files)".to_owned(),
+            |path| path_line(path, str_at(value, &["path_mode"])),
         ),
         format!(
             "showing {} of {} files",
@@ -125,7 +129,7 @@ pub fn files_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
         ),
     ];
     if value.get("truncated").and_then(Value::as_bool) == Some(true) {
-        summary.push("the list is truncated; pass a longer path prefix".to_owned());
+        summary.push("the list is truncated; pass a narrower path prefix or glob".to_owned());
     }
     RenderDoc {
         title: format!("knot-lite files — repository '{repo}'"),
@@ -164,6 +168,15 @@ pub fn files_doc(value: &Value, _format: OutputFormat) -> RenderDoc {
     }
 }
 
+/// `path: <p>`, with ` (glob)` appended for a glob (shared with search).
+pub(crate) fn path_line(path: &str, mode: Option<&str>) -> String {
+    if mode == Some("glob") {
+        format!("path: {path} (glob)")
+    } else {
+        format!("path: {path}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,8 +192,8 @@ mod tests {
         (tmp, index)
     }
 
-    fn prefix(raw: &str) -> Option<PathPrefix> {
-        PathPrefix::parse("list_files", raw).expect("valid prefix")
+    fn prefix(raw: &str) -> Option<PathFilter> {
+        PathFilter::parse(raw)
     }
 
     #[test]
@@ -250,6 +263,29 @@ mod tests {
         );
         let exact_file = files_response(&index, "demo", prefix("src/lib.rs").as_ref());
         assert_eq!(exact_file.total, 1, "a prefix may name a single file");
+        assert_eq!(under_src.path_mode, Some(PathMode::Prefix));
+    }
+
+    #[test]
+    fn files_reports_path_mode() {
+        let function = |id: &str| entity(id, "rust_function", "f", "f", (1, 2));
+        let index = synthetic_index(
+            vec![
+                ("src/lib.rs", function("1")),
+                ("src/api/mod.rs", function("2")),
+                ("src/api/mod.ts", function("3")),
+            ],
+            &[],
+        );
+        let glob = files_response(&index, "demo", prefix("src/**/*.rs").as_ref());
+        let paths: Vec<&str> = glob.files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, vec!["src/api/mod.rs", "src/lib.rs"]);
+        assert_eq!(glob.path_mode, Some(PathMode::Glob));
+        let json = serde_json::to_value(&glob).expect("json");
+        assert_eq!(json["path_mode"], "glob");
+        assert_eq!(json["path"], "src/**/*.rs");
+        let unfiltered = serde_json::to_value(files_response(&index, "demo", None)).expect("json");
+        assert!(unfiltered["path_mode"].is_null());
     }
 
     #[test]
@@ -260,7 +296,7 @@ mod tests {
             (response.total, response.shown, response.truncated),
             (0, 0, false)
         );
-        assert_eq!(response.notes, vec!["no indexed file under 'nope'"]);
+        assert_eq!(response.notes, vec!["path 'nope' matched no indexed file"]);
     }
 
     #[test]

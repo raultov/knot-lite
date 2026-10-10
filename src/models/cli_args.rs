@@ -113,7 +113,8 @@ pub enum Commands {
         kinds: Option<String>,
 
         /// Optional path filter: repo-relative directory prefix ('src/api',
-        /// matched on a path boundary). Glob patterns are not supported yet.
+        /// matched on a path boundary) or glob pattern (segments: `*` segment
+        /// wildcard, `**` any depth, `?` one char).
         #[arg(short, long)]
         path: Option<String>,
 
@@ -173,9 +174,11 @@ pub enum Commands {
     },
 
     /// List the indexed files of the repository (read-only), optionally under a
-    /// directory prefix (`src/api`)
+    /// directory prefix (`src/api`) or matching a glob (`src/**/*.rs`)
     Files {
-        /// Optional repo-relative directory prefix
+        /// Optional repo-relative directory prefix ('src/api', matched on a path
+        /// boundary) or glob pattern (segments: `*` segment wildcard, `**` any
+        /// depth, `?` one char)
         #[arg(short, long)]
         path: Option<String>,
 

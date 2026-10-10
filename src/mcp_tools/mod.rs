@@ -229,17 +229,26 @@ mod tests {
     }
 
     #[test]
-    fn list_files_path_does_not_promise_globs() {
-        let tool = tool_named("list_files");
-        let description = property(&tool, "path")["description"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        assert!(
-            description.contains("Glob patterns are not supported"),
-            "{description}"
-        );
-        assert!(!description.contains("segment wildcard"), "{description}");
+    fn path_fields_describe_knot_globs() {
+        for name in ["list_files", "search_hybrid_context"] {
+            let tool = tool_named(name);
+            let description = property(&tool, "path")["description"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            assert!(
+                description.starts_with(
+                    "Optional repo-relative directory prefix (e.g. 'src/api', matched on a path boundary) or glob pattern (segments: `*` segment wildcard, `**` any depth, `?` one char)."
+                ),
+                "{name}: {description}"
+            );
+            assert!(!description.contains("not supported"), "{description}");
+            let tool_description = tool.description.unwrap();
+            assert!(
+                !tool_description.contains("rejected"),
+                "{name}: {tool_description}"
+            );
+        }
     }
 
     #[test]

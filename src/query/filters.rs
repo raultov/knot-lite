@@ -1,48 +1,68 @@
-//! Parameter normalisation shared by the query tools: path prefixes (never
-//! globs in 0.2.0) and result limits.
+//! Parameter normalisation shared by the query tools: path filters (directory
+//! prefixes or knot's globs) and result limits.
 
-/// Characters that make a path a glob pattern (not supported yet).
-const GLOB_CHARS: &[char] = &['*', '?', '[', '{'];
+use serde::Serialize;
 
-/// A repo-relative directory prefix, normalised: `\` → `/`, a leading `./` and
-/// trailing `/` removed.
+/// How a [`PathFilter`] matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathMode {
+    /// A directory prefix matched on a `/` boundary.
+    Prefix,
+    /// A glob: `*` (one segment), `**` (any depth), `?` (one character).
+    Glob,
+}
+
+/// A repo-relative path filter, normalised: `\` → `/`, a leading `./` and
+/// trailing `/` removed. Matching is knot's own
+/// ([`knot::cli_tools::list_files::path_matches`]), so prefixes and globs
+/// behave exactly as in knot: `[`, `]`, `{` and `}` are literal characters.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PathPrefix(String);
+pub struct PathFilter {
+    pattern: String,
+    mode: PathMode,
+}
 
-impl PathPrefix {
-    /// Parse a user-supplied prefix. `""` and `"."` mean "no filter"
-    /// (`Ok(None)`); glob metacharacters are rejected with the pinned text of
-    /// §9.7 (a plain error, not an unavailable-index diagnostic).
-    pub fn parse(tool: &str, raw: &str) -> Result<Option<Self>, String> {
-        if raw.contains(GLOB_CHARS) {
-            return Err(format!(
-                "{tool}: glob patterns are not supported by knot-lite {} ('{raw}'); pass a repo-relative directory prefix such as 'src/api'.",
-                env!("CARGO_PKG_VERSION")
-            ));
-        }
+impl PathFilter {
+    /// Parse a user-supplied filter. `""` and `"."` mean "no filter" (`None`).
+    pub fn parse(raw: &str) -> Option<Self> {
         let mut normalised = raw.trim().replace('\\', "/");
         while let Some(rest) = normalised.strip_prefix("./") {
             normalised = rest.to_owned();
         }
-        let trimmed = normalised.trim_end_matches('/');
-        Ok(match trimmed {
+        match normalised.trim_end_matches('/') {
             "" | "." => None,
-            prefix => Some(Self(prefix.to_owned())),
-        })
+            pattern => Some(Self {
+                pattern: pattern.to_owned(),
+                mode: if pattern.contains(['*', '?']) {
+                    PathMode::Glob
+                } else {
+                    PathMode::Prefix
+                },
+            }),
+        }
     }
 
-    /// Whether `rel` is the prefix itself or lies under it (boundary match:
-    /// `src` matches `src/lib.rs`, not `srcx/lib.rs`).
+    /// Whether `rel` passes the filter: for a prefix, `rel` is the prefix itself
+    /// or lies under it (`src` matches `src/lib.rs`, not `srcx/lib.rs`); for a
+    /// glob, `rel` matches the pattern segment by segment.
     pub fn matches(&self, rel: &str) -> bool {
-        rel == self.0
-            || rel
-                .strip_prefix(&self.0)
-                .is_some_and(|rest| rest.starts_with('/'))
+        knot::cli_tools::list_files::path_matches(&self.pattern, rel)
     }
 
-    /// The normalised prefix.
+    /// The normalised pattern.
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.pattern
+    }
+
+    /// Prefix or glob.
+    pub fn mode(&self) -> PathMode {
+        self.mode
+    }
+
+    /// The note added when no indexed file passes the filter.
+    pub fn no_match_note(&self) -> String {
+        format!("path '{}' matched no indexed file", self.pattern)
     }
 }
 
@@ -59,55 +79,104 @@ pub fn clamp_i64(value: Option<i64>, default: usize, max: usize) -> usize {
 mod tests {
     use super::*;
 
-    fn prefix(raw: &str) -> Option<PathPrefix> {
-        PathPrefix::parse("list_files", raw).expect("valid prefix")
+    fn filter(raw: &str) -> PathFilter {
+        PathFilter::parse(raw).expect(raw)
     }
 
     #[test]
     fn empty_and_dot_mean_no_filter() {
         for raw in ["", ".", "./", "  ", "./."] {
-            assert_eq!(prefix(raw), None, "{raw:?}");
+            assert_eq!(PathFilter::parse(raw), None, "{raw:?}");
         }
     }
 
     #[test]
-    fn prefixes_are_normalised() {
+    fn backslashes_and_dot_slash_normalised_before_matching() {
         for (raw, expected) in [
             ("src", "src"),
             ("src/", "src"),
             ("./src/api", "src/api"),
             ("src\\api\\", "src/api"),
             ("././a/b//", "a/b"),
+            (".\\src\\**\\*.rs", "src/**/*.rs"),
         ] {
-            assert_eq!(prefix(raw).expect(raw).as_str(), expected, "{raw:?}");
+            assert_eq!(filter(raw).as_str(), expected, "{raw:?}");
         }
+        assert!(filter("src\\**\\*.rs").matches("src/a/b.rs"));
     }
 
     #[test]
-    fn matching_respects_directory_boundaries() {
-        let p = prefix("src").expect("prefix");
+    fn prefix_mode_for_plain_paths() {
+        let p = filter("src");
+        assert_eq!(p.mode(), PathMode::Prefix);
         for rel in ["src", "src/lib.rs", "src/a/b.rs"] {
             assert!(p.matches(rel), "{rel}");
         }
         for rel in ["srcx/lib.rs", "other/src/lib.rs", "sr", "src.rs", ""] {
             assert!(!p.matches(rel), "{rel}");
         }
-        let nested = prefix("src/api").expect("prefix");
+        let nested = filter("src/api");
         assert!(nested.matches("src/api/mod.rs") && !nested.matches("src/apix/mod.rs"));
+        assert!(!nested.matches("src/api-notes.md"));
     }
 
     #[test]
-    fn globs_are_rejected_with_the_pinned_text() {
-        for raw in ["src/*", "src/**/*.rs", "a?b", "src/[ab]", "{a,b}"] {
-            let error = PathPrefix::parse("list_files", raw).expect_err(raw);
-            assert_eq!(
-                error,
-                format!(
-                    "list_files: glob patterns are not supported by knot-lite {} ('{raw}'); pass a repo-relative directory prefix such as 'src/api'.",
-                    env!("CARGO_PKG_VERSION")
-                )
-            );
+    fn glob_mode_for_star_and_question() {
+        for raw in ["src/*", "src/**/*.rs", "a?b"] {
+            assert_eq!(filter(raw).mode(), PathMode::Glob, "{raw}");
         }
+        assert!(filter("src/?.rs").matches("src/a.rs"));
+        assert!(!filter("src/?.rs").matches("src/ab.rs"));
+    }
+
+    #[test]
+    fn brackets_and_braces_are_literal() {
+        let next = filter("app/[id]");
+        assert_eq!(next.mode(), PathMode::Prefix);
+        assert!(next.matches("app/[id]/page.tsx"));
+        assert!(!next.matches("app/i/page.tsx"));
+        let braces = filter("src/{a,b}");
+        assert_eq!(braces.mode(), PathMode::Prefix);
+        assert!(braces.matches("src/{a,b}/x.rs") && !braces.matches("src/a/x.rs"));
+    }
+
+    #[test]
+    fn star_is_segment_local() {
+        let p = filter("src/*.rs");
+        assert!(p.matches("src/lib.rs"));
+        assert!(!p.matches("src/a/b.rs"));
+    }
+
+    #[test]
+    fn double_star_spans_segments_including_zero() {
+        let p = filter("src/**/*.rs");
+        for rel in ["src/lib.rs", "src/a/b.rs", "src/a/b/c.rs"] {
+            assert!(p.matches(rel), "{rel}");
+        }
+        assert!(!p.matches("tests/a.rs"));
+        assert!(!p.matches("src/a/b.ts"));
+    }
+
+    #[test]
+    fn star_dot_ext_matches_root_only() {
+        let p = filter("*.rs");
+        assert!(p.matches("build.rs"));
+        assert!(!p.matches("src/lib.rs"));
+        assert!(filter("**/*.rs").matches("src/lib.rs"));
+    }
+
+    #[test]
+    fn matching_is_case_sensitive() {
+        assert!(!filter("SRC/**").matches("src/lib.rs"));
+        assert!(!filter("Src").matches("src/lib.rs"));
+    }
+
+    #[test]
+    fn no_match_note_names_the_pattern() {
+        assert_eq!(
+            filter("src/**/*.zig").no_match_note(),
+            "path 'src/**/*.zig' matched no indexed file"
+        );
     }
 
     #[test]
