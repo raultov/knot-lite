@@ -37,7 +37,7 @@ absent in a fresh clone. This file is the standing contract.
    tests in `src/` never download models, access network, start a real language server
    (an in-process scripted fake, `lsp/fake.rs`, speaks LSP instead; `config_for` turns
    servers off), or read `~/.knot` / the sandbox.
-   Measurement tests are `#[ignore]`d in `src/measure.rs` and run explicitly with
+   Measurement tests are `#[ignore]`d in `src/measure/` and run explicitly with
    `KNOT_LITE_SANDBOX` and `KNOT_LITE_MEASURE_OUT` set (both required, no default).
 6. After every task `make check` must be green before committing. Commits:
    `phase2(P2.x): <summary>`-style messages, one commit per task.
@@ -70,13 +70,14 @@ src/
 ├── config.rs         Config, OutputFormat, CommonArgs, EmbedSettings, pure resolver
 ├── error.rs          IndexUnavailable, QueryUnavailable (typed diagnostics, exit code 2)
 ├── utils.rs          logging (stderr only)
-├── measure.rs        #[cfg(test)] #[ignore] measurement gates M1–M8 (Phase 2) and L1–L12 (Phases 3–4)
+├── measure/          #[cfg(test)] #[ignore] measurement gates: phase2 (M1–M8), lsp (L1–L12), hybrid (H1–H3, M4r, M5r), explore (X1, X2), precompute (L13, L7s)
 ├── models/           cli_args (clap), params (run_* contracts), repo_scope
-├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load
+├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load, search_aux (lazy BM25 + call graph)
+├── lexicon/          tokenize (kl-lex-1), store (lexicon/<rel>.jsonl), bm25
 ├── embed/            EmbedBatch trait, EmbedSettings, FakeEmbedder, KnotEmbedder
 ├── graph/            containers (ContainerTable), heuristic (resolve_edges), fanin (caller_fanin)
-├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters, render, search, callers + sources (indexed / live / heuristic per target), explore, files
-├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker; one lock per language), owner (ownership mark + sweeps), process (the only spawn), session, spec, target, normalize, request, precompute, probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
+├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters (prefix / glob), render, search + hybrid (pool, coverage, fusion), callers + sources (indexed / live / heuristic per target), explore + explore_refs + outline, files
+├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker; one lock per language), owner (ownership mark + sweeps), process (the only spawn), session, spec, target, ops, outline (documentSymbol), normalize, request, precompute (heuristic / lsp-refs selection), probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
 ├── capability/       language labels, which(), lsp_registry, scan, tier model
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)
@@ -86,7 +87,9 @@ tests/
 ├── mcp_stdio.rs      the stdio transport (Rust, part of `make check`)
 ├── run_all_e2e.sh    orchestrator of the E2E suites (`make e2e`)
 ├── run_{rust,typescript,javascript,java}_e2e.sh   one suite per language (Java also runs Gradle)
+├── ci/               install_jdtls.sh (pinned, checksum-verified), seed_gradle.sh (CI only)
 └── e2e/              lib.sh (helpers, sourced) and fixtures/ (copied to the E2E home, never used in place)
+.github/workflows/ci.yml   CI: `make check` (Linux; + macOS on master), `make e2e` (Linux, strict)
 ```
 
 ## Gates
@@ -99,6 +102,11 @@ make dupes-cleanup                          # stale duplication suppressions
 make e2e                                    # the end-to-end suites (real servers; not in `make check`)
 make check-all                              # make check + make e2e
 ```
+
+CI (`.github/workflows/ci.yml`) runs `make check` on every push to `master`/`phase-*` and on pull
+requests (Linux; macOS too on `master`), then `make e2e` on Linux in strict mode
+(`KNOT_LITE_E2E_REQUIRE_LSP=1`, `KNOT_LITE_E2E_REQUIRE_GRADLE=1`). Pin actions by commit SHA and
+server versions explicitly; a CI change is its own `-ci` commit.
 
 Duplication must stay at **0** (see `dupes.toml`): extract a shared, parameterised
 helper instead of duplicating code. `docs/spikes/` is excluded from the root gate.

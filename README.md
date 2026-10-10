@@ -1,18 +1,22 @@
 # knot-lite
 
+[![CI](https://github.com/raultov/knot-lite/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/raultov/knot-lite/actions/workflows/ci.yml)
+
 Database-free code intelligence for **one repository**: file-based vectors plus a
 language-server call graph, built on [knot](../knot)'s parsers. No Qdrant, no Neo4j,
 no services to run — an index lives in a single `.knot-lite/` directory inside the
 repository it describes.
 
-> **Project status — Phase 4.** All five tools (`status`, `search_hybrid_context`, `find_callers`,
+> **Project status — Phase 5.** All five tools (`status`, `search_hybrid_context`, `find_callers`,
 > `explore_file`, `list_files`) answer from the index. `find_callers` asks the **language
 > server** (rust-analyzer, typescript-language-server, jdtls) per target — live, or from edges
 > pre-computed by `knot-lite index` for widely used targets — and falls back to knot's heuristic
 > edges per target when a server is unavailable. Vectors use `i8pv_b64` int8 product-quantisation
 > with text-hash reuse. Phase 4 hardened the servers: languages are queried in parallel, every
 > process a server starts (a Gradle daemon) is owned by it and stopped with it, and a shell
-> end-to-end suite runs the real servers on small fixtures (`make e2e`).
+> end-to-end suite runs the real servers on small fixtures (`make e2e`). Phase 5 added glob path filters, knot's
+> full target-tier ladder for `find_callers`, an opt-in hybrid search (`KNOT_LITE_SEARCH=hybrid`), language-server
+> counts and outlines in `explore_file`, an opt-in pre-computation selection by server reference counts, and CI.
 
 ## Quick start
 
@@ -20,15 +24,17 @@ repository it describes.
 knot-lite index                               # build .knot-lite/ in the current directory
 knot-lite status                              # check capability matrix, index state and freshness
 knot-lite search "user authentication"        # vector search
+KNOT_LITE_SEARCH=hybrid knot-lite search "user authentication"  # opt-in hybrid ranking
 knot-lite callers parse_files                 # reverse references (language server, heuristic fallback)
 knot-lite callers parse_files --no-lsp        # same, without asking language servers
+knot-lite callers arse_fil --no-lsp           # approximate tiers: substring (4+ chars), name prefix, signature prefix
 knot-lite status --probe-lsp                  # start each language server once and report readiness
 knot-lite explore src/pipeline/parser/mod.rs  # file anatomy and entity list
 knot-lite files -p src/                       # list indexed files
 knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 ```
 
-## Tools & Capabilities (0.4.0)
+## Tools & Capabilities (0.5.0)
 
 | Tool | Capability | Provenance |
 |---|---|---|
@@ -88,7 +94,8 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
 - **When they start.** Lazily, on the first target of their language (CLI and MCP), unless
   `KNOT_LITE_LSP_WARMUP=on` (MCP: start the indexed languages at launch). A query waits for a starting server
   up to its ready timeout on the CLI and 20 s on MCP; after that the target is answered from heuristic edges
-  and the note says so — retry for language-server answers.
+  and the note says so — retry for language-server answers. `explore_file` waits the same way before its first
+  request; its own live budget (about 4 s) starts once the server answers.
 - **When a server counts as ready.** jdtls announces `ServiceReady` and then keeps sending `Starting` status
   reports for its initialization jobs; a Gradle import goes on after `ServiceReady`. A Java server is ready once it
   has announced `ServiceReady` **at any time** and those reports have stopped for the idle window (it is not the
@@ -181,6 +188,28 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
 - **Live latency after the pool rewrite:** unchanged — p95 46 ms (Rust, `knot`) and 28 ms (TypeScript, `knot-site`),
   20/20 and 21/21 targets identical to the independent client.
 
+## Performance & Baselines (Phase 5 Measurements)
+
+Measured with the release build of 0.5.0 (knot 1.11.3) on the same three repositories; the baselines are 0.4.0
+re-measured the same day (see `docs/PLAN_PHASE5_SEARCH_LSP_CI.md`, Appendix D):
+
+- **Hybrid search (opt-in):** on a held-out set of 30 hand-written queries, hit@5 83.3 % hybrid vs 76.7 % cosine
+  (+6.6 points; the bar for making it the default was +10, so `vector` stays the default). Per repository (cosine /
+  hybrid): `knot` 6/8, `knot-site` 9/8, `spring-ai` 8/9. On the Phase 2 entity queries hybrid reaches 75.0 / 100 /
+  100 % (cosine: 75.0 / 80.0 / 83.3 %). In-process search p95: 2.3 ms (`knot`), 0.8 ms (`knot-site`), 12.8 ms
+  (`spring-ai`); the keyword index is built on the first hybrid query (34 / 6 / 224 ms).
+- **Index cost of the lexicon:** warm re-index ×1.06 / ×1.08 / ×1.04 of 0.4.0 (803 ms, 398 ms, 10.2 s); `.knot-lite`
+  grows by 66 / 51 / 53 % (lexicon 3.2 / 0.6 / 17.6 MB). Index load median 19 / 3 / 192 ms.
+- **`explore_file` with a warm server:** p95 84 ms (TypeScript, `knot-site`); 1.8 s (Rust, `knot`), the slow sample being
+  the first explore of a large file (the 14 others: 7–641 ms). Java on `spring-ai` hits the 4 s live budget and answers
+  `partial`. Live counts agree with `find_callers` on 20/20 Rust and 20/20 TypeScript entities.
+- **Pre-computation selection** (`--lsp-precompute all` on `knot`): `heuristic` picked 48 targets (2 942 edges, 13.7 s of
+  language-server time); `lsp-refs` probed 536 candidates in 14.4 s and picked 50 (3 103 edges, 29.1 s). Against the
+  server's own most-referenced targets, `lsp-refs` overlapped 100 % (heuristic 86 %) and covered ×1.05 the callers; on a
+  20-target `spring-ai` sample 70 % vs 55 % (the probe reached 12 of 80 candidates within its share of the budget), ×1.12.
+  The bars for making it the default were 85 % overlap, +10 points and ×1.10, so `heuristic` stays the default.
+  Answers pre-computed with `lsp-refs`: p95 2 ms, 10/10 identical to the live answer.
+
 ## Limitations
 
 - **Hybrid search is opt-in:** by default `search_hybrid_context` ranks by cosine similarity (as in 0.4.x). `KNOT_LITE_SEARCH=hybrid` turns on knot's candidate pool built in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, ordered by knot's own re-rank (`rerank`, called from the knot crate) and fused with the keyword order. On the Phase 5 query set the hybrid ranking gained 6.6 points of hit@5 over cosine on the held-out queries (83.3 % vs 76.7 %) — short of the 10-point bar this release required to make it the default — and lost one `knot-site` query; it is stronger on identifier queries and weaker on documentation/config questions, where knot's re-rank prefers definitions. The call-graph signal uses the heuristic `CALLS` edges only. Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`.
@@ -188,6 +217,10 @@ Measured with the release build of 0.4.0 (knot 1.11.3) on the same repositories,
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed or unindexed file, live counts attribute callers through the containers of the last index, so they can be approximate until `knot-lite index` runs.
 - **Java right after an edit:** jdtls updates its index in the background, so the first live answer after a Java file was edited (and `knot-lite index` re-run) can still describe the file as it was — measured on a one-module Maven project, the call hierarchy missed the new caller in 6 of 8 first sessions and the merged answer in 3 of 8; the next session was complete every time (8 of 8). Ask again, or use the heuristic edges (`--no-lsp`), which are rebuilt by the index.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
+- **Test code in the re-rank:** knot marks entities inside Rust `#[cfg(test)]` modules as test context; for Java,
+  TypeScript and JavaScript the hybrid re-rank recognises tests by their path only.
+- **`explore_file` latency:** the first explore of a large file can take more than a second with a warm server (live
+  reference counts for up to 40 entities); Java usually reaches the 4 s budget and answers `partial`.
 - **Path filters:** `path` accepts a repo-relative directory prefix (`src/api`, matched on a path boundary) or knot's glob language: `*` stays inside one path segment (`*.rs` matches root files only; use `**/*.rs`), `**` spans any number of segments, `?` is one character. Matching is case-sensitive; `[`, `]`, `{` and `}` are literal characters (so `app/[id]` works as a prefix), not character classes or alternations.
 
 ## Install
@@ -261,8 +294,8 @@ make e2e                                    # the end-to-end suites (real langua
 make check-all                              # make check + make e2e
 ```
 
-The measurement gates (M1/M4/M5/M6 and the Phase 3 L1/L2/L3/L7, `#[ignore]`d in `src/measure.rs`) run
-explicitly and require persistent directories — there is no temp-dir default, so results are never lost. The
+The measurement gates (M1/M4/M5/M6, the Phase 3–4 L gates and the Phase 5 H1/M4r/H2/M5r/H3, X1/X2, L13/L7s,
+`#[ignore]`d in `src/measure/`) run explicitly and require persistent directories — there is no temp-dir default, so results are never lost. The
 L gates start **real language servers** on the sandbox copies and also need `KNOT_LITE_LSP_CACHE_DIR`:
 
 ```sh
@@ -271,16 +304,31 @@ KNOT_LITE_MEASURE_OUT=~/.local/share/knot-lite/measure \
 cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes to `master` and `phase-*`, on pull requests to `master` and on demand:
+
+- **`make check`** on `ubuntu-24.04`, and also on `macos-15` for `master` (other branches check on Linux only).
+- **`make e2e`** on `ubuntu-24.04` after `make check` passes, in strict mode (`KNOT_LITE_E2E_REQUIRE_LSP=1`,
+  `KNOT_LITE_E2E_REQUIRE_GRADLE=1`: a missing server fails instead of skipping). It installs pinned servers —
+  rust-analyzer from the toolchain, `typescript-language-server` 5.3.0 with TypeScript 5.9.3, jdtls 1.61.0 (checksum
+  verified, `tests/ci/install_jdtls.sh`) — and seeds Gradle 8.9 (`tests/ci/seed_gradle.sh`). On failure the answers
+  and the language-server logs are uploaded as the `e2e-logs` artifact.
+
+Actions are pinned by commit SHA. Windows is not covered by CI.
+
 ## End-to-end tests
 
 `make e2e` runs `tests/run_all_e2e.sh`: four suites — `tests/run_{rust,typescript,javascript,java}_e2e.sh` — each on a
 small fixture (`tests/e2e/fixtures/`) that is **copied** to `$KNOT_LITE_E2E_HOME/work/<suite>/` and indexed there.
 Every suite drives the release binaries through the CLI and through an MCP stdio session, with the real language
-server: `index`, `status`, `files`, `explore`, `search`, `callers` (heuristic, live, pre-computed, stale target,
-unresolvable server), the MCP tools and their error paths. The Java suite also runs a Gradle project and proves that
+server: `index`, `status`, `files` and `search` (prefix and glob filters, vector and hybrid ranking), `explore`
+(servers off, live counts, the server's outline of a changed or unindexed file), `callers` (every target tier,
+heuristic, live, pre-computed — with both selections in the Java suite — stale target, unresolvable server), the MCP tools and their
+error paths. The Java suite also runs a Gradle project and proves that
 the Gradle daemon is stopped after a CLI exit, after the MCP idle stop, after the MCP exit, and — after `kill -9` of
 the MCP server — by the next start. A suite ends with a check that no process was left behind. They are not part of
-`make check` (they start real servers and take about 5 minutes with warm caches — Java dominates — and longer the first time); a suite also runs alone,
+`make check` (they start real servers and take about 6–7 minutes with warm caches — Java dominates — and longer the first time); a suite also runs alone,
 e.g. `./tests/run_rust_e2e.sh`.
 
 Needs: bash (3.2+), `jq`, a release build (made unless `KNOT_LITE_E2E_SKIP_BUILD=1`), and the servers —

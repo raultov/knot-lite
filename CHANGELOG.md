@@ -7,13 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned for 0.5.0 (Phase 5):
-- Hybrid search for `search_hybrid_context` (BM25 keyword channel, knot's kind-aware re-rank, call-graph entry-point signal).
-- Glob path filters (`*`, `**`, `?`) for `search_hybrid_context` and `list_files`.
-- More `find_callers` target tiers: signature prefix, fuzzy (substring) and name prefix.
-- `explore_file` reference counts and outlines from the language server.
-- Pre-computation targets ranked by language-server reference counts.
-- Continuous integration on Linux and macOS, with the end-to-end suites on Linux.
+## [0.5.0] - unreleased
+
+### Added
+- **Glob path filters:** `path` of `search_hybrid_context` and `list_files` accepts knot's glob language (`*` within a segment, `**` across segments, `?`); plain paths stay directory prefixes. Responses report `path_mode` (`prefix` / `glob`).
+- **`find_callers` target tiers:** knot's full ladder — exact FQN, FQN suffix, exact name, signature prefix, name prefix (short queries) and fuzzy substring (4+ characters). `resolution.tier` names the tier used; approximate tiers add a note.
+- **Hybrid search (opt-in, `KNOT_LITE_SEARCH=hybrid`):** knot's recall pool built in memory (cosine window, definition pass, name probe, callers of the best roots), a BM25 keyword channel over a new per-file lexicon (`.knot-lite/lexicon/`, tokenizer `kl-lex-1`), knot's kind-aware `rerank`, reciprocal-rank fusion. `status` shows the search mode.
+- **`explore_file` v2 (`knot-lite/explore/v2`):** live language-server reference counts for up to 40 entities per call (about 4 s, types and callables first; `lsp.status` = `ok` / `partial` / `off` / …); a changed or unindexed file is described by the server's `documentSymbol` outline.
+- **Pre-computation selection (opt-in, `--lsp-selection lsp-refs`):** a `references` probe over a wider candidate pool (`--lsp-probe-min-fanin`, default 3) ranks targets by the server's own caller count. Manifest `[lsp] format = 2` records the selection and probe counts.
+- **Continuous integration:** `make check` on Linux (and macOS on `master`), `make e2e` on Linux in strict mode with pinned language servers.
+- **E2E rows** for globs, tiers, search modes, explore (servers off, live counts, outlines) and both selections.
+
+### Changed
+- The selection and search defaults stay as in 0.4.x: hybrid search and the `lsp-refs` selection missed this release's measurement bars (hybrid: +6.6 points of hit@5 on held-out queries vs +10 required; `lsp-refs`: 100 % / 70 % overlap with the most-referenced targets and ×1.05 / ×1.12 callers vs 85 % and ×1.10 required). See the README's Phase 5 measurements.
+- `search_hybrid_context` answers with schema `knot-lite/search/v2` in both modes: every hit carries `cosine` and `channels`.
+- `explore_file` waits for a starting language server before its first request, as `find_callers` does; its live budget starts once the server answers.
+- Shard records carry `tc` (entity inside a Rust `#[cfg(test)]` module). Indexes built before 0.5.0 still load; the keyword channel reads names, FQNs and signatures only until the next `knot-lite index`.
 
 ---
 
