@@ -5,6 +5,18 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Planned for 0.5.0 (Phase 5):
+- Hybrid search for `search_hybrid_context` (BM25 keyword channel, knot's kind-aware re-rank, call-graph entry-point signal).
+- Glob path filters (`*`, `**`, `?`) for `search_hybrid_context` and `list_files`.
+- More `find_callers` target tiers: signature prefix, fuzzy (substring) and name prefix.
+- `explore_file` reference counts and outlines from the language server.
+- Pre-computation targets ranked by language-server reference counts.
+- Continuous integration on Linux and macOS, with the end-to-end suites on Linux.
+
+---
+
 ## [0.4.0] - 2026-10-09
 
 ### Added
