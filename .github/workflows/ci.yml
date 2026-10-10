@@ -39,3 +39,61 @@ jobs:
       - name: cargo-dupes
         run: command -v cargo-dupes || cargo install cargo-dupes --version 0.2.1 --locked
       - run: make check
+
+  e2e:
+    name: make e2e (ubuntu-24.04)
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      KNOT_LITE_E2E_REQUIRE_LSP: "1"
+      KNOT_LITE_E2E_REQUIRE_GRADLE: "1"
+      JDTLS_VERSION: "1.61.0"
+      JDTLS_TARBALL: jdt-language-server-1.61.0-202609031315.tar.gz
+      JDTLS_SHA256: 338e7e73d61836651ba2453919a0d34fa763eb4e7c03342092309bffb8934c64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rust-analyzer
+      - name: rust-analyzer on PATH
+        run: echo "$(dirname "$(rustup which --toolchain "$RUST_TOOLCHAIN" rust-analyzer)")" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: npm install -g typescript-language-server@5.3.0 typescript@5.9.3
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gradle/wrapper/dists
+            ~/.cache/knot-lite/fastembed
+            ~/.local/share/jdtls
+          key: e2e-${{ runner.os }}-jdtls-${{ env.JDTLS_VERSION }}-gradle-8.9-${{ hashFiles('tests/e2e/fixtures/**/pom.xml', 'tests/e2e/fixtures/**/build.gradle') }}
+      - name: jdtls
+        run: tests/ci/install_jdtls.sh "$JDTLS_VERSION" "$JDTLS_TARBALL" "$JDTLS_SHA256" "$HOME/.local/share/jdtls/$JDTLS_VERSION" >> "$GITHUB_PATH"
+      - name: Gradle 8.9
+        run: tests/ci/seed_gradle.sh
+      - name: versions
+        run: |
+          rust-analyzer --version
+          typescript-language-server --version
+          node --version
+          java -version
+          mvn -v | head -1
+          jq --version
+      - run: make e2e
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs
+          path: |
+            ~/.local/share/knot-lite/e2e/run
+            ~/.local/share/knot-lite/e2e/lsp-cache/**/*.log
+          retention-days: 7
