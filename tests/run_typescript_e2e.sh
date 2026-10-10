@@ -69,6 +69,26 @@ assert_jq T12a "every hit is a function or a method" "$(J T12a)" '(.results|leng
 rc="$(cli T12b -- search "full display name of a user" -p src/util -o json)"; assert_rc T12b "search -p exits 0" 0 "$rc"
 assert_jq T12b "every hit is under src/util" "$(J T12b)" '(.results|length) > 0 and all(.results[]; .file | startswith("src/util"))'
 
+# ---- T36-T39 Phase 5: globs, target tiers, search modes, explore with servers off -----------------
+rc="$(cli T36a -- files -p 'src/**/*.ts' -o json)"; assert_rc T36a "files with src/**/*.ts exits 0" 0 "$rc"
+assert_jq T36a "exactly the fixture's sources, glob mode" "$(J T36a)" '.path_mode == "glob" and ([.files[].path] | sort) == ($want | sort)' --argjson want "$SRC_FILES"
+rc="$(cli T36b -- search "full display name of a user" -p 'src/*/format.ts' -m 10 -o json)"; assert_rc T36b "search with a glob exits 0" 0 "$rc"
+assert_jq T36b "glob mode, every hit matches src/*/format.ts" "$(J T36b)" '.filters.path_mode == "glob" and (.results|length) > 0 and all(.results[]; .file | test("^src/[^/]+/format\\.ts$"))'
+rc="$(cli T37a -- callers ormatNam --no-lsp -o json)"; assert_rc T37a "callers with a substring exits 0" 0 "$rc"
+assert_jq T37a "fuzzy tier, formatName is target #1" "$(J T37a)" '.resolution.tier == "fuzzy" and .targets[0].name == "formatName"'
+rc="$(cli T37b -- callers fi --no-lsp -o json)"; assert_rc T37b "callers with a short prefix exits 0" 0 "$rc"
+assert_jq T37b "name_prefix tier finds findById" "$(J T37b)" '.resolution.tier == "name_prefix" and ([.targets[].name] | index("findById") != null)'
+rc="$(cli T37d -- callers formatName --no-lsp -o json)"; assert_rc T37d "callers with an exact name exits 0" 0 "$rc"
+assert_jq T37d "the exact name still wins over fuzzy" "$(J T37d)" '.resolution.tier == "exact_name" and .targets[0].name == "formatName"'
+rc="$(cli T38a KNOT_LITE_SEARCH=hybrid -- search "full display name of a user" -o json)"; assert_rc T38a "hybrid search exits 0" 0 "$rc"
+assert_jq T38a "search/v2, hybrid, every hit has a cosine and channels" "$(J T38a)" '.schema == "knot-lite/search/v2" and .provenance == "hybrid" and all(.results[]; (.cosine | type) == "number" and (.channels | length) > 0)'
+rc="$(cli T38b KNOT_LITE_SEARCH=hybrid -- search "format name" -o json)"; assert_rc T38b "hybrid identifier search exits 0" 0 "$rc"
+assert_jq T38b "formatName is rank 1" "$(J T38b)" '.results[0].name == "formatName"'
+rc="$(cli T38c -- search "full display name of a user" -o json)"; assert_rc T38c "default search exits 0" 0 "$rc"
+assert_jq T38c "vector by default: score equals cosine" "$(J T38c)" '.provenance == "vector" and all(.results[]; .score == .cosine)'
+rc="$(cli T39 KNOT_LITE_LSP=off -- explore src/util/format.ts -o json)"; assert_rc T39 "explore with servers off exits 0" 0 "$rc"
+assert_jq T39 "lsp off, every count heuristic" "$(J T39)" '.schema == "knot-lite/explore/v2" and .lsp.status == "off" and all(.groups[].entities[]; .refs_provenance == "heuristic")'
+
 # ---- T13 heuristic ------------------------------------------------------------------------------
 rc="$(cli T13 -- callers formatName --no-lsp -o json)"; assert_rc T13 "callers --no-lsp exits 0" 0 "$rc"
 assert_jq T13 "provenance is heuristic and the notes say so" "$(J T13)" \
@@ -86,6 +106,9 @@ if lsp_or_skip T14 "live callers" ts; then
   assert_subset T14d "file-level rows only in the importing files" "$(file_rows "$(J T14d)")" "$USER_FILE_ROWS"
   rc="$(cli T15 -- callers formatName -o table)"; assert_rc T15 "callers (table) exits 0" 0 "$rc"
   text_in T15 "the table marks the answer [lsp-live]" "$(J T15)" '\[lsp-live\]'
+  rc="$(cli T40 -- explore src/util/format.ts -o json)"; assert_rc T40 "explore with a live server exits 0" 0 "$rc"
+  assert_jq T40 "lsp ok; formatName counted live (4 caller containers)" "$(J T40)" \
+    '.lsp.status == "ok" and ([.groups[].entities[] | select(.name == "formatName") | [.refs_provenance, .referenced_by]] == [["lsp-live", 4]])'
 fi
 
 # ---- T16 a server that does not resolve ----------------------------------------------------------
@@ -108,6 +131,14 @@ if lsp_or_skip T20 "stale target" ts; then
   rc="$(cli T20 -- callers formatName -o json)"; assert_rc T20 "callers after an edit exits 0" 0 "$rc"
   assert_jq T20 "the edited file's target is stale and falls back" "$(J T20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   text_in T20 "a note says the file changed since the last index" "$(J T20)" 'changed since the last index'
+  rc="$(cli T41 -- explore src/util/format.ts -o json)"; assert_rc T41 "explore of the edited file exits 0" 0 "$rc"
+  assert_jq T41 "outline from the server; initials listed, not indexed" "$(J T41)" \
+    '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "initials") | .indexed] == [false])'
+  printf 'export function extraUnit(): number {\n  return 1;\n}\n' > "$T/src/util/extra.ts"
+  rc="$(cli T42 -- explore src/util/extra.ts -o json)"; assert_rc T42 "explore of a file not in the index exits 0" 0 "$rc"
+  assert_jq T42 "outline from the server, reason not_indexed" "$(J T42)" \
+    '.resolution == "not_indexed" and .outline.reason == "not_indexed" and ([.groups[].entities[].name] | index("extraUnit") != null)'
+  rm -f "$T/src/util/extra.ts"
   rc="$(cli T21a -- index -o json)"; assert_rc T21a "re-index exits 0" 0 "$rc"
   rc="$(cli T21b -- callers formatName -o json)"; assert_rc T21b "callers after the re-index exits 0" 0 "$rc"
   assert_jq T21b "answered live again" "$(J T21b)" '.targets[0].provenance == "lsp-live"'

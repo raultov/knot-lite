@@ -65,6 +65,26 @@ assert_jq J12a "every hit is a function or a method" "$(J J12a)" '(.results|leng
 rc="$(cli J12b -- search "price after the discount rate" -p src/ -o json)"; assert_rc J12b "search -p exits 0" 0 "$rc"
 assert_jq J12b "every hit is under src/" "$(J J12b)" '(.results|length) > 0 and all(.results[]; .file | startswith("src/"))'
 
+# ---- J36-J39 Phase 5: globs, target tiers, search modes, explore with servers off -----------------
+rc="$(cli J36a -- files -p 'src/*' -o json)"; assert_rc J36a "files with src/* exits 0" 0 "$rc"
+assert_jq J36a "exactly the fixture's sources, glob mode" "$(J J36a)" '.path_mode == "glob" and ([.files[].path] | sort) == ($want | sort)' --argjson want "$SRC_FILES"
+rc="$(cli J36b -- search "price after the discount rate" -p 'src/p*.js' -m 10 -o json)"; assert_rc J36b "search with a glob exits 0" 0 "$rc"
+assert_jq J36b "glob mode, every hit matches src/p*.js" "$(J J36b)" '.filters.path_mode == "glob" and (.results|length) > 0 and all(.results[]; .file | test("^src/p[^/]*\\.js$"))'
+rc="$(cli J37a -- callers iscountedPri --no-lsp -o json)"; assert_rc J37a "callers with a substring exits 0" 0 "$rc"
+assert_jq J37a "fuzzy tier, discountedPrice is target #1" "$(J J37a)" '.resolution.tier == "fuzzy" and .targets[0].name == "discountedPrice"'
+rc="$(cli J37b -- callers qu --no-lsp -o json)"; assert_rc J37b "callers with a short prefix exits 0" 0 "$rc"
+assert_jq J37b "name_prefix tier finds quote" "$(J J37b)" '.resolution.tier == "name_prefix" and ([.targets[].name] | index("quote") != null)'
+rc="$(cli J37d -- callers discountedPrice --no-lsp -o json)"; assert_rc J37d "callers with an exact name exits 0" 0 "$rc"
+assert_jq J37d "the exact name still wins over fuzzy" "$(J J37d)" '.resolution.tier == "exact_name" and .targets[0].name == "discountedPrice"'
+rc="$(cli J38a KNOT_LITE_SEARCH=hybrid -- search "price after the discount rate" -o json)"; assert_rc J38a "hybrid search exits 0" 0 "$rc"
+assert_jq J38a "search/v2, hybrid, every hit has a cosine and channels" "$(J J38a)" '.schema == "knot-lite/search/v2" and .provenance == "hybrid" and all(.results[]; (.cosine | type) == "number" and (.channels | length) > 0)'
+rc="$(cli J38b KNOT_LITE_SEARCH=hybrid -- search "discounted price" -o json)"; assert_rc J38b "hybrid identifier search exits 0" 0 "$rc"
+assert_jq J38b "discountedPrice is rank 1" "$(J J38b)" '.results[0].name == "discountedPrice"'
+rc="$(cli J38c -- search "price after the discount rate" -o json)"; assert_rc J38c "default search exits 0" 0 "$rc"
+assert_jq J38c "vector by default: score equals cosine" "$(J J38c)" '.provenance == "vector" and all(.results[]; .score == .cosine)'
+rc="$(cli J39 KNOT_LITE_LSP=off -- explore src/pricing.js -o json)"; assert_rc J39 "explore with servers off exits 0" 0 "$rc"
+assert_jq J39 "lsp off, every count heuristic" "$(J J39)" '.schema == "knot-lite/explore/v2" and .lsp.status == "off" and all(.groups[].entities[]; .refs_provenance == "heuristic")'
+
 # ---- J13 heuristic ------------------------------------------------------------------------------
 rc="$(cli J13 -- callers discountedPrice --no-lsp -o json)"; assert_rc J13 "callers --no-lsp exits 0" 0 "$rc"
 assert_jq J13 "provenance is heuristic and the notes say so" "$(J J13)" \
@@ -78,6 +98,9 @@ if lsp_or_skip J14 "live callers" ts; then
   live_exact J14c legacyTotal "$EXACT_LEGACY" "$LEGACY_FILE_ROWS"
   rc="$(cli J15 -- callers discountedPrice -o table)"; assert_rc J15 "callers (table) exits 0" 0 "$rc"
   text_in J15 "the table marks the answer [lsp-live]" "$(J J15)" '\[lsp-live\]'
+  rc="$(cli J40 -- explore src/pricing.js -o json)"; assert_rc J40 "explore with a live server exits 0" 0 "$rc"
+  assert_jq J40 "lsp ok; discountedPrice counted live (4 caller containers)" "$(J J40)" \
+    '.lsp.status == "ok" and ([.groups[].entities[] | select(.name == "discountedPrice") | [.refs_provenance, .referenced_by]] == [["lsp-live", 4]])'
 fi
 
 # ---- J16 a server that does not resolve ----------------------------------------------------------
@@ -100,6 +123,14 @@ if lsp_or_skip J20 "stale target" ts; then
   rc="$(cli J20 -- callers discountedPrice -o json)"; assert_rc J20 "callers after an edit exits 0" 0 "$rc"
   assert_jq J20 "the edited file's target is stale and falls back" "$(J J20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   text_in J20 "a note says the file changed since the last index" "$(J J20)" 'changed since the last index'
+  rc="$(cli J41 -- explore src/pricing.js -o json)"; assert_rc J41 "explore of the edited file exits 0" 0 "$rc"
+  assert_jq J41 "outline from the server; unitPrice listed, not indexed" "$(J J41)" \
+    '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "unitPrice") | .indexed] == [false])'
+  printf 'export function extraUnit() {\n  return 1;\n}\n' > "$J_REPO/src/extra.js"
+  rc="$(cli J42 -- explore src/extra.js -o json)"; assert_rc J42 "explore of a file not in the index exits 0" 0 "$rc"
+  assert_jq J42 "outline from the server, reason not_indexed" "$(J J42)" \
+    '.resolution == "not_indexed" and .outline.reason == "not_indexed" and ([.groups[].entities[].name] | index("extraUnit") != null)'
+  rm -f "$J_REPO/src/extra.js"
   rc="$(cli J21a -- index -o json)"; assert_rc J21a "re-index exits 0" 0 "$rc"
   rc="$(cli J21b -- callers discountedPrice -o json)"; assert_rc J21b "callers after the re-index exits 0" 0 "$rc"
   assert_jq J21b "answered live again" "$(J J21b)" '.targets[0].provenance == "lsp-live"'

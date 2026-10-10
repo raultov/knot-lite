@@ -69,6 +69,28 @@ assert_jq V12a "every hit is a function or a method" "$(J V12a)" '(.results|leng
 rc="$(cli V12b -- search "sums unit price times quantity" -p "$P/service" -o json)"; assert_rc V12b "search -p exits 0" 0 "$rc"
 assert_jq V12b "every hit is under the service package" "$(J V12b)" '(.results|length) > 0 and all(.results[]; .file | startswith($p))' --arg p "$P/service"
 
+# ---- V36-V39 Phase 5: globs, target tiers, search modes, explore with servers off -----------------
+rc="$(cli V36a -- files -p 'src/**/*.java' -o json)"; assert_rc V36a "files with src/**/*.java exits 0" 0 "$rc"
+assert_jq V36a "exactly the fixture's sources, glob mode" "$(J V36a)" '.path_mode == "glob" and ([.files[].path] | sort) == ($want | sort)' --argjson want "$SRC_FILES"
+rc="$(cli V36b -- search "sums unit price times quantity" -p "$P/*/Default*.java" -m 10 -o json)"; assert_rc V36b "search with a glob exits 0" 0 "$rc"
+assert_jq V36b "glob mode, every hit in DefaultPriceCalculator.java" "$(J V36b)" '.filters.path_mode == "glob" and (.results|length) > 0 and all(.results[]; .file == $f)' --arg f "$P/service/DefaultPriceCalculator.java"
+rc="$(cli V37a -- callers tItem --no-lsp -o json)"; assert_rc V37a "callers with a substring exits 0" 0 "$rc"
+assert_jq V37a "fuzzy tier, getItems is target #1" "$(J V37a)" '.resolution.tier == "fuzzy" and .targets[0].name == "getItems"'
+rc="$(cli V37b -- callers ad --no-lsp -o json)"; assert_rc V37b "callers with a 2-character prefix exits 0" 0 "$rc"
+assert_jq V37b "name_prefix tier finds addItem" "$(J V37b)" '.resolution.tier == "name_prefix" and ([.targets[].name] | index("addItem") != null)'
+rc="$(cli V37c -- callers 'addItem(Item' --no-lsp -o json)"; assert_rc V37c "callers with a signature prefix exits 0" 0 "$rc"
+assert_jq V37c "signature_prefix tier, addItem" "$(J V37c)" '.resolution.tier == "signature_prefix" and [.targets[].name] == ["addItem"]'
+rc="$(cli V37d -- callers getItems --no-lsp -o json)"; assert_rc V37d "callers with an exact name exits 0" 0 "$rc"
+assert_jq V37d "the exact name still wins over fuzzy" "$(J V37d)" '.resolution.tier == "exact_name" and [.targets[].name] == ["getItems"]'
+rc="$(cli V38a KNOT_LITE_SEARCH=hybrid -- search "sums unit price times quantity" -o json)"; assert_rc V38a "hybrid search exits 0" 0 "$rc"
+assert_jq V38a "search/v2, hybrid, every hit has a cosine and channels" "$(J V38a)" '.schema == "knot-lite/search/v2" and .provenance == "hybrid" and all(.results[]; (.cosine | type) == "number" and (.channels | length) > 0)'
+rc="$(cli V38b KNOT_LITE_SEARCH=hybrid -- search "get items" -o json)"; assert_rc V38b "hybrid identifier search exits 0" 0 "$rc"
+assert_jq V38b "getItems is rank 1" "$(J V38b)" '.results[0].name == "getItems"'
+rc="$(cli V38c -- search "sums unit price times quantity" -o json)"; assert_rc V38c "default search exits 0" 0 "$rc"
+assert_jq V38c "vector by default: score equals cosine" "$(J V38c)" '.provenance == "vector" and all(.results[]; .score == .cosine)'
+rc="$(cli V39 KNOT_LITE_LSP=off -- explore "$P/model/Order.java" -o json)"; assert_rc V39 "explore with servers off exits 0" 0 "$rc"
+assert_jq V39 "lsp off, every count heuristic" "$(J V39)" '.schema == "knot-lite/explore/v2" and .lsp.status == "off" and all(.groups[].entities[]; .refs_provenance == "heuristic")'
+
 # ---- V13 heuristic ------------------------------------------------------------------------------
 rc="$(cli V13 -- callers Order.getItems --no-lsp -o json)"; assert_rc V13 "callers --no-lsp exits 0" 0 "$rc"
 assert_jq V13 "provenance is heuristic and the notes say so" "$(J V13)" \
@@ -86,6 +108,9 @@ if lsp_or_skip V14 "live callers" java; then
   assert_subset V14d "file-level rows only in the importing and implementing files" "$(file_rows "$(J V14d)")" "$IFACE_FILE_ROWS"
   rc="$(cli V15 -- callers Order.getItems -o table)"; assert_rc V15 "callers (table) exits 0" 0 "$rc"
   text_in V15 "the table marks the answer [lsp-live]" "$(J V15)" '\[lsp-live\]'
+  rc="$(cli V40 -- explore "$P/model/Order.java" -o json)"; assert_rc V40 "explore with a live server exits 0" 0 "$rc"
+  assert_jq V40 "lsp ok; getItems counted live (total, count)" "$(J V40)" \
+    '.lsp.status == "ok" and ([.groups[].entities[] | select(.name == "getItems") | [.refs_provenance, .referenced_by]] == [["lsp-live", 2]])'
 fi
 
 # ---- V16 a server that does not resolve ----------------------------------------------------------
@@ -106,6 +131,14 @@ if lsp_or_skip V20 "stale target" java; then
   rc="$(cli V20 -- callers Order.getItems -o json)"; assert_rc V20 "callers after an edit exits 0" 0 "$rc"
   assert_jq V20 "the edited file's target is stale and falls back" "$(J V20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   text_in V20 "a note says the file changed since the last index" "$(J V20)" 'changed since the last index'
+  rc="$(cli V41 -- explore "$P/model/Order.java" -o json)"; assert_rc V41 "explore of the edited file exits 0" 0 "$rc"
+  assert_jq V41 "outline from the server; size listed, not indexed" "$(J V41)" \
+    '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "size") | .indexed] == [false])'
+  printf 'package com.example.shop.model;\n\npublic class Extra {\n    public int one() {\n        return 1;\n    }\n}\n' > "$V/$P/model/Extra.java"
+  rc="$(cli V42 -- explore "$P/model/Extra.java" -o json)"; assert_rc V42 "explore of a file not in the index exits 0" 0 "$rc"
+  assert_jq V42 "outline from the server, reason not_indexed" "$(J V42)" \
+    '.resolution == "not_indexed" and .outline.reason == "not_indexed" and ([.groups[].entities[].name] | index("Extra") != null)'
+  rm -f "$V/$P/model/Extra.java"
   rc="$(cli V21a -- index -o json)"; assert_rc V21a "re-index exits 0" 0 "$rc"
   # jdtls updates its index in the background, so the first live answer after an edit can still describe the
   # file as it was (measured: the call hierarchy missed the new caller in 6 of 8 sessions and the merged answer
@@ -141,6 +174,13 @@ if lsp_or_skip V17 "pre-computed callers" java; then
   assert_jq V19 "the pre-computation is reused" "$(J V19)" '.lsp.languages.java.status == "reused"'
   logs_after="$(find "$KNOT_LITE_LSP_CACHE_DIR" -name 'java_*.stderr.log' 2>/dev/null | wc -l | tr -d ' ')"
   if [ "$logs_before" = "$logs_after" ]; then pass V19 "no language server was started ($logs_after logs)"; else fail V19 "a server was started" "logs before $logs_before, after $logs_after"; fi
+  assert_jq V43 "default selection: heuristic, manifest format 2, nothing probed" "$(J V17)" \
+    '.lsp.format == 2 and .lsp.selection == "heuristic" and .lsp.languages.java.probed == 0'
+  rc="$(cli V43b -- index --lsp-precompute all --lsp-min-fanin 2 --lsp-selection lsp-refs -o json)"; assert_rc V43b "index with the lsp-refs selection exits 0" 0 "$rc"
+  assert_jq V43b "lsp-refs selection recomputes after probing" "$(J V43b)" \
+    '.lsp.selection == "lsp-refs" and .lsp.languages.java.status == "computed" and .lsp.languages.java.probed >= 1'
+  rc="$(cli V43c -- index --lsp-precompute all --lsp-min-fanin 2 -o json)"; assert_rc V43c "back to the default selection exits 0" 0 "$rc"
+  assert_jq V43c "heuristic again" "$(J V43c)" '.lsp.selection == "heuristic" and .lsp.languages.java.status == "computed"'
 fi
 
 # ---- V23-V33 MCP ------------------------------------------------------------------------------------

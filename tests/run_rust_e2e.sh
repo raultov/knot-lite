@@ -64,6 +64,32 @@ assert_jq R12a "every hit is a function or a method" "$(J R12a)" '(.results|leng
 rc="$(cli R12b -- search "sum of the areas of every shape" -p src/ -o json)"; assert_rc R12b "search -p exits 0" 0 "$rc"
 assert_jq R12b "every hit is under src/" "$(J R12b)" '(.results|length) > 0 and all(.results[]; .file | startswith("src/"))'
 
+# ---- R36-R39 Phase 5: globs, target tiers, search modes, explore with servers off -----------------
+rc="$(cli R36a -- files -p 'src/**/*.rs' -o json)"; assert_rc R36a "files with src/**/*.rs exits 0" 0 "$rc"
+assert_jq R36a "exactly the fixture's sources, glob mode" "$(J R36a)" '.path_mode == "glob" and ([.files[].path] | sort) == ($want | sort)' --argjson want "$SRC_FILES"
+rc="$(cli R36b -- search "sum of the areas of every shape" -p 'src/g*.rs' -m 10 -o json)"; assert_rc R36b "search with a glob exits 0" 0 "$rc"
+assert_jq R36b "glob mode, every hit in src/geometry.rs" "$(J R36b)" '.filters.path_mode == "glob" and (.results|length) > 0 and all(.results[]; .file == "src/geometry.rs")'
+rc="$(cli R36c -- files -p 'src/[x]' -o json)"; assert_rc R36c "a path with brackets is accepted" 0 "$rc"
+assert_jq R36c "brackets are a literal prefix that matches nothing" "$(J R36c)" '.path_mode == "prefix" and .total == 0'
+rc="$(cli R37a -- callers otal_are --no-lsp -o json)"; assert_rc R37a "callers with a substring exits 0" 0 "$rc"
+assert_jq R37a "fuzzy tier, total_area is target #1" "$(J R37a)" '.resolution.tier == "fuzzy" and .targets[0].name == "total_area"'
+rc="$(cli R37b -- callers sc --no-lsp -o json)"; assert_rc R37b "callers with a 2-character prefix exits 0" 0 "$rc"
+assert_jq R37b "name_prefix tier finds scene_area" "$(J R37b)" '.resolution.tier == "name_prefix" and ([.targets[].name] | index("scene_area") != null)'
+rc="$(cli R37c -- callers 'pair_area(size' --no-lsp -o json)"; assert_rc R37c "callers with a signature prefix exits 0" 0 "$rc"
+assert_jq R37c "signature_prefix tier, pair_area" "$(J R37c)" '.resolution.tier == "signature_prefix" and [.targets[].name] == ["pair_area"]'
+rc="$(cli R37d -- callers total_area --no-lsp -o json)"; assert_rc R37d "callers with an exact name exits 0" 0 "$rc"
+assert_jq R37d "the exact name still wins over fuzzy" "$(J R37d)" '.resolution.tier == "exact_name" and [.targets[].name] == ["total_area"]'
+rc="$(cli R38a KNOT_LITE_SEARCH=hybrid -- search "sum of the areas of every shape" -o json)"; assert_rc R38a "hybrid search exits 0" 0 "$rc"
+assert_jq R38a "search/v2, hybrid, every hit has a cosine and channels" "$(J R38a)" '.schema == "knot-lite/search/v2" and .provenance == "hybrid" and all(.results[]; (.cosine | type) == "number" and (.channels | length) > 0)'
+rc="$(cli R38b KNOT_LITE_SEARCH=hybrid -- search "total area" -o json)"; assert_rc R38b "hybrid identifier search exits 0" 0 "$rc"
+# knot's re-rank gives the exact-name boost to the method `area` (a whole query word), so `total_area`
+# shares the top with it (Appendix D, P5.15).
+assert_jq R38b "total_area is in the top 3" "$(J R38b)" '[.results[:3][].name] | index("total_area") != null'
+rc="$(cli R38c -- search "sum of the areas of every shape" -o json)"; assert_rc R38c "default search exits 0" 0 "$rc"
+assert_jq R38c "vector by default: score equals cosine" "$(J R38c)" '.provenance == "vector" and all(.results[]; .score == .cosine)'
+rc="$(cli R39 KNOT_LITE_LSP=off -- explore src/geometry.rs -o json)"; assert_rc R39 "explore with servers off exits 0" 0 "$rc"
+assert_jq R39 "lsp off, every count heuristic" "$(J R39)" '.schema == "knot-lite/explore/v2" and .lsp.status == "off" and all(.groups[].entities[]; .refs_provenance == "heuristic")'
+
 # ---- R13 heuristic ------------------------------------------------------------------------------
 rc="$(cli R13 -- callers total_area --no-lsp -o json)"; assert_rc R13 "callers --no-lsp exits 0" 0 "$rc"
 assert_jq R13 "provenance is heuristic and the notes say so" "$(J R13)" \
@@ -81,6 +107,9 @@ if lsp_or_skip R14 "live callers" rust; then
   assert_subset R14d "Circle is referenced by pair_area and scene_area" '["src/geometry.rs#pair_area","src/report.rs#scene_area"]' "$(function_set "$(J R14d)")"
   rc="$(cli R15 -- callers total_area -o table)"; assert_rc R15 "callers (table) exits 0" 0 "$rc"
   text_in R15 "the table marks the answer [lsp-live]" "$(J R15)" '\[lsp-live\]'
+  rc="$(cli R40 -- explore src/geometry.rs -o json)"; assert_rc R40 "explore with a live server exits 0" 0 "$rc"
+  assert_jq R40 "lsp ok; total_area counted live: pair_area and scene_area" "$(J R40)" \
+    '.lsp.status == "ok" and ([.groups[].entities[] | select(.name == "total_area") | [.refs_provenance, .referenced_by]] == [["lsp-live", 2]])'
 fi
 
 # ---- R16 a server that does not resolve ----------------------------------------------------------
@@ -103,6 +132,14 @@ if lsp_or_skip R20 "stale target" rust; then
   rc="$(cli R20 -- callers total_area -o json)"; assert_rc R20 "callers after an edit exits 0" 0 "$rc"
   assert_jq R20 "the edited file's target is stale and falls back" "$(J R20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   text_in R20 "a note says the file changed since the last index" "$(J R20)" 'changed since the last index'
+  rc="$(cli R41 -- explore src/geometry.rs -o json)"; assert_rc R41 "explore of the edited file exits 0" 0 "$rc"
+  assert_jq R41 "outline from the server; triple_circle listed, not indexed" "$(J R41)" \
+    '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "triple_circle") | .indexed] == [false])'
+  printf 'pub fn extra_unit() -> f64 {\n    1.0\n}\n' > "$R/src/extra.rs"
+  rc="$(cli R42 -- explore src/extra.rs -o json)"; assert_rc R42 "explore of a file not in the index exits 0" 0 "$rc"
+  assert_jq R42 "outline from the server, reason not_indexed" "$(J R42)" \
+    '.resolution == "not_indexed" and .outline.reason == "not_indexed" and ([.groups[].entities[].name] | index("extra_unit") != null)'
+  rm -f "$R/src/extra.rs"
   rc="$(cli R21a -- index -o json)"; assert_rc R21a "re-index exits 0" 0 "$rc"
   rc="$(cli R21b -- callers total_area -o json)"; assert_rc R21b "callers after the re-index exits 0" 0 "$rc"
   assert_jq R21b "answered live again" "$(J R21b)" '.targets[0].provenance == "lsp-live"'
