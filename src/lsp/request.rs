@@ -187,6 +187,7 @@ mod tests {
             h: "h".to_owned(),
             q: None,
             s: None,
+            tc: false,
         }
     }
 

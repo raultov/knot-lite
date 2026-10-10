@@ -194,6 +194,7 @@ mod tests {
             h: h.to_owned(),
             q: q.map(str::to_owned),
             s: q.map(|_| 0.5),
+            tc: false,
         }
     }
 

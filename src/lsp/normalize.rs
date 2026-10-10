@@ -285,6 +285,7 @@ mod tests {
             h: String::new(),
             q: None,
             s: None,
+            tc: false,
         }
     }
 

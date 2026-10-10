@@ -26,6 +26,8 @@ pub const MANIFEST_SCHEMA_V1: &str = "knot-lite/manifest/v1";
 pub const SHARDS_DIR: &str = "shards";
 /// Directory holding one JSONL edge shard per caller file.
 pub const EDGES_DIR: &str = "edges";
+/// Directory holding one lexicon file per shard (the keyword channel's term bags).
+pub const LEXICON_DIR: &str = "lexicon";
 /// Directory holding pre-computed LSP edge shards.
 pub const LSP_EDGES_DIR: &str = "lsp-edges";
 /// Directory holding pre-computed LSP target status files.
@@ -97,6 +99,16 @@ impl IndexLayout {
     /// Edge shard of the caller file `rel`: `edges/<rel>.jsonl`.
     pub fn edges_for(&self, rel: &str) -> anyhow::Result<PathBuf> {
         record_path(&self.edges, rel)
+    }
+
+    /// The `.knot-lite/lexicon` directory.
+    pub fn lexicon(&self) -> PathBuf {
+        self.dir.join(LEXICON_DIR)
+    }
+
+    /// Lexicon file of the repo-relative path `rel`: `lexicon/<rel>.jsonl`.
+    pub fn lexicon_for(&self, rel: &str) -> anyhow::Result<PathBuf> {
+        record_path(&self.lexicon(), rel)
     }
 
     /// The `.knot-lite/lsp-edges` directory.

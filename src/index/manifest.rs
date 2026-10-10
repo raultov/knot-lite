@@ -53,8 +53,29 @@ pub struct Manifest {
     /// Per-stage timings of the last run, in milliseconds.
     pub timings_ms: IndexTimings,
     /// Pre-computed LSP call graph manifest (P3-D9).
+    /// The keyword channel's lexicon (absent in indexes built before 0.5.0).
+    #[serde(default)]
+    pub lexicon: Option<LexiconManifest>,
     #[serde(default)]
     pub lsp: Option<LspManifest>,
+}
+
+/// Format of the lexicon files this knot-lite version writes and reads.
+pub const LEXICON_FORMAT_V1: u32 = 1;
+
+/// `[lexicon]` table of the manifest (§10.5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexiconManifest {
+    /// [`LEXICON_FORMAT_V1`].
+    pub format: u32,
+    /// Tokenizer that produced the terms ([`crate::lexicon::tokenize::TOKENIZER`]).
+    pub tokenizer: String,
+    /// Records with a term bag.
+    pub records: u64,
+    /// Distinct terms over all records.
+    pub terms: u64,
+    /// Bytes of every lexicon file together.
+    pub bytes: u64,
 }
 
 /// Pre-computed LSP metadata section in manifest.
@@ -331,6 +352,7 @@ pub(crate) mod test_support {
                 lsp: None,
                 total: 21,
             },
+            lexicon: None,
             lsp: None,
         }
     }

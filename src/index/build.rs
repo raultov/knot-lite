@@ -5,7 +5,7 @@
 //! `<repo>/.knot-lite/` (P2-D6, P2-D13). The embedder is injected so the
 //! pipeline is testable without a model (P2-D4).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -23,8 +23,8 @@ use super::encode::{encode_i8pv, normalize};
 use super::inventory::{Inventory, collect_inventory, fingerprint, write_inventory};
 use super::layout::{CommitMode, INDEX_DIR, IndexLayout, MANIFEST_SCHEMA_V1, apply_commit_mode};
 use super::manifest::{
-    IndexCounts, IndexTimings, KNOT_VERSION, LspManifest, Manifest, now_rfc3339, read_manifest,
-    write_manifest_atomic,
+    IndexCounts, IndexTimings, KNOT_VERSION, LEXICON_FORMAT_V1, LexiconManifest, LspManifest,
+    Manifest, now_rfc3339, read_manifest, write_manifest_atomic,
 };
 use super::record_io::{WriteOutcome, list_record_files, remove_orphans, write_jsonl_if_changed};
 use super::reuse::{ReuseMap, ReuseSource};
@@ -34,6 +34,8 @@ use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::Config;
 use crate::embed::{EmbedBatch, EmbeddingSpec};
 use crate::graph::heuristic::{ResolverMetrics, resolve_edges};
+use crate::lexicon::store::LexiconLine;
+use crate::lexicon::tokenize::TOKENIZER;
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::pool::LspPool;
 use crate::lsp::position::{is_nameless, locate_name_in_lines};
@@ -159,6 +161,12 @@ pub struct FileStats {
     pub edge_shards_unchanged: usize,
     /// Orphan edge shard files deleted.
     pub edge_shards_removed: usize,
+    /// Lexicon files created or rewritten.
+    pub lexicon_written: usize,
+    /// Lexicon files left untouched (identical bytes).
+    pub lexicon_unchanged: usize,
+    /// Orphan lexicon files deleted.
+    pub lexicon_removed: usize,
 }
 
 /// The `knot-lite/index-run/v1` document (§9.1).
@@ -278,6 +286,7 @@ pub fn build_index(
 
     progress(ProgressEvent::Stage { name: "write" });
     let stage = Instant::now();
+    let lexicon = write_lexicon(&dir.layout, &records.pending, opts.jobs)?;
     let shards = write_shards(&dir.layout, records.pending)?;
     let entity_files: HashMap<Uuid, &str> = entities
         .iter()
@@ -319,6 +328,7 @@ pub fn build_index(
                 lsp_edge_shards: list_record_files(&dir.layout.lsp_edges())?.len(),
             }),
             timings,
+            lexicon: lexicon.manifest(),
             lsp: lsp_manifest,
         },
     );
@@ -337,6 +347,7 @@ pub fn build_index(
             vectors,
             shards,
             edges,
+            lexicon,
             resolver: resolved.metrics,
         },
     ))
@@ -423,6 +434,7 @@ struct StageResults {
     vectors: VectorStats,
     shards: ShardStats,
     edges: EdgeStats,
+    lexicon: LexiconStats,
     resolver: ResolverMetrics,
 }
 
@@ -455,6 +467,9 @@ fn assemble_report(
             edge_shards_written: results.edges.written,
             edge_shards_unchanged: results.edges.unchanged,
             edge_shards_removed: results.edges.removed,
+            lexicon_written: results.lexicon.written,
+            lexicon_unchanged: results.lexicon.unchanged,
+            lexicon_removed: results.lexicon.removed,
         },
         resolver: results.resolver,
         timings_ms: manifest.timings_ms.clone(),
@@ -708,6 +723,7 @@ fn entity_records(entities: &[ParsedEntity]) -> Vec<PendingRecord> {
                 h: text_hash(&entity.embed_text),
                 q: None,
                 s: None,
+                tc: entity.is_test_context,
             },
             text: entity.embed_text.clone(),
         })
@@ -759,6 +775,7 @@ fn tier1_records(
                     h: text_hash(&chunk.text),
                     q: None,
                     s: None,
+                    tc: false,
                 },
                 file: chunk.rel,
                 text: chunk.text,
@@ -877,6 +894,122 @@ fn write_shards(layout: &IndexLayout, records: Vec<PendingRecord>) -> anyhow::Re
     Ok(stats)
 }
 
+/// What [`write_lexicon`] did, and the totals of the `[lexicon]` table.
+struct LexiconStats {
+    written: usize,
+    unchanged: usize,
+    removed: usize,
+    records: usize,
+    terms: usize,
+    bytes: u64,
+}
+
+impl LexiconStats {
+    fn manifest(&self) -> Option<LexiconManifest> {
+        Some(LexiconManifest {
+            format: LEXICON_FORMAT_V1,
+            tokenizer: TOKENIZER.to_owned(),
+            records: count(self.records),
+            terms: count(self.terms),
+            bytes: self.bytes,
+        })
+    }
+}
+
+/// Write one lexicon file per shard path: the term bag of every record with
+/// embed text, in shard order (§6.3.4). Tokenizing runs on up to `jobs`
+/// threads; a file is rewritten only when its bytes change, and the files of
+/// paths without such records are deleted.
+fn write_lexicon(
+    layout: &IndexLayout,
+    records: &[PendingRecord],
+    jobs: usize,
+) -> anyhow::Result<LexiconStats> {
+    let mut by_file: BTreeMap<&str, Vec<&PendingRecord>> = BTreeMap::new();
+    for record in records
+        .iter()
+        .filter(|record| !record.text.trim().is_empty())
+    {
+        by_file
+            .entry(record.file.as_str())
+            .or_default()
+            .push(record);
+    }
+    let groups: Vec<(&str, Vec<&PendingRecord>)> = by_file
+        .into_iter()
+        .map(|(file, mut group)| {
+            group.sort_by(|a, b| a.line.sort_key().cmp(&b.line.sort_key()));
+            (file, group)
+        })
+        .collect();
+    let mut stats = LexiconStats {
+        written: 0,
+        unchanged: 0,
+        removed: 0,
+        records: 0,
+        terms: 0,
+        bytes: 0,
+    };
+    let mut terms: HashSet<String> = HashSet::new();
+    let mut kept = BTreeSet::new();
+    for (file, lines) in tokenize_groups(&groups, jobs)? {
+        stats.records += lines.len();
+        for (term, _) in lines.iter().flat_map(|line| &line.t) {
+            if !terms.contains(term) {
+                terms.insert(term.clone());
+            }
+        }
+        let path = layout.lexicon_for(file)?;
+        match write_jsonl_if_changed(&path, &lines)? {
+            WriteOutcome::Written => stats.written += 1,
+            WriteOutcome::Unchanged => stats.unchanged += 1,
+        }
+        stats.bytes += std::fs::metadata(&path)
+            .with_context(|| format!("reading the size of {}", path.display()))?
+            .len();
+        kept.insert(path);
+    }
+    stats.terms = terms.len();
+    stats.removed = remove_orphans(&layout.lexicon(), &kept)?;
+    Ok(stats)
+}
+
+/// The term bags of every `(file, records)` group, in input order, computed on
+/// up to `jobs` scoped threads (contiguous slices of the groups).
+fn tokenize_groups<'a>(
+    groups: &[(&'a str, Vec<&PendingRecord>)],
+    jobs: usize,
+) -> anyhow::Result<Vec<(&'a str, Vec<LexiconLine>)>> {
+    let slice = groups.len().div_ceil(jobs.max(1)).max(1);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = groups
+            .chunks(slice)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|(file, group)| {
+                            let lines = group
+                                .iter()
+                                .map(|record| LexiconLine::from_text(&record.line.id, &record.text))
+                                .collect();
+                            (*file, lines)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut out = Vec::with_capacity(groups.len());
+        for handle in handles {
+            out.extend(
+                handle
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("a lexicon tokenizer thread panicked"))?,
+            );
+        }
+        Ok(out)
+    })
+}
+
 struct EdgeStats {
     written: usize,
     unchanged: usize,
@@ -990,6 +1123,7 @@ struct ManifestParts<'a> {
     source_fingerprint: String,
     counts: IndexCounts,
     timings: IndexTimings,
+    lexicon: Option<LexiconManifest>,
     lsp: Option<LspManifest>,
 }
 
@@ -1010,6 +1144,7 @@ fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manif
         embedding: parts.spec.clone(),
         counts: parts.counts,
         timings_ms: parts.timings,
+        lexicon: parts.lexicon,
         lsp: parts.lsp,
     }
 }
@@ -1732,6 +1867,7 @@ mod column_tests {
                 h: String::new(),
                 q: None,
                 s: None,
+                tc: false,
             },
             text: String::new(),
         }
@@ -1918,5 +2054,104 @@ mod column_tests {
         assert_eq!(second.vectors.reused, first.vectors.embedded);
         let by_file = shards(&IndexLayout::for_repo(tmp.path()));
         assert_eq!(col_of(&by_file, "src/lib.rs", "target"), Some(7));
+    }
+}
+
+/// P5.7: the lexicon written next to the shards and the test-context flag.
+#[cfg(test)]
+mod lexicon_tests {
+    use super::test_support::{fixture, run, shards, snapshot};
+    use super::*;
+    use crate::config::test_support::config_for;
+    use crate::index::record_io::read_jsonl;
+
+    fn lexicon_lines(layout: &IndexLayout, rel: &str) -> Vec<LexiconLine> {
+        read_jsonl(&layout.lexicon_for(rel).expect("path")).expect("lexicon")
+    }
+
+    #[test]
+    fn lexicon_has_one_line_per_record_with_a_vector_in_shard_order() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        let report = run(&cfg);
+        let all_shards = shards(&layout);
+        let mut records = 0;
+        for (rel, lines) in &all_shards {
+            let with_vector: Vec<&str> = lines
+                .iter()
+                .filter(|line| line.has_vector())
+                .map(|line| line.id.as_str())
+                .collect();
+            let lexicon = lexicon_lines(&layout, rel);
+            let ids: Vec<&str> = lexicon.iter().map(|line| line.id.as_str()).collect();
+            assert_eq!(ids, with_vector, "{rel}");
+            assert!(lexicon.iter().all(|line| line.n > 0 && !line.t.is_empty()));
+            records += ids.len();
+        }
+        let manifest = read_manifest(&layout.manifest).expect("manifest");
+        let lexicon = manifest.lexicon.expect("[lexicon]");
+        assert_eq!(lexicon.format, LEXICON_FORMAT_V1);
+        assert_eq!(lexicon.tokenizer, "kl-lex-1");
+        assert_eq!(lexicon.records, count(records));
+        assert!(lexicon.terms > 0);
+        let bytes: usize = snapshot(&layout.lexicon()).values().map(Vec::len).sum();
+        assert_eq!(lexicon.bytes, count(bytes));
+        assert_eq!(report.files.lexicon_written, all_shards.len());
+    }
+
+    #[test]
+    fn lexicon_byte_identical_across_builds() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        run(&cfg);
+        let first = snapshot(&layout.lexicon());
+        assert!(!first.is_empty());
+        std::fs::remove_dir_all(&layout.dir).expect("remove index");
+        run(&cfg);
+        assert_eq!(snapshot(&layout.lexicon()), first);
+    }
+
+    #[test]
+    fn warm_build_writes_no_lexicon_file() {
+        let (_tmp, cfg) = fixture();
+        let first = run(&cfg);
+        let second = run(&cfg);
+        assert_eq!(second.files.lexicon_written, 0);
+        assert_eq!(second.files.lexicon_unchanged, first.files.lexicon_written);
+        assert_eq!(second.files.lexicon_removed, 0);
+    }
+
+    #[test]
+    fn deleted_source_removes_lexicon_file() {
+        let (tmp, cfg) = fixture();
+        let layout = IndexLayout::for_repo(tmp.path());
+        run(&cfg);
+        assert!(layout.lexicon_for("src/util.rs").expect("path").exists());
+        std::fs::remove_file(tmp.path().join("src/util.rs")).expect("remove");
+        let report = run(&cfg);
+        assert!(!layout.lexicon_for("src/util.rs").expect("path").exists());
+        assert_eq!(report.files.lexicon_removed, 1);
+    }
+
+    #[test]
+    fn test_context_flag_comes_from_the_parser() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("lib.rs"),
+            "pub fn production() {}\n\n#[cfg(test)]\nmod tests {\n    fn checks_production() {}\n}\n",
+        )
+        .expect("write");
+        let cfg = config_for(tmp.path().to_path_buf());
+        run(&cfg);
+        let lines = &shards(&IndexLayout::for_repo(tmp.path()))["lib.rs"];
+        let flag = |name: &str| {
+            lines
+                .iter()
+                .find(|line| line.name == name)
+                .unwrap_or_else(|| panic!("{name} missing: {lines:?}"))
+                .tc
+        };
+        assert!(!flag("production"));
+        assert!(flag("checks_production"));
     }
 }

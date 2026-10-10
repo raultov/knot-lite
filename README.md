@@ -44,6 +44,7 @@ knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 - `manifest.toml`: index metadata, counts, model, timings, commit mode.
 - `inventory.jsonl`: file path, size, and SHA-256 hash stamp for freshness detection.
 - `shards/<rel>.jsonl`: int8 quantised vector records for parsed code entities and tier-1 line-window chunks.
+- `lexicon/<rel>.jsonl`: the term bag of every record with a vector (tokenizer `kl-lex-1`), read by the keyword channel of `search_hybrid_context`. Shard records also carry `tc` (an entity inside a Rust `#[cfg(test)]` module).
 - `edges/<rel>.jsonl`: pre-computed reference relationship edges, keyed by caller file (knot's heuristic resolver).
 - `lsp-edges/<lang>/<rel>.jsonl` and `lsp-targets/<lang>.jsonl`: language-server answers pre-computed for widely used targets (see below).
 - `.gitignore` (default) or `.gitattributes` (`--commit`).

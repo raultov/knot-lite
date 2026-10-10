@@ -40,6 +40,10 @@ pub struct ShardLine {
     pub q: Option<String>,
     /// Per-vector scale; `null` together with `q`.
     pub s: Option<f64>,
+    /// knot's `is_test_context` (an entity inside a Rust `#[cfg(test)]`
+    /// module); `false` for tier-1 records and for shards written before 0.5.0.
+    #[serde(default)]
+    pub tc: bool,
 }
 
 /// Components of [`ShardLine::sort_key`].
@@ -107,6 +111,7 @@ mod tests {
             h: text_hash(name),
             q: None,
             s: None,
+            tc: false,
         }
     }
 
@@ -125,6 +130,7 @@ mod tests {
             h: "3f2a9c1d0e4b5a6c".to_owned(),
             q: Some("AQL/".to_owned()),
             s: Some(0.001_234_57),
+            tc: false,
         };
         assert_eq!(
             serde_json::to_string(&populated).expect("json"),
@@ -133,9 +139,23 @@ mod tests {
                 r#""name":"parse_files","fqn":"knot::pipeline::parser::parse_files","#,
                 r#""lang":"rust","l0":211,"l1":229,"col":null,"#,
                 r#""sig":"(files: &[PathBuf], parse_cfg: &ParseConfig)","#,
-                r#""h":"3f2a9c1d0e4b5a6c","q":"AQL/","s":0.00123457}"#
+                r#""h":"3f2a9c1d0e4b5a6c","q":"AQL/","s":0.00123457,"tc":false}"#
             )
         );
+    }
+
+    #[test]
+    fn tc_round_trips_and_defaults_false() {
+        let mut test_fn = line(3, "rust_function", "it_works", "t");
+        test_fn.tc = true;
+        let json = serde_json::to_string(&test_fn).expect("json");
+        assert!(json.ends_with(r#","tc":true}"#), "{json}");
+        let back: ShardLine = serde_json::from_str(&json).expect("round trip");
+        assert!(back.tc);
+        // A 0.4.x shard line has no `tc` key: it loads as production code.
+        let old = json.replace(r#","tc":true"#, "");
+        let back: ShardLine = serde_json::from_str(&old).expect("0.4.x line");
+        assert!(!back.tc);
     }
 
     #[test]
