@@ -34,7 +34,7 @@ knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 |---|---|---|
 | `status` | Capability matrix (tiers 3/2/1/0 per language) + index details, counts, model, freshness; language-server state (running, version, memory, pre-computed or not) | — |
 | `search_hybrid_context` | Cosine top-k vector search over entities and tier-1 line-window chunks | `vector` |
-| `find_callers` | 3-tier target resolution, container-level callers grouped by relationship; per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
+| `find_callers` | knot's target tiers (exact FQN → FQN suffix → exact name → signature prefix → name prefix / fuzzy substring), container-level callers grouped by relationship; per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
 | `explore_file` | File entities grouped by family, with incoming-reference counts and markup summaries | — |
 | `list_files` | Indexed files with entity and chunk counts, prefix or glob filter | — |
 

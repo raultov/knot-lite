@@ -1,6 +1,7 @@
 //! `find_callers`: who references an entity.
 //!
-//! Targets are resolved in three tiers (the first with a match wins), callers
+//! Targets are resolved with knot's tier ladder (exact FQN, FQN suffix, exact
+//! name, signature prefix, fuzzy, name prefix; the first with a match wins), callers
 //! are reported at container granularity (the function or type that holds the
 //! reference site) and grouped by relationship. Each target is answered by a
 //! language server (pre-computed at index time, or asked now) when one applies,
@@ -9,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use knot::cli_tools::kinds::KindFilter;
+use knot::cli_tools::kinds::{CALLABLE_KINDS, KindFilter, TYPE_KINDS};
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use serde_json::Value;
@@ -19,6 +20,7 @@ use super::sources::{Describer, PROVENANCE_HEURISTIC, PROVENANCE_INDEXED};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::OutputFormat;
 use crate::index::load::LoadedIndex;
+use crate::index::shard::ShardLine;
 use crate::lsp::pool::LspPool;
 use crate::lsp::settings::LspSettings;
 use crate::lsp::target::OpCounts;
@@ -32,17 +34,8 @@ pub const MAX_TARGETS_CAP: usize = 500;
 
 const HEURISTIC_NOTE: &str = "Heuristic edges from knot's resolver (no language server): expect missed dynamic/indirect references and occasional over-attribution (Phase 0: precision 93 % / recall 86 % on Rust).";
 
-/// How a query was matched to targets. The first tier with a match wins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MatchTier {
-    /// `fqn == query` (also with `.` and `::` swapped).
-    ExactFqn,
-    /// The FQN ends with the query at a separator boundary.
-    FqnSuffix,
-    /// `name == query`.
-    ExactName,
-}
+/// How a query was matched to targets: knot's own tier enum (P5-D5).
+pub use knot::db::graph::MatchTier;
 
 /// The query with `::` read as `.` and with `.` read as `::` (both are tried).
 fn separator_variants(query: &str) -> [String; 3] {
@@ -71,53 +64,102 @@ fn fqn_suffix_matches(fqn: &str, query: &str) -> bool {
 }
 
 /// Resolve `query` to entity records (never `chunk`/`file`), honouring the
-/// kind filter. Targets are sorted by `(file, l0, name)`.
+/// kind filter. The tiers and their order are knot's
+/// ([`knot::db::graph::target_resolution_tiers`]); each tier's predicate is
+/// evaluated in memory and the first tier with a match wins. Exact tiers are
+/// sorted by `(file, l0, name)`, approximate tiers by [`approximate_key`].
 pub fn resolve_targets(
     index: &LoadedIndex,
     query: &str,
     filter: &KindFilter,
 ) -> Option<(MatchTier, Vec<usize>)> {
     let query = query.trim();
-    let eligible = |&position: &usize| {
-        let line = &index.records[position].line;
-        !line.is_tier1() && filter.allows(&line.kind)
-    };
-    let scan = |matches: &dyn Fn(&str) -> bool| -> Vec<usize> {
-        (0..index.records.len())
-            .filter(|position| eligible(position) && matches(&index.records[*position].line.fqn))
-            .collect()
-    };
-
-    let mut tiers: Vec<(MatchTier, Vec<usize>)> =
-        vec![(MatchTier::ExactFqn, scan(&|fqn| fqn_equals(fqn, query)))];
-    if query.contains('.') || query.contains("::") {
-        tiers.push((
-            MatchTier::FqnSuffix,
-            scan(&|fqn| fqn_suffix_matches(fqn, query)),
-        ));
-    }
-    tiers.push((
-        MatchTier::ExactName,
-        index
-            .by_name
-            .get(query)
-            .into_iter()
-            .flatten()
-            .copied()
-            .filter(eligible)
-            .collect(),
-    ));
-
-    tiers
+    let lower = query.to_lowercase();
+    knot::db::graph::target_resolution_tiers(query)
         .into_iter()
-        .find(|(_, matched)| !matched.is_empty())
-        .map(|(tier, mut matched)| {
-            matched.sort_by(|&a, &b| {
-                let (a, b) = (&index.records[a], &index.records[b]);
-                (&a.file, a.line.l0, &a.line.name).cmp(&(&b.file, b.line.l0, &b.line.name))
-            });
-            (tier, matched)
+        .find_map(|(tier, _cypher)| {
+            let mut matched: Vec<usize> = (0..index.records.len())
+                .filter(|&position| {
+                    let line = &index.records[position].line;
+                    !line.is_tier1()
+                        && filter.allows(&line.kind)
+                        && tier_matches(tier, line, query, &lower)
+                })
+                .collect();
+            if matched.is_empty() {
+                return None;
+            }
+            if is_approximate(tier) {
+                matched.sort_by_cached_key(|&position| approximate_key(index, position, &lower));
+            } else {
+                matched.sort_by(|&a, &b| {
+                    let (a, b) = (&index.records[a], &index.records[b]);
+                    (&a.file, a.line.l0, &a.line.name).cmp(&(&b.file, b.line.l0, &b.line.name))
+                });
+            }
+            Some((tier, matched))
         })
+}
+
+/// knot's tier predicates (`db/graph/query.rs` `target_resolution_tiers`),
+/// evaluated on one record; `lower` is the lower-cased query.
+fn tier_matches(tier: MatchTier, line: &ShardLine, query: &str, lower: &str) -> bool {
+    let name_and_signature = || format!("{}{}", line.name, line.sig.as_deref().unwrap_or(""));
+    match tier {
+        MatchTier::ExactFqn => fqn_equals(&line.fqn, query),
+        MatchTier::FqnSuffix => fqn_suffix_matches(&line.fqn, query),
+        MatchTier::ExactName => line.name == query,
+        MatchTier::SignaturePrefix => name_and_signature().starts_with(query),
+        MatchTier::Fuzzy => {
+            line.fqn.to_lowercase().contains(lower)
+                || name_and_signature().to_lowercase().contains(lower)
+        }
+        MatchTier::NamePrefix => !lower.is_empty() && line.name.to_lowercase().starts_with(lower),
+    }
+}
+
+/// Whether a tier matches approximately (anything but the exact tiers).
+fn is_approximate(tier: MatchTier) -> bool {
+    matches!(
+        tier,
+        MatchTier::SignaturePrefix | MatchTier::Fuzzy | MatchTier::NamePrefix
+    )
+}
+
+/// Order of the approximate tiers (P5-D6): match quality on the name (equal
+/// ignoring case, prefix, contains, elsewhere), then types before callables
+/// before the rest, then `(file, l0, name)`.
+fn approximate_key(
+    index: &LoadedIndex,
+    position: usize,
+    lower: &str,
+) -> (u8, u8, String, usize, String) {
+    let record = &index.records[position];
+    let name = record.line.name.to_lowercase();
+    let quality = if name == lower {
+        0
+    } else if name.starts_with(lower) {
+        1
+    } else if name.contains(lower) {
+        2
+    } else {
+        3
+    };
+    let kind = record.line.kind.as_str();
+    let kind_rank = if TYPE_KINDS.contains(&kind) {
+        0
+    } else if CALLABLE_KINDS.contains(&kind) {
+        1
+    } else {
+        2
+    };
+    (
+        quality,
+        kind_rank,
+        record.file.clone(),
+        record.line.l0,
+        record.line.name.clone(),
+    )
 }
 
 /// `index` object of the response.
@@ -325,6 +367,7 @@ pub fn callers_response(ctx: &CallersContext<'_>) -> CallersResponse {
         ctx,
         &Findings {
             tier,
+            total: matched.len(),
             targets: &targets,
             languages: &languages,
             diagnostics: &describer.into_diagnostics(),
@@ -415,6 +458,8 @@ fn top_lsp(
 /// What the targets of one call turned out to be, for the notes.
 struct Findings<'a> {
     tier: Option<MatchTier>,
+    /// Every target the query resolved to (before `max_targets`).
+    total: usize,
     targets: &'a [CallerTarget],
     languages: &'a BTreeMap<String, LangRuntimeState>,
     diagnostics: &'a [(&'static str, String)],
@@ -440,12 +485,19 @@ impl Findings<'_> {
 /// Caveats and hints, in a fixed order (§10.5).
 fn response_notes(ctx: &CallersContext<'_>, findings: &Findings<'_>) -> Vec<String> {
     let mut notes = Vec::new();
-    if findings.tier.is_none() {
-        notes.push(format!(
-            "no indexed entity matches '{}' (tiers tried: exact FQN, FQN suffix, exact name; kind filter {}). Use search_hybrid_context to discover names.",
-            ctx.query.trim(),
+    let query = ctx.query.trim();
+    match findings.tier {
+        None => notes.push(format!(
+            "no indexed entity matches '{query}' (tiers tried: {}; kind filter {}). Use search_hybrid_context to discover names.",
+            tiers_tried(query),
             ctx.filter.wire_label()
-        ));
+        )),
+        Some(tier) if is_approximate(tier) => notes.push(format!(
+            "No entity is named exactly '{query}'; showing {} approximate matches ({}). Use a qualified name to narrow.",
+            findings.total,
+            tier.as_str()
+        )),
+        Some(_) => {}
     }
     notes.extend(not_ready_notes(findings));
     let settings = ctx.lsp.settings;
@@ -481,6 +533,22 @@ fn response_notes(ctx: &CallersContext<'_>, findings: &Findings<'_>) -> Vec<Stri
         notes.push(HEURISTIC_NOTE.to_owned());
     }
     notes
+}
+
+/// The tiers knot's ladder tries for `query`, in order, in words.
+fn tiers_tried(query: &str) -> String {
+    knot::db::graph::target_resolution_tiers(query)
+        .into_iter()
+        .map(|(tier, _)| match tier {
+            MatchTier::ExactFqn => "exact FQN",
+            MatchTier::FqnSuffix => "FQN suffix",
+            MatchTier::ExactName => "exact name",
+            MatchTier::SignaturePrefix => "signature prefix",
+            MatchTier::Fuzzy => "fuzzy",
+            MatchTier::NamePrefix => "name prefix",
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// One note per language whose server was still starting.
@@ -767,8 +835,11 @@ mod tests {
     #[test]
     fn tier_fqn_suffix_requires_boundary() {
         let index = homonyms();
-        // `pha::run` is a textual suffix of `pkg::Alpha::run` but not at a separator.
-        assert!(resolve_targets(&index, "pha::run", &code()).is_none());
+        // `pha::run` is a textual suffix of `pkg::Alpha::run` but not at a separator:
+        // the suffix tier misses and knot's fuzzy tier (a substring) answers instead.
+        let (tier, targets) = resolve_targets(&index, "pha::run", &code()).expect("fuzzy");
+        assert_eq!(tier, MatchTier::Fuzzy);
+        assert_eq!(names(&index, &targets), vec!["pkg::Alpha::run"]);
         assert!(fqn_suffix_matches(
             "knot::pipeline::embed::Embedder::embed",
             "Embedder::embed"
@@ -800,6 +871,250 @@ mod tests {
         assert_eq!(
             names(&index, &targets),
             vec!["pkg::run", "pkg::Alpha::run", "pkg::Beta::run"]
+        );
+    }
+
+    /// Records named for the approximate tiers: types, callables and a constant.
+    fn approximates() -> LoadedIndex {
+        let mut parse_args = entity(
+            "f-pa",
+            "rust_function",
+            "parse_args",
+            "cli::parse_args",
+            (3, 9),
+        );
+        parse_args.sig = Some("(raw: &[String]) -> Args".to_owned());
+        let mut parse = entity("f-p", "rust_function", "parse", "cli::parse", (20, 30));
+        parse.sig = Some("(input: &str) -> Ast".to_owned());
+        synthetic_index(
+            vec![
+                ("src/cli.rs", parse_args),
+                ("src/cli.rs", parse),
+                (
+                    "src/model.rs",
+                    entity("t-pr", "rust_struct", "Parser", "model::Parser", (1, 8)),
+                ),
+                (
+                    "src/model.rs",
+                    entity(
+                        "c-pl",
+                        "rust_constant",
+                        "PARSE_LIMIT",
+                        "model::PARSE_LIMIT",
+                        (10, 10),
+                    ),
+                ),
+                (
+                    "src/zz.rs",
+                    entity("f-run", "rust_function", "run", "parser_glue::run", (1, 2)),
+                ),
+                (
+                    "docs/parse.md",
+                    entity(
+                        "d",
+                        "markdown_section",
+                        "Parsing",
+                        "docs/parse.md::Parsing",
+                        (1, 4),
+                    ),
+                ),
+            ],
+            &[],
+        )
+    }
+
+    fn tier_names(tiers: &[(MatchTier, &str)]) -> Vec<MatchTier> {
+        tiers.iter().map(|(tier, _)| *tier).collect()
+    }
+
+    #[test]
+    fn ladder_comes_from_knot_for_bare_dotted_paren_short_queries() {
+        use knot::db::graph::target_resolution_tiers as ladder;
+        assert_eq!(
+            tier_names(&ladder("parse")),
+            vec![MatchTier::ExactName, MatchTier::Fuzzy]
+        );
+        assert_eq!(
+            tier_names(&ladder("cli::parse")),
+            vec![
+                MatchTier::ExactFqn,
+                MatchTier::FqnSuffix,
+                MatchTier::ExactName,
+                MatchTier::Fuzzy
+            ]
+        );
+        assert_eq!(
+            tier_names(&ladder("parse(")),
+            vec![
+                MatchTier::ExactName,
+                MatchTier::SignaturePrefix,
+                MatchTier::Fuzzy
+            ]
+        );
+        assert_eq!(
+            tier_names(&ladder("par")),
+            vec![MatchTier::ExactName, MatchTier::NamePrefix]
+        );
+    }
+
+    #[test]
+    fn bare_name_skips_exact_fqn() {
+        // A record whose FQN is the bare word `glue` and another named `glue`:
+        // without a separator knot's ladder never tries the FQN tier, so the
+        // name tier answers (both records, the FQN one only if named so).
+        let index = synthetic_index(
+            vec![
+                (
+                    "src/a.rs",
+                    entity("fq", "rust_function", "other", "glue", (1, 2)),
+                ),
+                (
+                    "src/b.rs",
+                    entity("nm", "rust_function", "glue", "b::glue", (1, 2)),
+                ),
+            ],
+            &[],
+        );
+        let (tier, targets) = resolve_targets(&index, "glue", &code()).expect("match");
+        assert_eq!(tier, MatchTier::ExactName);
+        assert_eq!(names(&index, &targets), vec!["b::glue"]);
+    }
+
+    #[test]
+    fn signature_prefix_requires_paren() {
+        let index = approximates();
+        let (tier, targets) = resolve_targets(&index, "parse_args(raw", &code()).expect("sig");
+        assert_eq!(tier, MatchTier::SignaturePrefix);
+        assert_eq!(names(&index, &targets), vec!["cli::parse_args"]);
+        // Without `(` the tier is not tried; `parse_args` is an exact name.
+        let (tier, _) = resolve_targets(&index, "parse_args", &code()).expect("name");
+        assert_eq!(tier, MatchTier::ExactName);
+    }
+
+    #[test]
+    fn fuzzy_requires_four_chars_and_is_case_insensitive() {
+        let index = approximates();
+        let (tier, targets) = resolve_targets(&index, "PARSE_A", &code()).expect("fuzzy");
+        assert_eq!(tier, MatchTier::Fuzzy);
+        assert_eq!(names(&index, &targets), vec!["cli::parse_args"]);
+        // Three characters: name prefix, never a substring.
+        let (tier, _) =
+            resolve_targets(&index, "ars", &code()).map_or((None, vec![]), |(t, v)| (Some(t), v));
+        assert_eq!(
+            tier, None,
+            "`ars` is inside parse_args but not a name prefix"
+        );
+    }
+
+    #[test]
+    fn fuzzy_matches_fqn_or_name_plus_signature() {
+        let index = approximates();
+        // Only in an FQN (`parser_glue::run`) and in names: both count.
+        let (tier, targets) = resolve_targets(&index, "glue", &code()).expect("fuzzy");
+        assert_eq!(tier, MatchTier::Fuzzy);
+        assert_eq!(names(&index, &targets), vec!["parser_glue::run"]);
+        // Only in a signature (`-> Ast`).
+        let (tier, targets) = resolve_targets(&index, "-> ast", &code()).expect("fuzzy");
+        assert_eq!(tier, MatchTier::Fuzzy);
+        assert_eq!(names(&index, &targets), vec!["cli::parse"]);
+    }
+
+    #[test]
+    fn name_prefix_for_short_queries_only_on_name() {
+        let index = approximates();
+        let (tier, targets) = resolve_targets(&index, "Pa", &code()).expect("prefix");
+        assert_eq!(tier, MatchTier::NamePrefix);
+        assert_eq!(
+            names(&index, &targets),
+            vec![
+                "model::Parser",
+                "cli::parse_args",
+                "cli::parse",
+                "model::PARSE_LIMIT"
+            ]
+        );
+        // `par` is the start of the FQN `parser_glue::run`, but name prefixes ignore FQNs.
+        let (_, targets) = resolve_targets(&index, "par", &code()).expect("prefix");
+        assert!(!names(&index, &targets).contains(&"parser_glue::run".to_owned()));
+    }
+
+    #[test]
+    fn approximate_tier_ordering_quality_then_kind_then_location() {
+        let index = approximates();
+        let (tier, targets) = resolve_targets(&index, "pars", &code()).expect("fuzzy");
+        assert_eq!(tier, MatchTier::Fuzzy);
+        // Name prefixes first (type, callables by location, constant), then
+        // the FQN-only match.
+        assert_eq!(
+            names(&index, &targets),
+            vec![
+                "model::Parser",
+                "cli::parse_args",
+                "cli::parse",
+                "model::PARSE_LIMIT",
+                "parser_glue::run"
+            ]
+        );
+        // Equality ignoring case ranks first.
+        let (_, targets) = resolve_targets(&index, "PARSER", &code()).expect("fuzzy");
+        assert_eq!(names(&index, &targets)[0], "model::Parser");
+    }
+
+    #[test]
+    fn approximate_tier_adds_note() {
+        let index = approximates();
+        let response = heuristic_response(&index, "demo", "pars", 25, &code());
+        assert_eq!(response.resolution.tier, Some(MatchTier::Fuzzy));
+        assert!(
+            response.notes.contains(
+                &"No entity is named exactly 'pars'; showing 5 approximate matches (fuzzy). Use a qualified name to narrow."
+                    .to_owned()
+            ),
+            "{:?}",
+            response.notes
+        );
+        let exact = heuristic_response(&index, "demo", "parse", 25, &code());
+        assert!(!exact.notes.iter().any(|n| n.contains("approximate")));
+    }
+
+    #[test]
+    fn exact_name_wins_over_fuzzy() {
+        let index = approximates();
+        let (tier, targets) = resolve_targets(&index, "parse", &code()).expect("name");
+        assert_eq!(tier, MatchTier::ExactName);
+        assert_eq!(names(&index, &targets), vec!["cli::parse"]);
+    }
+
+    #[test]
+    fn kinds_filter_applies_to_every_tier() {
+        let index = approximates();
+        let (_, code_only) = resolve_targets(&index, "pars", &code()).expect("fuzzy");
+        assert!(!names(&index, &code_only).contains(&"docs/parse.md::Parsing".to_owned()));
+        let (_, with_docs) = resolve_targets(&index, "pars", &any()).expect("fuzzy");
+        assert!(names(&index, &with_docs).contains(&"docs/parse.md::Parsing".to_owned()));
+        let types = KindFilter::parse(Some("type"));
+        let (_, only_types) = resolve_targets(&index, "Pa", &types).expect("prefix");
+        assert_eq!(names(&index, &only_types), vec!["model::Parser"]);
+    }
+
+    #[test]
+    fn tier_serialises_snake_case_and_unmatched_note_lists_tiers() {
+        for (tier, wire) in [
+            (MatchTier::SignaturePrefix, "signature_prefix"),
+            (MatchTier::Fuzzy, "fuzzy"),
+            (MatchTier::NamePrefix, "name_prefix"),
+        ] {
+            assert_eq!(serde_json::to_value(tier).expect("json"), wire);
+        }
+        let index = approximates();
+        let response = heuristic_response(&index, "demo", "nothing::here", 25, &code());
+        assert_eq!(response.resolution.tier, None);
+        assert!(
+            response.notes[0].contains(
+                "(tiers tried: exact FQN, FQN suffix, exact name, fuzzy; kind filter code_default)"
+            ),
+            "{:?}",
+            response.notes
         );
     }
 

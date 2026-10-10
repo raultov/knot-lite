@@ -252,6 +252,21 @@ mod tests {
     }
 
     #[test]
+    fn find_callers_describes_knot_tier_ladder() {
+        let callers = tool_named("find_callers").description.unwrap();
+        assert!(
+            callers.contains(
+                "exact name → signature prefix (queries containing '(', e.g. `accept(List`) → name prefix (queries under 4 characters, case-insensitive) → fuzzy substring (queries of 4+ characters"
+            ),
+            "{callers}"
+        );
+        assert!(
+            !callers.contains("not available in this version"),
+            "{callers}"
+        );
+    }
+
+    #[test]
     fn all_tools_have_input_schema() {
         for tool in all_tools() {
             assert_eq!(tool.input_schema.type_(), "object");
