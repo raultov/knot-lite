@@ -2,9 +2,10 @@
 //! asked live (`references` only), and the outline of a file the index does
 //! not describe (`documentSymbol`).
 //!
-//! The pool is used exactly as `find_callers` uses it: a server that is not
-//! ready answers nothing (it keeps starting in the background), and every
-//! request carries the call's deadline.
+//! The pool is used exactly as `find_callers` uses it (P5-D16): the first
+//! request may wait the pool's ready wait for a starting server (one that is
+//! still not ready answers nothing and keeps starting in the background); the
+//! live budget starts once the server answers.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -102,8 +103,14 @@ impl ExploreLive<'_> {
         }
     }
 
-    fn deadline(&self) -> Instant {
-        Instant::now() + EXPLORE_LIVE_BUDGET.min(self.lsp.settings.deadline)
+    fn budget(&self) -> Duration {
+        EXPLORE_LIVE_BUDGET.min(self.lsp.settings.deadline)
+    }
+
+    /// The deadline of a first request: the budget plus the time a starting
+    /// server may take to become ready.
+    fn first_deadline(&self, pool: &crate::lsp::pool::LspPool) -> Instant {
+        Instant::now() + pool.ready_wait() + self.budget()
     }
 
     fn request(
@@ -136,8 +143,12 @@ impl ExploreLive<'_> {
             return Err(ExploreLsp::idle("off", self.lang));
         };
         let started = Instant::now();
-        let outcome =
-            pool.query(self.request(lang, Position::default(), OpSet::outline(), self.deadline()));
+        let outcome = pool.query(self.request(
+            lang,
+            Position::default(),
+            OpSet::outline(),
+            self.first_deadline(pool),
+        ));
         let mut lsp = ExploreLsp::idle(status_word(outcome.status), Some(lang));
         lsp.asked = 1;
         lsp.ms = elapsed_ms(started);
@@ -167,7 +178,7 @@ impl ExploreLive<'_> {
         };
         targets.truncate(EXPLORE_LIVE_MAX);
         let started = Instant::now();
-        let deadline = self.deadline();
+        let mut deadline = self.first_deadline(pool);
         let mut counts = Vec::new();
         for target in targets {
             if Instant::now() >= deadline {
@@ -177,6 +188,10 @@ impl ExploreLive<'_> {
             tally.asked += 1;
             let outcome =
                 pool.query(self.request(lang, target.position, OpSet::references_only(), deadline));
+            if tally.asked == 1 {
+                // The server is up (or will not be): the budget starts now.
+                deadline = deadline.min(Instant::now() + self.budget());
+            }
             match outcome.status {
                 LiveStatus::Ok => {
                     tally.answered += 1;

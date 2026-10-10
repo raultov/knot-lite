@@ -1347,7 +1347,8 @@ mod lsp_tests {
         let mut tight = settings();
         tight.deadline = Duration::ZERO;
         let response = explore_with(&index, tmp.path(), &tight, Some(&pool), "src/lib.rs");
-        assert_eq!((response.lsp.status, response.lsp.asked), ("partial", 0));
+        // The first request may wait for the server; the (zero) budget starts after it.
+        assert_eq!((response.lsp.status, response.lsp.asked), ("partial", 1));
 
         let lsp_ctx = LspContext {
             settings: &settings(),

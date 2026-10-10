@@ -248,6 +248,11 @@ impl LspPool {
         })
     }
 
+    /// How long a query waits for a server that is still starting.
+    pub fn ready_wait(&self) -> Duration {
+        self.settings.ready_wait
+    }
+
     /// Query the language server for `req`. Never panics, never blocks past
     /// `req.deadline + reply_slack`.
     pub fn query(&self, req: LiveRequest) -> LiveOutcome {
