@@ -8,6 +8,9 @@
 //! timeout discards everything gathered so far, because a union with a missing
 //! operation would silently under-report — the caller falls back to the
 //! heuristic edges instead.
+//!
+//! The same job asks for a document's symbols when [`OpSet::document_symbol`]
+//! is set (`explore_file`'s outline, P5.11); the position is then unused.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use super::normalize::{LocationFilter, Normalized, RawHit, RawLocation, normalize};
 use super::ops::{Op, OpSet};
+use super::outline::{OutlineSymbol, flatten_outline};
 use super::session::{LspSession, RequestError, RequestOutcome};
 use super::uri::{join_rel, path_to_uri};
 use crate::capability::languages::LspLang;
@@ -133,6 +137,9 @@ pub struct LiveOutcome {
     pub retried_empty: bool,
     /// Wall-clock milliseconds the query took.
     pub ms: u64,
+    /// The document's symbols, when they were asked for and the server
+    /// answers `documentSymbol`; `None` otherwise.
+    pub symbols: Option<Vec<OutlineSymbol>>,
 }
 
 impl LiveOutcome {
@@ -147,6 +154,7 @@ impl LiveOutcome {
             comment_filtered: 0,
             retried_empty: false,
             ms: 0,
+            symbols: None,
         }
     }
 }
@@ -174,6 +182,7 @@ struct Collected {
     counts: OpCounts,
     external: usize,
     comment_filtered: usize,
+    symbols: Option<Vec<OutlineSymbol>>,
 }
 
 impl Collected {
@@ -282,6 +291,7 @@ fn finish(result: Result<Collected, Failure>, retried_empty: bool, ms: u64) -> L
             comment_filtered: collected.comment_filtered,
             retried_empty,
             ms: 0,
+            symbols: collected.symbols,
         },
         Err(Failure::NoPosition(detail)) => {
             LiveOutcome::without_answer(LiveStatus::NoPosition, detail)
@@ -358,7 +368,29 @@ async fn collect(
         };
         collected.absorb(op, found, filter, sources);
     }
+    if req.ops.document_symbol && supports_document_symbol(session.capabilities()) {
+        collected.symbols = Some(document_symbols(session, req, uri).await?);
+    }
     Ok(collected)
+}
+
+/// Whether the server advertises `documentSymbol`.
+fn supports_document_symbol(capabilities: &ServerCapabilities) -> bool {
+    matches!(
+        capabilities.document_symbol_provider,
+        Some(OneOf::Left(true) | OneOf::Right(_))
+    )
+}
+
+/// `textDocument/documentSymbol` of the target's document, flattened.
+async fn document_symbols(
+    session: &mut LspSession,
+    req: &LiveRequest,
+    uri: &Url,
+) -> Result<Vec<OutlineSymbol>, Failure> {
+    let per_try = budget(session, req.deadline)?;
+    let answer = settle(session.document_symbol(uri, per_try).await, req.deadline)?;
+    Ok(answer.map(flatten_outline).unwrap_or_default())
 }
 
 /// Whether the server advertises `op` (absent or `false` means no).
@@ -706,6 +738,70 @@ mod tests {
         assert_eq!(outcome.op_counts, counts(Some(1), Some(2), None));
         assert_eq!(outcome.locations.len(), 3);
         assert!(!outcome.retried_empty);
+    }
+
+    #[tokio::test]
+    async fn references_only_sends_one_request() {
+        let mut rig = Rig::rust(|repo| {
+            repo.with_references(vec![
+                repo.location("src/a.rs", 3),
+                repo.location("src/b.rs", 9),
+            ])
+        })
+        .await;
+        let mut req = rig.request(TargetShape::Method);
+        req.ops = OpSet::references_only();
+        let outcome = rig.run(&req).await;
+        assert_eq!(outcome.status, LiveStatus::Ok);
+        assert_eq!(rig.methods(), vec!["textDocument/references"]);
+        assert_eq!(outcome.op_counts, counts(None, Some(2), None));
+        assert_eq!(outcome.locations.len(), 2);
+        assert_eq!(outcome.symbols, None);
+    }
+
+    #[tokio::test]
+    async fn document_symbol_ignores_position() {
+        use crate::lsp::outline::test_support::symbol;
+        use async_lsp::lsp_types::{DocumentSymbolResponse, SymbolKind};
+
+        let mut rig = Rig::rust(|_| FakeScript {
+            symbols: vec![(
+                "src/lib.rs".to_owned(),
+                DocumentSymbolResponse::Nested(vec![symbol(
+                    "target",
+                    SymbolKind::FUNCTION,
+                    (2, 2),
+                    vec![],
+                )]),
+            )],
+            ..FakeScript::full()
+        })
+        .await;
+        let mut req = rig.request(TargetShape::None);
+        req.ops = OpSet::outline();
+        req.position = Position::new(999, 999);
+        let outcome = rig.run(&req).await;
+        assert_eq!(outcome.status, LiveStatus::Ok, "{:?}", outcome.detail);
+        assert_eq!(rig.methods(), vec!["textDocument/documentSymbol"]);
+        let symbols = outcome.symbols.expect("symbols");
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].name, "target");
+        assert!(outcome.locations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn document_symbol_without_capability_is_none() {
+        let mut rig = Rig::rust(|_| FakeScript {
+            capabilities: ServerCapabilities::default(),
+            ..FakeScript::default()
+        })
+        .await;
+        let mut req = rig.request(TargetShape::None);
+        req.ops = OpSet::outline();
+        let outcome = rig.run(&req).await;
+        assert_eq!(outcome.status, LiveStatus::Ok);
+        assert!(rig.methods().is_empty());
+        assert_eq!(outcome.symbols, None);
     }
 
     #[tokio::test]

@@ -616,36 +616,6 @@ fn l2_l3_java() {
 // L1: the `col` stored in the index against the server's own selection ranges
 // ---------------------------------------------------------------------------
 
-/// A symbol of a `documentSymbol` answer, flattened.
-struct Symbol {
-    name: String,
-    first_line0: u32,
-    last_line0: u32,
-    selection_line0: u32,
-    selection_col: u32,
-}
-
-fn flatten_symbols(symbols: &[async_lsp::lsp_types::DocumentSymbol], out: &mut Vec<Symbol>) {
-    for symbol in symbols {
-        // jdtls names methods `name(Type)`; tsserver and rust-analyzer may add
-        // generics: the declared name is what comes before them.
-        let name = symbol
-            .name
-            .split(['(', '<', ' ', ':'])
-            .next()
-            .unwrap_or_default()
-            .to_owned();
-        out.push(Symbol {
-            name,
-            first_line0: symbol.range.start.line,
-            last_line0: symbol.range.end.line,
-            selection_line0: symbol.selection_range.start.line,
-            selection_col: symbol.selection_range.start.character,
-        });
-        flatten_symbols(symbol.children.as_deref().unwrap_or_default(), out);
-    }
-}
-
 /// Start the server of `lang` on `repo` and wait until it is ready.
 async fn start_ready_server(
     lang: LspLang,
@@ -749,12 +719,13 @@ async fn l1_language(repo: &str, lang: LspLang, max_files: usize) -> ColumnRepor
             .session
             .document_symbol(&file_uri, spec.first_request_timeout)
             .await;
-        let mut symbols = Vec::new();
-        if let Ok(Some(async_lsp::lsp_types::DocumentSymbolResponse::Nested(nested))) =
-            outcome.result
-        {
-            flatten_symbols(&nested, &mut symbols);
-        }
+        // L1 compares selection ranges: only the hierarchical form has them.
+        let symbols = match outcome.result {
+            Ok(Some(nested @ async_lsp::lsp_types::DocumentSymbolResponse::Nested(_))) => {
+                crate::lsp::outline::flatten_outline(nested)
+            }
+            _ => Vec::new(),
+        };
         if symbols.is_empty() {
             report.files_without_symbols += 1;
             continue;
@@ -770,7 +741,7 @@ async fn l1_language(repo: &str, lang: LspLang, max_files: usize) -> ColumnRepor
             else {
                 continue;
             };
-            let candidates: Vec<&Symbol> = symbols
+            let candidates: Vec<&crate::lsp::outline::OutlineSymbol> = symbols
                 .iter()
                 .filter(|s| {
                     s.name == record.name

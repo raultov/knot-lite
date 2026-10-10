@@ -22,6 +22,7 @@ pub(crate) mod fake;
 pub mod launch;
 pub mod normalize;
 pub mod ops;
+pub mod outline;
 pub mod owner;
 pub mod pool;
 pub mod position;

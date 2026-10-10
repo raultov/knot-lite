@@ -18,17 +18,17 @@ use async_lsp::lsp_types::notification::{
     DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized, Progress,
 };
 use async_lsp::lsp_types::request::{
-    CallHierarchyIncomingCalls, CallHierarchyPrepare, GotoImplementation, References,
-    RegisterCapability, Request, ShowMessageRequest, Shutdown, WorkDoneProgressCreate,
+    CallHierarchyIncomingCalls, CallHierarchyPrepare, DocumentSymbolRequest, GotoImplementation,
+    References, RegisterCapability, Request, ShowMessageRequest, Shutdown, WorkDoneProgressCreate,
     WorkspaceConfiguration, WorkspaceFoldersRequest,
 };
 use async_lsp::lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyServerCapability, ConfigurationItem,
-    ConfigurationParams, GotoDefinitionResponse, ImplementationProviderCapability,
-    InitializeResult, Location, LocationLink, MessageType, NumberOrString, OneOf, Position,
-    ProgressParams, ProgressParamsValue, Range, RegistrationParams, ServerCapabilities, ServerInfo,
-    ShowMessageRequestParams, SymbolKind, Url, WorkDoneProgress, WorkDoneProgressBegin,
-    WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+    ConfigurationParams, DocumentSymbolResponse, GotoDefinitionResponse,
+    ImplementationProviderCapability, InitializeResult, Location, LocationLink, MessageType,
+    NumberOrString, OneOf, Position, ProgressParams, ProgressParamsValue, Range,
+    RegistrationParams, ServerCapabilities, ServerInfo, ShowMessageRequestParams, SymbolKind, Url,
+    WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
 };
 use async_lsp::panic::CatchUnwindLayer;
 use async_lsp::router::Router;
@@ -118,6 +118,8 @@ pub(crate) struct FakeScript {
     pub implementation: Vec<(Position, Vec<Location>)>,
     /// How the implementation answer is shaped.
     pub implementation_shape: ImplementationShape,
+    /// `documentSymbol`, by the document's repo-relative path.
+    pub symbols: Vec<(String, DocumentSymbolResponse)>,
     /// The first this many requests fail with `ContentModified`.
     pub content_modified_first: usize,
     /// Every request waits this long before it is answered.
@@ -137,6 +139,7 @@ impl FakeScript {
                 call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
                 implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
             ..Self::default()
@@ -603,6 +606,20 @@ fn register_queries(router: &mut Router<FakeState>) {
         async move {
             gate.await?;
             Ok::<_, ResponseError>(Some(locations))
+        }
+    });
+    router.request::<DocumentSymbolRequest, _>(|state, params| {
+        let gate = gate(state, DocumentSymbolRequest::METHOD);
+        let uri = params.text_document.uri.to_string();
+        let symbols = state
+            .script
+            .symbols
+            .iter()
+            .find(|(rel, _)| uri.ends_with(&format!("/{rel}")))
+            .map(|(_, symbols)| symbols.clone());
+        async move {
+            gate.await?;
+            Ok::<_, ResponseError>(symbols)
         }
     });
     router.request::<GotoImplementation, _>(|state, params| {

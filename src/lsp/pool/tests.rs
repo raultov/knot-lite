@@ -183,6 +183,42 @@ fn not_ready_within_wait_returns_not_ready_and_keeps_starting() {
 }
 
 #[test]
+fn not_ready_server_returns_outline_request_without_blocking() {
+    let repo = setup_repo();
+    let factory = Arc::new(ScriptedFactory {
+        script_fn: Arc::new(|lang| {
+            Box::pin(async move {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let spec = test_spec(lang);
+                let init = crate::lsp::session::InitInputs {
+                    spec: &spec,
+                    repo_root: Path::new("/work/demo"),
+                };
+                connect(FakeScript::full(), init).await
+            })
+        }),
+        missing_lang: None,
+    });
+    let settings = PoolSettings {
+        ready_wait: Duration::from_millis(20),
+        idle: Duration::from_secs(900),
+        reply_slack: Duration::from_secs(5),
+    };
+    let pool = LspPool::new(factory, settings, None).expect("pool");
+    let mut req = dummy_request(LspLang::Rust, repo.path());
+    req.ops = crate::lsp::ops::OpSet::outline();
+    let started = std::time::Instant::now();
+    let outcome = pool.query(req);
+    assert_eq!(outcome.status, LiveStatus::NotReady);
+    assert_eq!(outcome.symbols, None);
+    assert!(
+        started.elapsed() < Duration::from_millis(400),
+        "answered within the ready wait, not after the start: {:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
 fn missing_server_is_terminal_without_restart() {
     let repo = setup_repo();
     let starts = Arc::new(AtomicU64::new(0));

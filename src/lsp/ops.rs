@@ -50,6 +50,9 @@ pub struct OpSet {
     pub references: bool,
     /// Run `implementation`.
     pub implementation: bool,
+    /// Ask for the document's symbols (`textDocument/documentSymbol`); the
+    /// position is not used for it.
+    pub document_symbol: bool,
 }
 
 impl OpSet {
@@ -64,7 +67,24 @@ impl OpSet {
 
     /// Whether no operation applies.
     pub fn is_empty(self) -> bool {
-        !(self.incoming || self.references || self.implementation)
+        !(self.incoming || self.references || self.implementation || self.document_symbol)
+    }
+
+    /// Only `references` (the cheap count `explore_file` and the pre-computation
+    /// probe ask for).
+    pub fn references_only() -> Self {
+        Self {
+            references: true,
+            ..Self::default()
+        }
+    }
+
+    /// Only the document's symbols.
+    pub fn outline() -> Self {
+        Self {
+            document_symbol: true,
+            ..Self::default()
+        }
     }
 }
 
@@ -81,6 +101,7 @@ pub fn ops_for(shape: TargetShape) -> OpSet {
         incoming,
         references,
         implementation,
+        document_symbol: false,
     }
 }
 
@@ -172,6 +193,7 @@ mod tests {
             incoming,
             references,
             implementation,
+            document_symbol: false,
         };
         let expected = [
             (TargetShape::Callable, ops(true, true, false)),
