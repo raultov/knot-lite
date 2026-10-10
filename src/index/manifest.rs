@@ -81,10 +81,17 @@ pub struct LexiconManifest {
 /// Pre-computed LSP metadata section in manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LspManifest {
-    /// Schema format version (1).
+    /// Schema format version ([`LSP_FORMAT_V2`]; 1 before 0.5.0).
     pub format: u32,
     /// Policy used (`"auto"`, `"all"`, `"none"`).
     pub policy: String,
+    /// How targets were chosen: `"lsp-refs"` or `"heuristic"` (a format-1
+    /// manifest reads as `"heuristic"`).
+    #[serde(default = "heuristic_selection")]
+    pub selection: String,
+    /// Heuristic fan-in a non-type candidate needs to be probed (`lsp-refs`).
+    #[serde(default)]
+    pub probe_min_fanin: usize,
     /// Minimum fan-in threshold.
     pub min_fanin: usize,
     /// Maximum targets per language.
@@ -118,6 +125,19 @@ pub struct LspLangManifest {
     pub ms: u64,
     /// Diagnostic explanation when skipped or failed.
     pub diagnostic: String,
+    /// Candidates the `references` probe answered (`lsp-refs` only).
+    #[serde(default)]
+    pub probed: usize,
+    /// Milliseconds the probe took (`lsp-refs` only).
+    #[serde(default)]
+    pub probe_ms: u64,
+}
+
+/// Format of the `[lsp]` table this knot-lite version writes (P5.13).
+pub const LSP_FORMAT_V2: u32 = 2;
+
+fn heuristic_selection() -> String {
+    "heuristic".to_owned()
 }
 
 /// Embedding model and wire encoding of the stored vectors. Lives here (not in
@@ -544,6 +564,8 @@ mod tests {
             edges,
             ms: 412_000,
             diagnostic: String::new(),
+            probed: 0,
+            probe_ms: 0,
         };
         let mut manifest = sample_manifest();
         manifest.counts.lsp_edges = 15_234;
@@ -560,6 +582,8 @@ mod tests {
                 ("java".to_owned(), language("computed", 15_234)),
                 ("rust".to_owned(), language("reused", 0)),
             ]),
+            selection: "heuristic".to_owned(),
+            probe_min_fanin: 0,
         });
 
         write_manifest_atomic(&layout.manifest, &manifest).expect("write");

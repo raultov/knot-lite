@@ -52,6 +52,8 @@ impl IndexParams {
                 min_fanin: args.lsp_min_fanin,
                 max_targets: args.lsp_max_targets,
                 budget: Duration::from_secs(args.lsp_budget_secs),
+                selection: args.lsp_selection,
+                probe_min_fanin: args.lsp_probe_min_fanin,
             },
         }
     }
@@ -205,6 +207,8 @@ mod tests {
             lsp_min_fanin: 7,
             lsp_max_targets: 70,
             lsp_budget_secs: 90,
+            lsp_selection: crate::lsp::precompute::Selection::Heuristic,
+            lsp_probe_min_fanin: 5,
             output: crate::config::OutputFormat::Json,
         };
         let params = IndexParams::from_cli(&args);
@@ -222,6 +226,8 @@ mod tests {
                     min_fanin: 7,
                     max_targets: 70,
                     budget: Duration::from_secs(90),
+                    selection: crate::lsp::precompute::Selection::Heuristic,
+                    probe_min_fanin: 5,
                 },
             }
         );

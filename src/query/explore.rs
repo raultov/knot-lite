@@ -1252,6 +1252,8 @@ mod lsp_tests {
                 ms: 1,
                 ops: OpCounts::default(),
                 server: "rust-analyzer".to_owned(),
+                refs: None,
+                h: None,
             },
         );
         let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();

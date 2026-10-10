@@ -810,6 +810,8 @@ mod tests {
                 implementation: None,
             },
             server: "rust-analyzer".to_owned(),
+            refs: None,
+            h: None,
         };
         write_lsp_targets(layout, LspLang::Rust, &[line]).expect("targets");
         (target, caller)

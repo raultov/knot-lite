@@ -784,8 +784,12 @@ mod tests {
                     edges: 340,
                     ms: 5_000,
                     diagnostic: String::new(),
+                    probed: 0,
+                    probe_ms: 0,
                 },
             )]),
+            selection: "heuristic".to_owned(),
+            probe_min_fanin: 0,
         });
         write_manifest_atomic(&layout.manifest, &manifest).expect("write");
         (tmp, cfg)

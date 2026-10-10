@@ -40,6 +40,13 @@ pub struct LspTargetLine {
     pub ops: OpCounts,
     /// Language server description from `serverInfo`, or `""`.
     pub server: String,
+    /// Distinct caller containers the `references` probe found (`lsp-refs`
+    /// selection; absent when not probed or with the `heuristic` selection).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refs: Option<usize>,
+    /// Heuristic caller containers (`lsp-refs` selection only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub h: Option<usize>,
 }
 
 /// Sort key for `LspEdgeLine`: `src` null-first, then `dst`, then `rel`.
@@ -162,6 +169,8 @@ mod tests {
                 implementation: None,
             },
             server: "rust-analyzer".to_owned(),
+            refs: None,
+            h: None,
         };
         let json = serde_json::to_string(&line).expect("json");
         assert_eq!(

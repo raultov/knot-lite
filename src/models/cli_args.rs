@@ -7,7 +7,7 @@
 use clap::{Args, Parser, Subcommand};
 
 use crate::config::{CommonArgs, OutputFormat};
-use crate::lsp::precompute::PrecomputePolicy;
+use crate::lsp::precompute::{PrecomputePolicy, Selection};
 
 #[derive(Parser)]
 #[command(name = "knot-lite")]
@@ -69,6 +69,15 @@ pub struct IndexArgs {
     /// Time budget for pre-computation per language, in seconds (default 600)
     #[arg(long, default_value_t = 600)]
     pub lsp_budget_secs: u64,
+
+    /// How pre-computation targets are chosen: lsp-refs = probe the language
+    /// server's reference counts first (default), heuristic = heuristic fan-in only
+    #[arg(long, value_enum, default_value_t = Selection::LspRefs)]
+    pub lsp_selection: Selection,
+
+    /// Heuristic caller count a non-type candidate needs to be probed (default 3)
+    #[arg(long, default_value_t = 3)]
+    pub lsp_probe_min_fanin: usize,
 
     /// Output format (default: table)
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Table)]
@@ -216,9 +225,37 @@ mod tests {
                 assert!(!args.quiet);
                 assert_eq!(args.output, OutputFormat::Table);
                 assert_eq!(args.lsp_precompute, PrecomputePolicy::Auto);
+                assert_eq!(args.lsp_selection, Selection::LspRefs);
+                assert_eq!(args.lsp_probe_min_fanin, 3);
             }
             other => panic!("expected Index, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn index_selection_flags_parse_and_reject_invalid() {
+        let cli = parse(&[
+            "index",
+            "--lsp-selection",
+            "heuristic",
+            "--lsp-probe-min-fanin",
+            "5",
+        ]);
+        match cli.command {
+            Commands::Index(args) => {
+                assert_eq!(args.lsp_selection, Selection::Heuristic);
+                assert_eq!(args.lsp_probe_min_fanin, 5);
+            }
+            other => panic!("expected Index, got {other:?}"),
+        }
+        assert_eq!(
+            match parse(&["index", "--lsp-selection", "lsp-refs"]).command {
+                Commands::Index(args) => args.lsp_selection,
+                other => panic!("expected Index, got {other:?}"),
+            },
+            Selection::LspRefs
+        );
+        assert!(Cli::try_parse_from(["knot-lite", "index", "--lsp-selection", "fanin"]).is_err());
     }
 
     #[test]

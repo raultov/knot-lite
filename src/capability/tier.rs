@@ -74,6 +74,8 @@ pub struct IndexDetails {
 pub struct LspDetails {
     /// `auto`, `all` or `none`.
     pub policy: String,
+    /// `lsp-refs` or `heuristic`.
+    pub selection: String,
     /// Per language directory name (`rust`, `ts`, `java`).
     pub languages: BTreeMap<String, LspLangDetails>,
 }
@@ -91,12 +93,15 @@ pub struct LspLangDetails {
     pub edges: usize,
     /// Milliseconds the language took.
     pub ms: u64,
+    /// Candidates the `references` probe answered.
+    pub probed: usize,
 }
 
 impl From<&LspManifest> for LspDetails {
     fn from(manifest: &LspManifest) -> Self {
         Self {
             policy: manifest.policy.clone(),
+            selection: manifest.selection.clone(),
             languages: manifest
                 .languages
                 .iter()
@@ -109,6 +114,7 @@ impl From<&LspManifest> for LspDetails {
                             targets_failed: lang.targets_failed,
                             edges: lang.edges,
                             ms: lang.ms,
+                            probed: lang.probed,
                         },
                     )
                 })

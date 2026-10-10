@@ -265,6 +265,7 @@ pub(crate) struct FakeServers {
     missing: bool,
     start_delay: Duration,
     starts: Arc<AtomicUsize>,
+    counters: Arc<Mutex<Vec<Arc<FakeCounters>>>>,
 }
 
 impl FakeServers {
@@ -275,7 +276,13 @@ impl FakeServers {
             missing: false,
             start_delay: Duration::ZERO,
             starts: Arc::new(AtomicUsize::new(0)),
+            counters: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    /// What every server started so far observed (shared with the pool's factory).
+    pub(crate) fn counters(&self) -> Arc<Mutex<Vec<Arc<FakeCounters>>>> {
+        Arc::clone(&self.counters)
     }
 
     /// Servers that take `delay` to finish starting (a server still booting).
@@ -321,6 +328,7 @@ impl SessionFactory for FakeServers {
         self.starts.fetch_add(1, Ordering::SeqCst);
         let script = (self.script)(lang);
         let delay = self.start_delay;
+        let counters = Arc::clone(&self.counters);
         Box::pin(async move {
             tokio::time::sleep(delay).await;
             let spec = test_spec(lang);
@@ -328,7 +336,8 @@ impl SessionFactory for FakeServers {
                 spec: &spec,
                 repo_root: Path::new("/work/demo"),
             };
-            let (session, _) = connect(script, init).await;
+            let (session, handle) = connect(script, init).await;
+            lock(&counters).push(Arc::clone(&handle.counters));
             StartOutcome::Ready(Box::new(Started {
                 session,
                 process: None,

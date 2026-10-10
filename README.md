@@ -58,6 +58,7 @@ Index flags:
 - `-q, --quiet`: suppress progress output on stderr.
 - `--lsp-precompute <auto|all|none>`: pre-compute language-server callers for widely used targets — `auto` = Java only (default), `all` = every language with a server, `none` = skip (and remove earlier data).
 - `--lsp-min-fanin <N>` (default 20), `--lsp-max-targets <N>` (200), `--lsp-budget-secs <N>` (600): which targets, how many, and how long per language.
+- `--lsp-selection <lsp-refs|heuristic>`: how targets are chosen. `lsp-refs` (default) first asks the server for the references of a wider candidate pool (`--lsp-probe-min-fanin <N>`, default 3 heuristic callers, plus every interface, class and type; at most 4 × `--lsp-max-targets` candidates, within 40 % of the budget) and pre-computes the candidates with the most callers according to the server (≥ `--lsp-min-fanin`), reusing the probe's references in the answer; candidates the probe did not reach fall back to the heuristic rule. `heuristic` uses the heuristic caller count only (the 0.4.x rule). `status --output json` shows the selection and how many candidates were probed per language.
 
 A warm re-index whose language files did not change reuses the pre-computed data and **starts no server**.
 

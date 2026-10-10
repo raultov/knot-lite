@@ -6,6 +6,12 @@
 //!
 //! Supports reuse (P3-D9): if the language file fingerprint and parameters match the
 //! previous manifest, data is kept untouched without starting a server.
+//!
+//! Targets are chosen in two stages by default (P5-D17, `--lsp-selection lsp-refs`): a
+//! cheap `references` probe over a wider candidate pool, within 40 % of the language's
+//! budget, ranks the candidates by the server's own caller count; the full answer of a
+//! selected target reuses the probe's locations. `--lsp-selection heuristic` keeps the
+//! Phase 3 rule (heuristic fan-in only).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
@@ -15,7 +21,7 @@ use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
 use super::normalize::{TargetInfo, group_locations};
-use super::ops::shape_of;
+use super::ops::{OpSet, TargetShape, ops_for, shape_of};
 use super::pool::LspPool;
 use super::request::{Pacing, SourceFiles, Target, live_request};
 use super::target::{LiveOutcome, LiveStatus};
@@ -27,7 +33,7 @@ use crate::index::layout::{IndexLayout, rel_of_record};
 use crate::index::lsp_records::{
     LspEdgeLine, LspTargetLine, write_lsp_edge_shards, write_lsp_targets,
 };
-use crate::index::manifest::{LspLangManifest, LspManifest};
+use crate::index::manifest::{LSP_FORMAT_V2, LspLangManifest, LspManifest};
 use crate::index::shard::ShardLine;
 
 /// Per-target live query cap during pre-computation.
@@ -35,6 +41,33 @@ const PER_TARGET_CAP: Duration = Duration::from_secs(120);
 
 /// Progress is reported every this many targets.
 const PROGRESS_EVERY: usize = 10;
+
+/// The probe pool holds this many candidates per selectable target (P5-D17).
+const PROBE_POOL_FACTOR: usize = 4;
+
+/// Share of a language's budget the probe may use (P5-D17).
+const PROBE_BUDGET_SHARE: f64 = 0.4;
+
+/// How pre-computation targets are chosen (P5-D17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum Selection {
+    /// Probe the server's reference counts, then pick the most referenced.
+    #[default]
+    LspRefs,
+    /// Heuristic fan-in only (the Phase 3 rule).
+    Heuristic,
+}
+
+impl Selection {
+    /// Wire string representation.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LspRefs => "lsp-refs",
+            Self::Heuristic => "heuristic",
+        }
+    }
+}
 
 /// Pre-compute policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, clap::ValueEnum)]
@@ -71,6 +104,10 @@ pub struct PrecomputeOptions {
     pub max_targets: usize,
     /// Time budget per language.
     pub budget: Duration,
+    /// How targets are chosen.
+    pub selection: Selection,
+    /// Heuristic fan-in a non-type candidate needs to be probed (`lsp-refs`).
+    pub probe_min_fanin: usize,
 }
 
 impl Default for PrecomputeOptions {
@@ -80,6 +117,8 @@ impl Default for PrecomputeOptions {
             min_fanin: 20,
             max_targets: 200,
             budget: Duration::from_secs(600),
+            selection: Selection::LspRefs,
+            probe_min_fanin: 3,
         }
     }
 }
@@ -182,21 +221,7 @@ pub fn run(
         if !selected_languages.contains(&lang) {
             clean_lang_data(layout, lang)?;
             if present_languages.contains(&lang) {
-                lang_manifests.insert(
-                    lang_dir_name,
-                    LspLangManifest {
-                        status: "none".to_owned(),
-                        server: lang.server_program().to_owned(),
-                        version: String::new(),
-                        files_fingerprint: fp,
-                        targets_selected: 0,
-                        targets_ok: 0,
-                        targets_failed: 0,
-                        edges: 0,
-                        ms: 0,
-                        diagnostic: String::new(),
-                    },
-                );
+                lang_manifests.insert(lang_dir_name, idle_manifest(lang, "none", fp, ""));
             }
             continue;
         }
@@ -206,6 +231,8 @@ pub fn run(
             && prev.policy == opts.policy.as_str()
             && prev.min_fanin == opts.min_fanin
             && prev.max_targets == opts.max_targets
+            && prev.selection == opts.selection.as_str()
+            && prev.probe_min_fanin == opts.probe_min_fanin
             && let Some(prev_lang) = prev.languages.get(&lang_dir_name)
             && matches!(prev_lang.status.as_str(), "computed" | "reused")
             && prev_lang.files_fingerprint == fp
@@ -221,18 +248,7 @@ pub fn run(
             clean_lang_data(layout, lang)?;
             lang_manifests.insert(
                 lang_dir_name,
-                LspLangManifest {
-                    status: "skipped".to_owned(),
-                    server: lang.server_program().to_owned(),
-                    version: String::new(),
-                    files_fingerprint: fp,
-                    targets_selected: 0,
-                    targets_ok: 0,
-                    targets_failed: 0,
-                    edges: 0,
-                    ms: 0,
-                    diagnostic: "LSP is disabled (KNOT_LITE_LSP=off)".to_owned(),
-                },
+                idle_manifest(lang, "skipped", fp, "LSP is disabled (KNOT_LITE_LSP=off)"),
             );
             continue;
         };
@@ -253,13 +269,33 @@ pub fn run(
     }
 
     Ok(LspManifest {
-        format: 1,
+        format: LSP_FORMAT_V2,
         policy: opts.policy.as_str().to_owned(),
+        selection: opts.selection.as_str().to_owned(),
+        probe_min_fanin: opts.probe_min_fanin,
         min_fanin: opts.min_fanin,
         max_targets: opts.max_targets,
         budget_secs: opts.budget.as_secs(),
         languages: lang_manifests,
     })
+}
+
+/// The manifest of a language nothing was asked about (`none`, `skipped`).
+fn idle_manifest(lang: LspLang, status: &str, fp: String, diagnostic: &str) -> LspLangManifest {
+    LspLangManifest {
+        status: status.to_owned(),
+        server: lang.server_program().to_owned(),
+        version: String::new(),
+        files_fingerprint: fp,
+        targets_selected: 0,
+        targets_ok: 0,
+        targets_failed: 0,
+        edges: 0,
+        ms: 0,
+        diagnostic: diagnostic.to_owned(),
+        probed: 0,
+        probe_ms: 0,
+    }
 }
 
 fn clean_lang_data(layout: &IndexLayout, lang: LspLang) -> anyhow::Result<()> {
@@ -291,10 +327,13 @@ struct PrecomputeLangCtx<'a> {
 }
 
 /// A target selected for pre-computation.
+#[derive(Clone, Copy)]
 struct Candidate<'a> {
     rel: &'a str,
     line: &'a ShardLine,
     fanin: usize,
+    /// Caller containers the probe found, when it was probed.
+    refs: Option<usize>,
 }
 
 /// Records of `lang` with a located column and at least `min_fanin` caller
@@ -304,33 +343,114 @@ fn select_candidates<'a>(
     lang: LspLang,
     opts: &PrecomputeOptions,
 ) -> Vec<Candidate<'a>> {
-    let mut candidates: Vec<Candidate<'a>> = input
+    let mut candidates: Vec<Candidate<'a>> = located_records(input, lang)
+        .filter(|candidate| candidate.fanin >= opts.min_fanin)
+        .collect();
+    sort_by_fanin(&mut candidates);
+    candidates.truncate(opts.max_targets);
+    candidates
+}
+
+/// The records of `lang` with a located column, as candidates.
+fn located_records<'a>(
+    input: &'a PrecomputeInput<'_>,
+    lang: LspLang,
+) -> impl Iterator<Item = Candidate<'a>> {
+    input
         .records
         .iter()
-        .filter(|(rel, line)| {
+        .filter(move |(rel, line)| {
             line.col.is_some() && lsp_lang_for_label(label_for(Path::new(rel))) == Some(lang)
         })
-        .filter_map(|(rel, line)| {
-            let fanin = input.heuristic_fanin.get(&line.id).copied().unwrap_or(0);
-            (fanin >= opts.min_fanin).then_some(Candidate { rel, line, fanin })
+        .map(|(rel, line)| Candidate {
+            rel,
+            line,
+            fanin: input.heuristic_fanin.get(&line.id).copied().unwrap_or(0),
+            refs: None,
         })
-        .collect();
+}
+
+fn sort_by_fanin(candidates: &mut [Candidate<'_>]) {
     candidates.sort_by(|a, b| {
         b.fanin
             .cmp(&a.fanin)
             .then_with(|| a.line.id.cmp(&b.line.id))
     });
-    candidates.truncate(opts.max_targets);
-    candidates
 }
 
-/// Ask the server about one candidate; a target that cannot be positioned is
-/// answered without a request.
+/// The probe pool (P5-D17): located records of a shape a server knows, with
+/// at least `probe_min_fanin` heuristic callers — or any fan-in for interfaces,
+/// classes and types, whose references the heuristic under-counts. Highest
+/// fan-in first, then by id, at most `PROBE_POOL_FACTOR × max_targets`.
+fn probe_pool<'a>(
+    input: &'a PrecomputeInput<'_>,
+    lang: LspLang,
+    opts: &PrecomputeOptions,
+) -> Vec<Candidate<'a>> {
+    let mut pool: Vec<Candidate<'a>> = located_records(input, lang)
+        .filter(|candidate| {
+            let shape = shape_of(&candidate.line.kind);
+            let typeish = matches!(
+                shape,
+                TargetShape::InterfaceLike | TargetShape::ClassLike | TargetShape::TypeLike
+            );
+            shape != TargetShape::None && (typeish || candidate.fanin >= opts.probe_min_fanin)
+        })
+        .collect();
+    sort_by_fanin(&mut pool);
+    pool.truncate(PROBE_POOL_FACTOR.saturating_mul(opts.max_targets));
+    pool
+}
+
+/// The selection after the probe: probed candidates with at least `min_fanin`
+/// caller containers by that count (then fan-in, id), then the candidates the
+/// probe did not reach that pass the Phase 3 rule; at most `max_targets`.
+fn select_by_refs<'a>(
+    input: &'a PrecomputeInput<'_>,
+    lang: LspLang,
+    opts: &PrecomputeOptions,
+    pool: &[Candidate<'a>],
+    probes: &HashMap<String, Probe>,
+) -> Vec<Candidate<'a>> {
+    let mut selected: Vec<Candidate<'a>> = pool
+        .iter()
+        .filter_map(|candidate| {
+            let probe = probes.get(&candidate.line.id)?;
+            (probe.count >= opts.min_fanin).then_some(Candidate {
+                refs: Some(probe.count),
+                ..*candidate
+            })
+        })
+        .collect();
+    selected.sort_by(|a, b| {
+        b.refs
+            .cmp(&a.refs)
+            .then_with(|| b.fanin.cmp(&a.fanin))
+            .then_with(|| a.line.id.cmp(&b.line.id))
+    });
+    let unprobed = select_candidates(
+        input,
+        lang,
+        &PrecomputeOptions {
+            max_targets: usize::MAX,
+            ..opts.clone()
+        },
+    )
+    .into_iter()
+    .filter(|candidate| !probes.contains_key(&candidate.line.id));
+    selected.extend(unprobed);
+    selected.truncate(opts.max_targets);
+    selected
+}
+
+/// Ask the server about one candidate (with `ops`, or the operations of its
+/// kind); a target that cannot be positioned is answered without a request.
 fn ask_target(
     ctx: &PrecomputeLangCtx<'_>,
     files: &mut SourceFiles<'_>,
     candidate: &Candidate<'_>,
     deadline: Instant,
+    ops: Option<OpSet>,
 ) -> LiveOutcome {
     let target = Target {
         rel: candidate.rel,
@@ -343,8 +463,22 @@ fn ask_target(
         deadline,
     };
     match live_request(files, &target, pacing) {
-        Ok(request) => ctx.pool.query(request),
+        Ok(mut request) => {
+            if let Some(ops) = ops {
+                request.ops = ops;
+            }
+            ctx.pool.query(request)
+        }
         Err(why) => LiveOutcome::without_answer(LiveStatus::NoPosition, why.detail()),
+    }
+}
+
+/// What a candidate's target is for the grouping of its answer.
+fn target_info(ctx: &PrecomputeLangCtx<'_>, candidate: &Candidate<'_>) -> TargetInfo {
+    let line = candidate.line;
+    TargetInfo {
+        shape: shape_of(&line.kind),
+        own: ctx.container_table.container_at(candidate.rel, line.l0).0,
     }
 }
 
@@ -357,24 +491,108 @@ fn collect_edges(
     outcome: &LiveOutcome,
     shards: &mut BTreeMap<String, Vec<LspEdgeLine>>,
 ) {
-    let line = candidate.line;
-    let target = TargetInfo {
-        shape: shape_of(&line.kind),
-        own: ctx.container_table.container_at(candidate.rel, line.l0).0,
-    };
-    let groups = group_locations(&outcome.locations, &target, ctx.container_table);
+    let groups = group_locations(
+        &outcome.locations,
+        &target_info(ctx, candidate),
+        ctx.container_table,
+    );
     for (relation, hits) in groups.groups {
         for hit in hits {
             shards.entry(hit.key.file).or_default().push(LspEdgeLine {
                 src: hit
                     .record
                     .map(|position| ctx.input.records[position].1.id.clone()),
-                dst: line.id.clone(),
+                dst: candidate.line.id.clone(),
                 rel: relation.clone(),
                 n: u32::try_from(hit.sites).unwrap_or(u32::MAX),
             });
         }
     }
+}
+
+/// One candidate's `references` answer from the probe.
+struct Probe {
+    outcome: LiveOutcome,
+    count: usize,
+}
+
+/// What the probe of one language gathered.
+#[derive(Default)]
+struct ProbeRun {
+    probes: HashMap<String, Probe>,
+    ms: u64,
+    no_server: bool,
+}
+
+/// Probe `pool` with `references` only until `probe_end`.
+fn run_probe(
+    ctx: &PrecomputeLangCtx<'_>,
+    files: &mut SourceFiles<'_>,
+    pool: &[Candidate<'_>],
+    probe_end: Instant,
+) -> ProbeRun {
+    let started = Instant::now();
+    let mut run = ProbeRun::default();
+    for candidate in pool {
+        let now = Instant::now();
+        if now >= probe_end {
+            break;
+        }
+        let deadline = (now + PER_TARGET_CAP).min(probe_end);
+        let outcome = ask_target(
+            ctx,
+            files,
+            candidate,
+            deadline,
+            Some(OpSet::references_only()),
+        );
+        match outcome.status {
+            LiveStatus::Ok => {
+                let count = group_locations(
+                    &outcome.locations,
+                    &target_info(ctx, candidate),
+                    ctx.container_table,
+                )
+                .containers
+                .len();
+                run.probes
+                    .insert(candidate.line.id.clone(), Probe { outcome, count });
+            }
+            LiveStatus::NoServer => {
+                run.no_server = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+    run.ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    run
+}
+
+/// The full answer of a probed candidate: the operations of its kind except
+/// `references`, merged with the probe's locations; no request at all when
+/// `references` was the only one (types, values).
+fn complete_with_probe(
+    ctx: &PrecomputeLangCtx<'_>,
+    files: &mut SourceFiles<'_>,
+    candidate: &Candidate<'_>,
+    deadline: Instant,
+    probe: &Probe,
+) -> LiveOutcome {
+    let mut ops = ops_for(shape_of(&candidate.line.kind));
+    ops.references = false;
+    if ops.is_empty() {
+        return probe.outcome.clone();
+    }
+    let mut outcome = ask_target(ctx, files, candidate, deadline, Some(ops));
+    if outcome.status == LiveStatus::Ok {
+        outcome
+            .locations
+            .extend(probe.outcome.locations.iter().cloned());
+        outcome.op_counts.references = probe.outcome.op_counts.references;
+        outcome.ms = outcome.ms.saturating_add(probe.outcome.ms);
+    }
+    outcome
 }
 
 /// What asking about the candidates of one language gathered.
@@ -390,7 +608,7 @@ struct LangRun {
 }
 
 impl LangRun {
-    fn record(&mut self, candidate: &Candidate<'_>, outcome: &LiveOutcome) {
+    fn record(&mut self, candidate: &Candidate<'_>, outcome: &LiveOutcome, selection: Selection) {
         if outcome.status == LiveStatus::Ok {
             self.ok += 1;
         } else {
@@ -405,6 +623,8 @@ impl LangRun {
             ms: outcome.ms,
             ops: outcome.op_counts,
             server: self.server_version.clone(),
+            refs: candidate.refs,
+            h: (selection == Selection::LspRefs).then_some(candidate.fanin),
         });
     }
 
@@ -424,43 +644,30 @@ fn precompute_lang(
 ) -> anyhow::Result<LspLangManifest> {
     let started = Instant::now();
     let budget_end = started + ctx.opts.budget;
-    let candidates = select_candidates(ctx.input, ctx.lang, ctx.opts);
-    let total = candidates.len();
     let mut files = SourceFiles::new(ctx.input.repo_root);
+    let (candidates, probe) = match ctx.opts.selection {
+        Selection::Heuristic => (
+            select_candidates(ctx.input, ctx.lang, ctx.opts),
+            ProbeRun::default(),
+        ),
+        Selection::LspRefs => {
+            let pool = probe_pool(ctx.input, ctx.lang, ctx.opts);
+            let probe_end = started + ctx.opts.budget.mul_f64(PROBE_BUDGET_SHARE);
+            let probe = run_probe(ctx, &mut files, &pool, probe_end);
+            let selected = select_by_refs(ctx.input, ctx.lang, ctx.opts, &pool, &probe.probes);
+            (selected, probe)
+        }
+    };
     let mut run = LangRun::default();
-
-    for (index, candidate) in candidates.iter().enumerate() {
-        let now = Instant::now();
-        if now >= budget_end {
-            tracing::info!(
-                "precompute for {} stopped by its budget after {}/{total} targets",
-                ctx.lang.dir_name(),
-                run.attempted
-            );
-            break;
-        }
-        run.attempted += 1;
-        let deadline = (now + PER_TARGET_CAP).min(budget_end);
-        let outcome = ask_target(ctx, &mut files, candidate, deadline);
-        if run.server_version.is_empty() {
-            run.server_version = server_version(ctx.pool, ctx.lang);
-        }
-        if outcome.status == LiveStatus::Ok {
-            collect_edges(ctx, candidate, &outcome, &mut run.shards);
-        }
-        run.record(candidate, &outcome);
-        if outcome.status == LiveStatus::NoServer {
-            // Terminal for this process: asking the other targets cannot help.
-            break;
-        }
-        if (index + 1) % PROGRESS_EVERY == 0 || index + 1 == total {
-            progress(ProgressEvent::LspTargets {
-                lang: ctx.lang,
-                done: index + 1,
-                total,
-            });
-        }
+    let plan = SelectedPlan {
+        candidates,
+        probe,
+        budget_end,
+    };
+    if !plan.probe.no_server {
+        ask_selected(ctx, &mut files, &plan, &mut run, progress);
     }
+    let probe = plan.probe;
 
     let (edges, _) = write_lsp_edge_shards(ctx.layout, ctx.lang, &run.shards)?;
     prune_orphan_edge_shards(ctx.layout, ctx.lang, &run.shards)?;
@@ -477,7 +684,63 @@ fn precompute_lang(
         edges,
         ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         diagnostic: run.diagnostic,
+        probed: probe.probes.len(),
+        probe_ms: probe.ms,
     })
+}
+
+/// The selected targets, the probe that ranked them and the language's budget.
+struct SelectedPlan<'a> {
+    candidates: Vec<Candidate<'a>>,
+    probe: ProbeRun,
+    budget_end: Instant,
+}
+
+/// Ask the server the full answer of every selected candidate, within the
+/// language's budget (a probed candidate reuses its probe's `references`).
+fn ask_selected(
+    ctx: &PrecomputeLangCtx<'_>,
+    files: &mut SourceFiles<'_>,
+    plan: &SelectedPlan<'_>,
+    run: &mut LangRun,
+    progress: &mut dyn FnMut(ProgressEvent),
+) {
+    let total = plan.candidates.len();
+    for (index, candidate) in plan.candidates.iter().enumerate() {
+        let now = Instant::now();
+        if now >= plan.budget_end {
+            tracing::info!(
+                "precompute for {} stopped by its budget after {}/{total} targets",
+                ctx.lang.dir_name(),
+                run.attempted
+            );
+            break;
+        }
+        run.attempted += 1;
+        let deadline = (now + PER_TARGET_CAP).min(plan.budget_end);
+        let outcome = match plan.probe.probes.get(&candidate.line.id) {
+            Some(probed) => complete_with_probe(ctx, files, candidate, deadline, probed),
+            None => ask_target(ctx, files, candidate, deadline, None),
+        };
+        if run.server_version.is_empty() {
+            run.server_version = server_version(ctx.pool, ctx.lang);
+        }
+        if outcome.status == LiveStatus::Ok {
+            collect_edges(ctx, candidate, &outcome, &mut run.shards);
+        }
+        run.record(candidate, &outcome, ctx.opts.selection);
+        if outcome.status == LiveStatus::NoServer {
+            // Terminal for this process: asking the other targets cannot help.
+            break;
+        }
+        if (index + 1) % PROGRESS_EVERY == 0 || index + 1 == total {
+            progress(ProgressEvent::LspTargets {
+                lang: ctx.lang,
+                done: index + 1,
+                total,
+            });
+        }
+    }
 }
 
 /// The version string the server of `lang` reported (empty before it is ready).
@@ -679,6 +942,8 @@ mod tests {
             min_fanin,
             max_targets: 10,
             budget: Duration::from_secs(600),
+            selection: Selection::Heuristic,
+            probe_min_fanin: 3,
         }
     }
 
@@ -974,6 +1239,269 @@ mod tests {
         assert_eq!(
             base,
             fingerprint_for_lang(&Inventory::new(other), LspLang::Rust)
+        );
+    }
+
+    fn lsp_refs(min_fanin: usize) -> PrecomputeOptions {
+        PrecomputeOptions {
+            selection: Selection::LspRefs,
+            ..all(min_fanin)
+        }
+    }
+
+    /// Methods every started server received, in order.
+    fn requests_seen(
+        servers: &std::sync::Mutex<Vec<std::sync::Arc<crate::lsp::fake::FakeCounters>>>,
+    ) -> Vec<String> {
+        servers
+            .lock()
+            .expect("counters")
+            .iter()
+            .flat_map(|counters| counters.requests())
+            .collect()
+    }
+
+    fn input_of(rig: &Rig) -> PrecomputeInput<'_> {
+        PrecomputeInput {
+            records: &rig.records,
+            heuristic_fanin: &rig.fanin,
+            inventory: &rig.inventory,
+            previous: None,
+            repo_root: rig.tmp.path(),
+        }
+    }
+
+    #[test]
+    fn full_stage_reuses_probe_references() {
+        let rig = Rig::new();
+        let servers = FakeServers::new(rig.script());
+        let counters = servers.counters();
+        let pool = servers.pool();
+        let manifest = rig.run(&lsp_refs(2), Some(&pool), None);
+        let rust = &manifest.languages["rust"];
+        assert_eq!(
+            (rust.status.as_str(), rust.targets_ok, rust.probed),
+            ("computed", 1, 1)
+        );
+        // The probe asked `references`; the full answer only the call hierarchy.
+        assert_eq!(
+            requests_seen(&counters),
+            vec![
+                "textDocument/references",
+                "textDocument/prepareCallHierarchy",
+                "callHierarchy/incomingCalls"
+            ]
+        );
+        // The same edges as the heuristic selection's full answer.
+        assert_eq!(
+            rig.edges_of("src/lib.rs"),
+            vec![
+                edge(Some("ca"), "CALLS", 1),
+                edge(Some("cb"), "REFERENCES", 1)
+            ]
+        );
+        let target = &rig.targets()[0];
+        assert_eq!((target.refs, target.h), (Some(3), Some(5)));
+        assert_eq!(
+            (target.ops.incoming, target.ops.references),
+            (Some(1), Some(4))
+        );
+        assert_eq!(
+            (
+                manifest.format,
+                manifest.selection.as_str(),
+                manifest.probe_min_fanin
+            ),
+            (2, "lsp-refs", 3)
+        );
+    }
+
+    #[test]
+    fn type_like_targets_need_no_second_request() {
+        let mut rig = Rig::new();
+        rig.records[0].1.kind = "rust_struct".to_owned();
+        let servers = FakeServers::new(rig.script());
+        let counters = servers.counters();
+        let pool = servers.pool();
+        let manifest = rig.run(&lsp_refs(2), Some(&pool), None);
+        assert_eq!(manifest.languages["rust"].targets_ok, 1);
+        assert_eq!(requests_seen(&counters), vec!["textDocument/references"]);
+        assert_eq!(rig.targets()[0].ops.references, Some(4));
+    }
+
+    #[test]
+    fn heuristic_mode_writes_phase4_lines() {
+        let rig = Rig::new();
+        rig.run_standard(&all(2), None);
+        let text =
+            std::fs::read_to_string(rig.layout.lsp_targets_for(LspLang::Rust)).expect("read");
+        assert!(
+            !text.contains("\"refs\"") && !text.contains("\"h\""),
+            "{text}"
+        );
+        assert_eq!(rig.targets()[0].refs, None);
+    }
+
+    #[test]
+    fn probe_pool_includes_types_regardless_of_fanin() {
+        let mut rig = Rig::new();
+        rig.records = vec![
+            (
+                "src/lib.rs".to_owned(),
+                shard_line("f0", "f0", 1, 2, Some(0)),
+            ),
+            (
+                "src/lib.rs".to_owned(),
+                shard_line("f9", "f9", 3, 4, Some(0)),
+            ),
+            (
+                "src/lib.rs".to_owned(),
+                shard_line("s0", "s0", 5, 6, Some(0)),
+            ),
+            (
+                "src/lib.rs".to_owned(),
+                shard_line("m0", "m0", 7, 8, Some(0)),
+            ),
+        ];
+        rig.records[2].1.kind = "rust_struct".to_owned();
+        rig.records[3].1.kind = "rust_module".to_owned();
+        rig.fanin = HashMap::from([("f9".to_owned(), 9)]);
+        let input = input_of(&rig);
+        let ids: Vec<&str> = probe_pool(&input, LspLang::Rust, &lsp_refs(20))
+            .iter()
+            .map(|candidate| candidate.line.id.as_str())
+            .collect();
+        // f9 (fan-in 9 ≥ 3), the struct with fan-in 0; not f0 (below 3), not the module.
+        assert_eq!(ids, vec!["f9", "s0"]);
+    }
+
+    #[test]
+    fn probe_pool_cap_and_order() {
+        let mut rig = Rig::new();
+        rig.records = (0..12)
+            .map(|i| {
+                let id = format!("f{i:02}");
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line(&id, &id, i * 2 + 1, i * 2 + 2, Some(0)),
+                )
+            })
+            .collect();
+        rig.fanin = (0..12).map(|i| (format!("f{i:02}"), 3 + i % 3)).collect();
+        let opts = PrecomputeOptions {
+            max_targets: 2,
+            ..lsp_refs(20)
+        };
+        let input = input_of(&rig);
+        let ids: Vec<String> = probe_pool(&input, LspLang::Rust, &opts)
+            .iter()
+            .map(|candidate| candidate.line.id.clone())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["f02", "f05", "f08", "f11", "f01", "f04", "f07", "f10"]
+        );
+    }
+
+    #[test]
+    fn selection_orders_by_lsp_count_then_heuristic_then_id_and_appends_unprobed() {
+        let mut rig = Rig::new();
+        rig.records = ["a", "b", "c", "d", "e"]
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                (
+                    "src/lib.rs".to_owned(),
+                    shard_line(id, id, i * 3 + 1, i * 3 + 2, Some(0)),
+                )
+            })
+            .collect();
+        rig.fanin = HashMap::from([
+            ("a".to_owned(), 30),
+            ("b".to_owned(), 25),
+            ("c".to_owned(), 25),
+            ("d".to_owned(), 4),
+            ("e".to_owned(), 40),
+        ]);
+        let input = input_of(&rig);
+        let opts = lsp_refs(20);
+        let pool = probe_pool(&input, LspLang::Rust, &opts);
+        let probe = |count| Probe {
+            outcome: LiveOutcome::without_answer(LiveStatus::Ok, ""),
+            count,
+        };
+        // a: 22 callers, b and c: 50 each, d: 3 (below min_fanin); e: not probed.
+        let probes = HashMap::from([
+            ("a".to_owned(), probe(22)),
+            ("b".to_owned(), probe(50)),
+            ("c".to_owned(), probe(50)),
+            ("d".to_owned(), probe(3)),
+        ]);
+        let ids: Vec<(&str, Option<usize>)> =
+            select_by_refs(&input, LspLang::Rust, &opts, &pool, &probes)
+                .iter()
+                .map(|candidate| (candidate.line.id.as_str(), candidate.refs))
+                .collect();
+        assert_eq!(
+            ids,
+            vec![
+                ("b", Some(50)),
+                ("c", Some(50)),
+                ("a", Some(22)),
+                ("e", None)
+            ]
+        );
+    }
+
+    #[test]
+    fn probe_stops_at_its_share_of_the_budget() {
+        let rig = Rig::new();
+        let opts = PrecomputeOptions {
+            budget: Duration::ZERO,
+            ..lsp_refs(2)
+        };
+        let (manifest, _) = rig.run_standard(&opts, None);
+        let rust = &manifest.languages["rust"];
+        assert_eq!((rust.probed, rust.targets_selected), (0, 0));
+    }
+
+    #[test]
+    fn skip_unchanged_includes_selection_options() {
+        let rig = Rig::new();
+        let (first, _) = rig.run_standard(&all(2), None);
+        let (again, starts) = rig.run_standard(&all(2), Some(&first));
+        assert_eq!(
+            (again.languages["rust"].status.as_str(), starts),
+            ("reused", 0)
+        );
+        let (switched, starts) = rig.run_standard(&lsp_refs(2), Some(&first));
+        assert_eq!(
+            (switched.languages["rust"].status.as_str(), starts),
+            ("computed", 1)
+        );
+        let probe_changed = PrecomputeOptions {
+            probe_min_fanin: 9,
+            ..lsp_refs(2)
+        };
+        let (changed, starts) = rig.run_standard(&probe_changed, Some(&switched));
+        assert_eq!(
+            (changed.languages["rust"].status.as_str(), starts),
+            ("computed", 1)
+        );
+    }
+
+    #[test]
+    fn manifest_format_2_round_trip_and_format_1_reads_as_heuristic() {
+        let rig = Rig::new();
+        let (manifest, _) = rig.run_standard(&lsp_refs(2), None);
+        let text = toml::to_string(&manifest).expect("toml");
+        let back: LspManifest = toml::from_str(&text).expect("parse");
+        assert_eq!(back, manifest);
+        let old = "format = 1\npolicy = \"all\"\nmin_fanin = 20\nmax_targets = 200\nbudget_secs = 600\n\n[languages]\n";
+        let old: LspManifest = toml::from_str(old).expect("format 1");
+        assert_eq!(
+            (old.selection.as_str(), old.probe_min_fanin),
+            ("heuristic", 0)
         );
     }
 }

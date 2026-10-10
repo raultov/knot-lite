@@ -1491,6 +1491,8 @@ mod tests {
                     implementation: None,
                 },
                 server: "rust-analyzer".to_owned(),
+                refs: None,
+                h: None,
             },
         );
         let edge = |rel: &str, src: Option<&str>, relation: &str, n: u32| LspIncoming {
@@ -1974,6 +1976,8 @@ mod tests {
                 ms: 1,
                 ops: OpCounts::default(),
                 server: String::new(),
+                refs: None,
+                h: None,
             },
         );
         let response = respond(&index, tmp.path(), &default_settings(), None, "target");
