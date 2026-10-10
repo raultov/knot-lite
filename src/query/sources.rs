@@ -122,8 +122,25 @@ impl<'a> Grouper<'a> {
     }
 }
 
+/// Distinct caller containers of a live answer about a target of `shape`
+/// declared in `own` — the grouping `find_callers` uses (P5-D14).
+pub(crate) fn live_container_count(
+    index: &LoadedIndex,
+    outcome: &LiveOutcome,
+    shape: TargetShape,
+    own: ContainerKey,
+) -> usize {
+    group_locations(
+        &outcome.locations,
+        &TargetInfo { shape, own },
+        &index.containers,
+    )
+    .containers
+    .len()
+}
+
 /// The innermost container of the record at `position`'s own declaration.
-fn own_container(index: &LoadedIndex, position: usize) -> ContainerKey {
+pub(crate) fn own_container(index: &LoadedIndex, position: usize) -> ContainerKey {
     let target = &index.records[position];
     index
         .containers

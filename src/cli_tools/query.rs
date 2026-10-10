@@ -18,7 +18,7 @@ use crate::models::params::{CallersParams, ExploreParams, FilesParams, SearchPar
 use crate::query::callers::{
     CallersContext, DEFAULT_MAX_TARGETS, LspContext, MAX_TARGETS_CAP, callers_doc, callers_response,
 };
-use crate::query::explore::{explore_doc, explore_response};
+use crate::query::explore::{ExploreContext, explore_doc, explore_response};
 use crate::query::files::{files_doc, files_response};
 use crate::query::filters::{PathFilter, clamp_i64};
 use crate::query::fusion::KEYWORD_WEIGHT;
@@ -126,25 +126,31 @@ pub fn format_callers_output(value: &Value, format: OutputFormat) -> String {
     render(&callers_doc(value, format), value, format)
 }
 
-/// `explore_file` — the entities of one file, grouped by kind family.
+/// `explore_file` — the entities of one file, grouped by kind family, with
+/// reference counts from the best available source.
 pub fn run_explore_file(
     cfg: &Config,
     services: &QueryServices,
     params: &ExploreParams,
 ) -> anyhow::Result<Value> {
     with_index(cfg, services, EXPLORE_TOOL, |index| {
-        let response = explore_response(
+        let pool = services.lsp_pool(cfg, index);
+        let response = explore_response(&ExploreContext {
             index,
-            &cfg.repo_name,
-            &cfg.repo_path,
-            &params.file_path,
-            params.include_markup,
-        );
+            repo: &cfg.repo_name,
+            requested: &params.file_path,
+            include_markup: params.include_markup,
+            lsp: LspContext {
+                settings: &cfg.lsp,
+                repo_root: &cfg.repo_path,
+                pool: pool.as_deref(),
+            },
+        });
         to_json(&response, EXPLORE_TOOL)
     })
 }
 
-/// Render a `knot-lite/explore/v1` document.
+/// Render a `knot-lite/explore/v2` document.
 pub fn format_explore_output(value: &Value, format: OutputFormat) -> String {
     render(&explore_doc(value, format), value, format)
 }

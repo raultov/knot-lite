@@ -4,10 +4,12 @@
 pub mod callers;
 pub mod coverage;
 pub mod explore;
+pub mod explore_refs;
 pub mod files;
 pub mod filters;
 pub mod fusion;
 pub mod hybrid;
+pub mod outline;
 pub mod pool;
 pub mod render;
 pub mod search;

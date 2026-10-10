@@ -207,6 +207,21 @@ mod tests {
     }
 
     #[test]
+    fn explore_file_describes_reference_sources_and_outline() {
+        let explore = tool_named("explore_file").description.unwrap();
+        for needle in [
+            "'refs_provenance'",
+            "'lsp-live'",
+            "'lsp-indexed'",
+            "'heuristic'",
+            "'outline.provenance' = 'lsp-live'",
+            "'indexed': false",
+        ] {
+            assert!(explore.contains(needle), "{needle} missing in {explore}");
+        }
+    }
+
+    #[test]
     fn descriptions_contain_phase3_keywords() {
         let callers = tool_named("find_callers").description.unwrap();
         for needle in [
