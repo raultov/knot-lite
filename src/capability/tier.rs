@@ -270,6 +270,8 @@ pub struct StatusReport {
     pub notes: Vec<String>,
     /// The language-server settings in force.
     pub lsp_settings: LspSettingsView,
+    /// Ranking of `search_hybrid_context` (`KNOT_LITE_SEARCH`).
+    pub search_mode: crate::config::SearchMode,
     /// Invalid or clamped settings, one line each.
     pub warnings: Vec<String>,
     /// What `--probe-lsp` found, per language (only when it ran).
@@ -340,7 +342,14 @@ pub fn build_report_with(
             TIER3_NOTE.to_string(),
         ],
         lsp_settings: LspSettingsView::from(&cfg.lsp),
-        warnings: cfg.lsp.warnings.clone(),
+        search_mode: cfg.search.mode,
+        warnings: cfg
+            .lsp
+            .warnings
+            .iter()
+            .chain(&cfg.search.warnings)
+            .cloned()
+            .collect(),
         lsp_probe: None,
     }
 }

@@ -24,3 +24,33 @@ pub fn init_logging(default_level: &str) -> Result<()> {
         .try_init()
         .map_err(|e| anyhow::anyhow!("failed to initialize logging: {e}"))
 }
+
+/// The `k` highest-scored entries of `scored`: score descending, ties by the
+/// lower key (record position or matrix row), so every ranking is deterministic.
+pub fn top_scored(mut scored: Vec<(usize, f32)>, k: usize) -> Vec<(usize, f32)> {
+    let keep = k.min(scored.len());
+    if keep == 0 {
+        return Vec::new();
+    }
+    let by_rank = |a: &(usize, f32), b: &(usize, f32)| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0));
+    scored.select_nth_unstable_by(keep - 1, by_rank);
+    scored.truncate(keep);
+    scored.sort_by(by_rank);
+    scored
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_scored_orders_by_score_then_key() {
+        let scored = vec![(4, 0.5), (1, 0.9), (3, 0.5), (2, 0.1)];
+        assert_eq!(
+            top_scored(scored.clone(), 3),
+            vec![(1, 0.9), (3, 0.5), (4, 0.5)]
+        );
+        assert_eq!(top_scored(scored.clone(), 10).len(), 4);
+        assert!(top_scored(scored, 0).is_empty());
+    }
+}

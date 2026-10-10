@@ -2,6 +2,7 @@
 //! search and kept with the [`LoadedIndex`] (P5-D10): the BM25 keyword index
 //! and the heuristic `CALLS` graph by record position.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use super::layout::IndexLayout;
@@ -29,6 +30,9 @@ pub struct SearchAux {
     pub calls_out: Vec<Vec<u32>>,
     /// Callers (heuristic `CALLS` edges) of every record position, ascending.
     pub calls_in: Vec<Vec<u32>>,
+    /// Identifier token (knot's `identifier_tokens` of the name) → positions of
+    /// the entity records with a vector, ascending (the name probe's lookup).
+    pub name_tokens: HashMap<String, Vec<u32>>,
     /// Milliseconds the build took.
     pub build_ms: u64,
 }
@@ -47,6 +51,7 @@ impl SearchAux {
             lexicon_full,
             calls_out,
             calls_in,
+            name_tokens: name_tokens(index),
             build_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         }
     }
@@ -105,6 +110,26 @@ fn names_only(index: &LoadedIndex) -> Bm25Index {
             }),
         index.records.len(),
     )
+}
+
+/// Identifier token → entity record positions (records with a vector only).
+fn name_tokens(index: &LoadedIndex) -> HashMap<String, Vec<u32>> {
+    let mut tokens: HashMap<String, Vec<u32>> = HashMap::new();
+    for (at, record) in index.records.iter().enumerate() {
+        let Ok(position) = u32::try_from(at) else {
+            continue;
+        };
+        if record.row.is_none() || record.line.is_tier1() {
+            continue;
+        }
+        let mut own = knot::utils::identifiers::identifier_tokens(&record.line.name);
+        own.sort_unstable();
+        own.dedup();
+        for token in own {
+            tokens.entry(token).or_default().push(position);
+        }
+    }
+    tokens
 }
 
 /// `(callees, callers)` per record position from the heuristic `CALLS` edges.

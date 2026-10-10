@@ -176,12 +176,15 @@ mod tests {
 
     #[test]
     fn descriptions_contain_phase2_keywords() {
-        assert!(
-            tool_named("search_hybrid_context")
-                .description
-                .unwrap()
-                .contains("no keyword channel")
-        );
+        let search = tool_named("search_hybrid_context").description.unwrap();
+        for needle in [
+            "BM25 keyword channel",
+            "knot's kind-aware re-rank",
+            "reciprocal-rank fusion",
+        ] {
+            assert!(search.contains(needle), "{needle} missing in {search}");
+        }
+        assert!(!search.contains("no keyword channel"), "{search}");
         assert!(
             tool_named("find_callers")
                 .description

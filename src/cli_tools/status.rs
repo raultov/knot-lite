@@ -418,6 +418,9 @@ fn lsp_lines(report: &serde_json::Value) -> Vec<String> {
             str_at(settings, &["cache_dir"]).unwrap_or("-"),
         ));
     }
+    if let Some(mode) = str_at(report, &["search_mode"]) {
+        lines.push(format!("search: {mode} (KNOT_LITE_SEARCH)"));
+    }
     if let Some(probe) = report.get("lsp_probe").and_then(|v| v.as_object()) {
         for (language, result) in probe {
             lines.push(probe_line(language, result));
@@ -981,6 +984,27 @@ mod tests {
         assert!(
             markdown.contains("- warning: KNOT_LITE_LSP_IDLE_SECS"),
             "{markdown}"
+        );
+    }
+
+    #[test]
+    fn status_shows_the_search_mode_and_its_warning() {
+        let (_tmp, mut cfg) = fixture_cfg();
+        let report = run_status_with(&cfg, &|_| stub_detect()).expect("report");
+        assert_eq!(report["search_mode"], "hybrid");
+        cfg.search = crate::config::resolve_search_settings(&|key: &str| {
+            (key == crate::config::SEARCH_ENV).then(|| "bm25".to_owned())
+        });
+        let report = run_status_with(&cfg, &|_| stub_detect()).expect("report");
+        assert_eq!(report["search_mode"], "hybrid");
+        let table = format_status_output(&report, OutputFormat::Table);
+        assert!(
+            table.contains("search: hybrid (KNOT_LITE_SEARCH)"),
+            "{table}"
+        );
+        assert!(
+            table.contains("warning: KNOT_LITE_SEARCH = 'bm25' is not 'hybrid' or 'vector'"),
+            "{table}"
         );
     }
 

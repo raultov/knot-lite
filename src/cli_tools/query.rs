@@ -21,6 +21,7 @@ use crate::query::callers::{
 use crate::query::explore::{explore_doc, explore_response};
 use crate::query::files::{files_doc, files_response};
 use crate::query::filters::{PathFilter, clamp_i64};
+use crate::query::fusion::KEYWORD_WEIGHT;
 use crate::query::render::render;
 use crate::query::search::{
     DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP, SearchRequest, search_doc, search_index,
@@ -58,7 +59,8 @@ fn to_json(response: &impl Serialize, tool: &str) -> anyhow::Result<Value> {
         .with_context(|| format!("failed to serialize the {tool} response"))
 }
 
-/// `search_hybrid_context` — cosine top-k over entities and tier-1 records.
+/// `search_hybrid_context` — hybrid (or, with `KNOT_LITE_SEARCH=vector`, cosine)
+/// ranking over entities and tier-1 records.
 pub fn run_search_hybrid_context(
     cfg: &Config,
     services: &QueryServices,
@@ -77,13 +79,15 @@ pub fn run_search_hybrid_context(
             max_results,
             kinds: &kinds,
             path: path.as_ref(),
+            mode: cfg.search.mode,
+            keyword_weight: KEYWORD_WEIGHT,
         };
         let response = search_index(index, &cfg.repo_name, &request, &query_vector);
         to_json(&response, SEARCH_TOOL)
     })
 }
 
-/// Render a `knot-lite/search/v1` document.
+/// Render a `knot-lite/search/v2` document.
 pub fn format_search_output(value: &Value, format: OutputFormat) -> String {
     render(&search_doc(value, format), value, format)
 }
@@ -219,8 +223,9 @@ mod tests {
     const MAKEFILE_CHUNK: &str = "Makefile (lines 1-2)\nall:\n\techo build";
 
     #[test]
-    fn search_finds_exact_text_first() {
-        let (_tmp, cfg) = indexed();
+    fn vector_mode_finds_exact_text_first() {
+        let (_tmp, mut cfg) = indexed();
+        cfg.search.mode = crate::config::SearchMode::Vector;
         let value =
             run_search_hybrid_context(&cfg, &services(), &search(MAKEFILE_CHUNK)).expect("search");
         let top = &value["results"][0];
@@ -229,9 +234,35 @@ mod tests {
         assert_eq!(top["rank"], 1);
         let score = top["score"].as_f64().expect("score");
         assert!(score > 0.98, "an exact text scores ~1.0, got {score}");
-        assert_eq!(value["schema"], "knot-lite/search/v1");
+        assert_eq!(top["cosine"], top["score"]);
+        assert_eq!(top["keyword"], Value::Null);
+        assert_eq!(top["channels"], serde_json::json!(["cosine"]));
+        assert_eq!(value["schema"], "knot-lite/search/v2");
         assert_eq!(value["provenance"], "vector");
+        assert_eq!(value["ranking"]["mode"], "vector");
+        assert_eq!(value["ranking"]["pool"], Value::Null);
         assert_eq!(value["repo"], "demo");
+    }
+
+    #[test]
+    fn hybrid_mode_recalls_exact_text_with_both_channels() {
+        let (_tmp, cfg) = indexed();
+        let value =
+            run_search_hybrid_context(&cfg, &services(), &search(MAKEFILE_CHUNK)).expect("search");
+        assert_eq!(value["provenance"], "hybrid");
+        assert_eq!(value["ranking"]["mode"], "hybrid");
+        assert_eq!(value["ranking"]["lexicon"], "full");
+        assert_eq!(value["ranking"]["keyword_weight"], 0.5);
+        let hits = value["results"].as_array().expect("results");
+        let chunk = hits
+            .iter()
+            .find(|hit| hit["file"] == "Makefile" && hit["l0"] == 1)
+            .expect("the exact chunk is among the results");
+        assert!(chunk["cosine"].as_f64().expect("cosine") > 0.98);
+        assert!(chunk["keyword"].as_f64().expect("keyword") > 0.0);
+        let channels = chunk["channels"].as_array().expect("channels");
+        assert!(channels.contains(&serde_json::json!("cosine")), "{chunk}");
+        assert!(channels.contains(&serde_json::json!("keyword")), "{chunk}");
     }
 
     #[test]
@@ -253,7 +284,7 @@ mod tests {
         );
         assert_eq!(
             value["notes"][0],
-            "Pure vector ranking (cosine over int8 vectors); no keyword channel or re-ranking."
+            "Hybrid ranking: cosine + BM25 keyword channel, knot's kind-aware re-rank and call-graph entry-point signal (weighted reciprocal-rank fusion)."
         );
     }
 
@@ -384,6 +415,92 @@ mod tests {
     }
 
     #[test]
+    fn vector_mode_equals_phase2_ranking() {
+        use crate::embed::EmbedBatch as _;
+        use crate::index::layout::IndexLayout;
+        use crate::index::load::load_index;
+        use crate::query::search::top_k;
+
+        let (tmp, mut cfg) = indexed();
+        cfg.search.mode = crate::config::SearchMode::Vector;
+        let params = SearchParams {
+            max_results: Some(10),
+            ..search("helper widget")
+        };
+        let value = run_search_hybrid_context(&cfg, &services(), &params).expect("search");
+        let index = load_index(&IndexLayout::for_repo(tmp.path())).expect("load");
+        let query = FakeEmbedder::new(DIM)
+            .embed_query("helper widget")
+            .expect("embed");
+        let rows: Vec<usize> = (0..index.matrix.rows()).collect();
+        let phase2: Vec<String> = top_k(&index.matrix, &rows, &query, 10)
+            .into_iter()
+            .map(|(row, _)| index.records[index.matrix.record[row]].line.id.clone())
+            .collect();
+        let ids: Vec<String> = value["results"]
+            .as_array()
+            .expect("results")
+            .iter()
+            .map(|hit| hit["id"].as_str().expect("id").to_owned())
+            .collect();
+        assert_eq!(ids, phase2);
+    }
+
+    #[test]
+    fn search_v2_shape_and_internal_fields_never_serialised() {
+        let (_tmp, cfg) = indexed();
+        let params = SearchParams {
+            max_results: Some(8),
+            ..search("helper calls target")
+        };
+        let value = run_search_hybrid_context(&cfg, &services(), &params).expect("search");
+        assert_eq!(value["schema"], "knot-lite/search/v2");
+        let keys: Vec<&str> = value
+            .as_object()
+            .expect("object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        for key in [
+            "schema",
+            "knot_lite_version",
+            "repo",
+            "query",
+            "provenance",
+            "ranking",
+            "index",
+            "filters",
+            "max_results",
+            "candidates",
+            "results",
+            "notes",
+        ] {
+            assert!(keys.contains(&key), "{key} missing: {keys:?}");
+        }
+        assert!(value["ranking"]["pool"].as_u64().expect("pool") > 0);
+        let hits = value["results"].as_array().expect("results");
+        assert_eq!(hits.len(), 8);
+        for (rank, hit) in hits.iter().enumerate() {
+            assert_eq!(hit["rank"], rank + 1);
+            assert!(hit["cosine"].is_f64(), "{hit}");
+            assert!(!hit["channels"].as_array().expect("channels").is_empty());
+        }
+        let scores: Vec<f64> = hits
+            .iter()
+            .filter_map(|hit| hit["score"].as_f64())
+            .collect();
+        assert!(
+            scores.windows(2).all(|pair| pair[0] >= pair[1]),
+            "{scores:?}"
+        );
+        let text = value.to_string();
+        assert!(
+            !text.contains("\"_kl\"") && !text.contains("\"_channel\""),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn search_clamps_max_results() {
         let (_tmp, cfg) = indexed();
         let mut params = search("x");
@@ -451,7 +568,7 @@ mod tests {
             table.starts_with("knot-lite search — repository 'demo'\nquery: "),
             "{table}"
         );
-        for header in ["SCORE", "KIND", "NAME", "LOCATION", "CALLERS"] {
+        for header in ["SCORE", "COS", "KW", "KIND", "NAME", "LOCATION", "CALLERS"] {
             assert!(table.contains(header), "{header} missing in {table}");
         }
         assert!(table.contains("Makefile:1-2"), "{table}");
@@ -459,13 +576,14 @@ mod tests {
         let markdown = format_search_output(&value, OutputFormat::Markdown);
         assert!(markdown.starts_with("## knot-lite search"), "{markdown}");
         assert!(
-            markdown.contains("| # | SCORE | KIND | NAME | LOCATION | CALLERS |"),
+            markdown
+                .contains("| # | SCORE | COS | KW | KIND | NAME | LOCATION | CALLERS | CHANNELS |"),
             "{markdown}"
         );
 
         let json: Value =
             serde_json::from_str(&format_search_output(&value, OutputFormat::Json)).expect("json");
-        assert_eq!(json["schema"], "knot-lite/search/v1");
+        assert_eq!(json["schema"], "knot-lite/search/v2");
     }
 
     #[test]

@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use super::store::LexiconLine;
+use crate::utils::top_scored;
 
 const K1: f32 = 1.2;
 const B: f32 = 0.75;
@@ -107,14 +108,14 @@ impl Bm25Index {
 /// The `k` highest entries of `scores` (positive only): score descending,
 /// ties by record position.
 pub fn top_of(scores: &HashMap<usize, f32>, k: usize) -> Vec<(usize, f32)> {
-    let mut ranked: Vec<(usize, f32)> = scores
-        .iter()
-        .filter(|(_, score)| **score > 0.0)
-        .map(|(&at, &score)| (at, score))
-        .collect();
-    ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-    ranked.truncate(k);
-    ranked
+    top_scored(
+        scores
+            .iter()
+            .filter(|(_, score)| **score > 0.0)
+            .map(|(&at, &score)| (at, score))
+            .collect(),
+        k,
+    )
 }
 
 struct Builder {

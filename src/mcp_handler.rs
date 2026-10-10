@@ -363,7 +363,7 @@ repo_name is optional: this server serves a single repository; 'all', '*' or its
         let structured = result.structured_content.expect("structured content");
         assert_eq!(
             structured.get("schema").and_then(|v| v.as_str()),
-            Some("knot-lite/search/v1")
+            Some("knot-lite/search/v2")
         );
     }
 

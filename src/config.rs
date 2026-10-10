@@ -20,6 +20,49 @@ pub const UNNAMED_REPO: &str = "unnamed-repo";
 /// Key of the `.env` directory override.
 pub const CONFIG_DIR_ENV: &str = "KNOT_LITE_CONFIG_DIR";
 
+/// Key selecting the ranking of `search_hybrid_context` (P5-D12).
+pub const SEARCH_ENV: &str = "KNOT_LITE_SEARCH";
+
+/// How `search_hybrid_context` ranks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchMode {
+    /// Recall pool, knot's kind-aware re-rank and the BM25 keyword channel.
+    #[default]
+    Hybrid,
+    /// Cosine only (the 0.4.x ranking).
+    Vector,
+}
+
+/// The search mode and the warning of an invalid [`SEARCH_ENV`] value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchSettings {
+    /// The mode in force.
+    pub mode: SearchMode,
+    /// One line per invalid value (it falls back to `hybrid`).
+    pub warnings: Vec<String>,
+}
+
+/// Resolve [`SEARCH_ENV`]: `hybrid` or `vector` (trimmed, case-insensitive);
+/// unset or empty means `hybrid`; anything else warns and uses `hybrid`.
+pub fn resolve_search_settings(lookup: &dyn Fn(&str) -> Option<String>) -> SearchSettings {
+    let raw = lookup(SEARCH_ENV).unwrap_or_default();
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "hybrid" => SearchSettings::default(),
+        "vector" => SearchSettings {
+            mode: SearchMode::Vector,
+            warnings: Vec::new(),
+        },
+        _ => SearchSettings {
+            mode: SearchMode::Hybrid,
+            warnings: vec![format!(
+                "{SEARCH_ENV} = '{}' is not 'hybrid' or 'vector'; using hybrid",
+                raw.trim()
+            )],
+        },
+    }
+}
+
 /// Output rendering shared by the CLI subcommands.
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq, Default)]
 pub enum OutputFormat {
@@ -69,6 +112,8 @@ pub struct Config {
     pub embed: EmbedSettings,
     /// Language-server switches, limits and scratch root (P3-D12, P3-D14).
     pub lsp: LspSettings,
+    /// Ranking of `search_hybrid_context` (P5-D12).
+    pub search: SearchSettings,
 }
 
 /// Everything [`resolve`] reads besides the CLI arguments, injected so the
@@ -158,6 +203,7 @@ pub fn resolve(args: &CommonArgs, dry_run: bool, inputs: &ResolveInputs<'_>) -> 
         dry_run,
         embed: resolve_embed_settings(&lookup, temp_dir),
         lsp: resolve_lsp_settings(&lookup, temp_dir),
+        search: resolve_search_settings(&lookup),
     })
 }
 
@@ -253,7 +299,7 @@ pub fn read_dotenv(path: &Path) -> BTreeMap<String, String> {
 pub(crate) mod test_support {
     use std::path::PathBuf;
 
-    use super::{Config, LspOverrides};
+    use super::{Config, LspOverrides, SearchSettings};
     use crate::embed::settings::EmbedSettings;
     use crate::lsp::settings::{LspSettings, resolve_lsp_settings};
 
@@ -275,6 +321,7 @@ pub(crate) mod test_support {
                 enabled: false,
                 ..resolve_lsp_settings(&|_| None, &temp_dir)
             },
+            search: SearchSettings::default(),
         }
     }
 }
@@ -541,6 +588,28 @@ mod tests {
         assert_eq!(
             map.get("KNOT_LITE_LSP_JAVA").map(String::as_str),
             Some("jdtls")
+        );
+    }
+
+    #[test]
+    fn search_mode_env_resolution() {
+        let with = |value: Option<&str>| {
+            let value = value.map(str::to_owned);
+            resolve_search_settings(&move |key: &str| {
+                (key == SEARCH_ENV).then(|| value.clone()).flatten()
+            })
+        };
+        assert_eq!(with(None), SearchSettings::default());
+        assert_eq!(with(Some("  ")).mode, SearchMode::Hybrid);
+        assert_eq!(with(Some("Hybrid")).mode, SearchMode::Hybrid);
+        let vector = with(Some(" VECTOR "));
+        assert_eq!(vector.mode, SearchMode::Vector);
+        assert!(vector.warnings.is_empty());
+        let bad = with(Some("bm25"));
+        assert_eq!(bad.mode, SearchMode::Hybrid);
+        assert_eq!(
+            bad.warnings,
+            vec!["KNOT_LITE_SEARCH = 'bm25' is not 'hybrid' or 'vector'; using hybrid"]
         );
     }
 }

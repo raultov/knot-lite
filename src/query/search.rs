@@ -1,20 +1,24 @@
-//! `search_hybrid_context`: cosine top-k over the loaded vectors (P2-D10).
-//!
-//! The name is kept for surface parity with knot; there is no keyword channel,
-//! no kind-aware re-ranking and no graph boost.
+//! `search_hybrid_context`: hybrid ranking over the loaded index (P5-D7) —
+//! a recall pool (cosine, definitions, names, BM25 keywords, callers of the
+//! best roots), knot's kind-aware re-rank and a reciprocal-rank fusion with the
+//! keyword order — or the 0.4.x cosine top-k with `KNOT_LITE_SEARCH=vector`.
 
 use serde::Serialize;
 use serde_json::Value;
 
 use super::files::path_line;
 use super::filters::{PathFilter, PathMode};
+use super::hybrid::{HybridInput, Ranked, rank_hybrid};
+use super::pool::CHANNEL_COSINE;
 use super::render::{Column, RenderDoc, RenderSection, str_at, u64_at};
-use crate::config::OutputFormat;
+use crate::config::{OutputFormat, SearchMode};
 use crate::index::load::{LoadedIndex, Matrix};
+use crate::index::search_aux::NAMES_ONLY_NOTE;
+use crate::utils::top_scored;
 use knot::cli_tools::kinds::kinds_allow;
 
-/// Schema id of the search document.
-pub const SEARCH_SCHEMA_V1: &str = "knot-lite/search/v1";
+/// Schema id of the search document (P5-D3: `score` is the fused score).
+pub const SEARCH_SCHEMA_V2: &str = "knot-lite/search/v2";
 /// Default `max_results`.
 pub const DEFAULT_MAX_RESULTS: usize = 5;
 /// Largest accepted `max_results`.
@@ -22,6 +26,7 @@ pub const MAX_RESULTS_CAP: usize = 100;
 
 const PURE_VECTOR_NOTE: &str =
     "Pure vector ranking (cosine over int8 vectors); no keyword channel or re-ranking.";
+const HYBRID_NOTE: &str = "Hybrid ranking: cosine + BM25 keyword channel, knot's kind-aware re-rank and call-graph entry-point signal (weighted reciprocal-rank fusion).";
 
 /// A validated search request.
 #[derive(Debug, Clone)]
@@ -34,6 +39,10 @@ pub struct SearchRequest<'a> {
     pub kinds: &'a [String],
     /// Optional path filter (prefix or glob).
     pub path: Option<&'a PathFilter>,
+    /// Hybrid or vector ranking.
+    pub mode: SearchMode,
+    /// Weight of the keyword order in the fusion (hybrid only).
+    pub keyword_weight: f64,
 }
 
 /// `index` object of the response.
@@ -56,13 +65,33 @@ pub struct SearchFilters {
     pub path_mode: Option<PathMode>,
 }
 
+/// `ranking` object of the response.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchRanking {
+    /// `hybrid` or `vector`.
+    pub mode: SearchMode,
+    /// Weight of the keyword order (`null` in vector mode).
+    pub keyword_weight: Option<f64>,
+    /// Candidates the re-rank ordered (`null` in vector mode).
+    pub pool: Option<usize>,
+    /// `full` (stored lexicon) or `names_only` (`null` in vector mode).
+    pub lexicon: Option<&'static str>,
+}
+
 /// One ranked result.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
     /// 1-based rank.
     pub rank: usize,
-    /// Cosine similarity, rounded to 4 decimals.
-    pub score: f64,
+    /// Fused score (the cosine in vector mode), 4 decimals; `null` for a
+    /// leading name-prefix slot.
+    pub score: Option<f64>,
+    /// Cosine similarity, 4 decimals.
+    pub cosine: f64,
+    /// BM25 score, 4 decimals; `null` when the record has no query term.
+    pub keyword: Option<f64>,
+    /// Recall channels that produced the result.
+    pub channels: Vec<&'static str>,
     /// Record id.
     pub id: String,
     /// Entity kind, or `chunk` / `file`.
@@ -85,10 +114,10 @@ pub struct SearchHit {
     pub callers: usize,
 }
 
-/// The `knot-lite/search/v1` document (§9.2).
+/// The `knot-lite/search/v2` document (§10.1).
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResponse {
-    /// [`SEARCH_SCHEMA_V1`].
+    /// [`SEARCH_SCHEMA_V2`].
     pub schema: &'static str,
     /// knot-lite version.
     pub knot_lite_version: &'static str,
@@ -96,8 +125,10 @@ pub struct SearchResponse {
     pub repo: String,
     /// The query text.
     pub query: String,
-    /// Always `vector` in 0.2.0.
+    /// `hybrid` or `vector`.
     pub provenance: &'static str,
+    /// How the results were ranked.
+    pub ranking: SearchRanking,
     /// The index the answer came from.
     pub index: SearchIndexInfo,
     /// Filters applied.
@@ -120,23 +151,15 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
 /// `query`, as `(row, score)`. Ties go to the lower row (record order), so the
 /// ranking is deterministic.
 pub fn top_k(matrix: &Matrix, candidates: &[usize], query: &[f32], k: usize) -> Vec<(usize, f32)> {
-    let mut scored: Vec<(usize, f32)> = candidates
+    let scored: Vec<(usize, f32)> = candidates
         .iter()
         .filter_map(|&row| matrix.row(row).map(|vector| (row, dot(vector, query))))
         .collect();
-    let keep = k.min(scored.len());
-    if keep == 0 {
-        return Vec::new();
-    }
-    let by_rank = |a: &(usize, f32), b: &(usize, f32)| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0));
-    scored.select_nth_unstable_by(keep - 1, by_rank);
-    scored.truncate(keep);
-    scored.sort_by(by_rank);
-    scored
+    top_scored(scored, k)
 }
 
-/// Score every record that passes the filters against `query_vector` and
-/// return the ranked response.
+/// Rank the records that pass the filters for `query_vector` and return the
+/// response.
 pub fn search_index(
     index: &LoadedIndex,
     repo: &str,
@@ -146,22 +169,25 @@ pub fn search_index(
     let candidates: Vec<usize> = (0..index.matrix.rows())
         .filter(|&row| passes(index, row, request))
         .collect();
-    let results = top_k(
-        &index.matrix,
-        &candidates,
-        query_vector,
-        request.max_results,
-    )
-    .into_iter()
-    .enumerate()
-    .map(|(position, (row, score))| hit(index, position + 1, row, score))
-    .collect();
+    let (ranked, ranking, ranking_note) = match request.mode {
+        SearchMode::Vector => vector_ranking(index, request, &candidates, query_vector),
+        SearchMode::Hybrid => hybrid_ranking(index, request, &candidates, query_vector),
+    };
+    let results = ranked
+        .into_iter()
+        .enumerate()
+        .map(|(at, ranked)| hit(index, at + 1, ranked))
+        .collect();
     SearchResponse {
-        schema: SEARCH_SCHEMA_V1,
+        schema: SEARCH_SCHEMA_V2,
         knot_lite_version: env!("CARGO_PKG_VERSION"),
         repo: repo.to_owned(),
         query: request.query.to_owned(),
-        provenance: "vector",
+        provenance: match request.mode {
+            SearchMode::Vector => "vector",
+            SearchMode::Hybrid => "hybrid",
+        },
+        ranking,
         index: SearchIndexInfo {
             model: index.manifest.embedding.model.clone(),
             updated_at: index.manifest.updated_at.clone(),
@@ -174,13 +200,81 @@ pub fn search_index(
         max_results: request.max_results,
         candidates: candidates.len(),
         results,
-        notes: search_notes(index, request.path),
+        notes: search_notes(index, request.path, ranking_note),
     }
 }
 
-/// The ranking note, plus the no-match note when no indexed file passes the path filter.
-fn search_notes(index: &LoadedIndex, path: Option<&PathFilter>) -> Vec<String> {
-    let mut notes = vec![PURE_VECTOR_NOTE.to_owned()];
+/// The 0.4.x ranking: cosine top-k.
+fn vector_ranking(
+    index: &LoadedIndex,
+    request: &SearchRequest<'_>,
+    candidates: &[usize],
+    query_vector: &[f32],
+) -> (Vec<Ranked>, SearchRanking, Vec<&'static str>) {
+    let ranked = top_k(&index.matrix, candidates, query_vector, request.max_results)
+        .into_iter()
+        .map(|(row, cosine)| Ranked {
+            position: index.matrix.record[row],
+            score: Some(f64::from(cosine)),
+            cosine,
+            keyword: None,
+            channels: vec![CHANNEL_COSINE],
+        })
+        .collect();
+    let ranking = SearchRanking {
+        mode: SearchMode::Vector,
+        keyword_weight: None,
+        pool: None,
+        lexicon: None,
+    };
+    (ranked, ranking, vec![PURE_VECTOR_NOTE])
+}
+
+/// The hybrid ranking over the cosine of every candidate.
+fn hybrid_ranking(
+    index: &LoadedIndex,
+    request: &SearchRequest<'_>,
+    candidates: &[usize],
+    query_vector: &[f32],
+) -> (Vec<Ranked>, SearchRanking, Vec<&'static str>) {
+    let mut cosine: Vec<Option<f32>> = vec![None; index.records.len()];
+    for &row in candidates {
+        if let Some(vector) = index.matrix.row(row) {
+            cosine[index.matrix.record[row]] = Some(dot(vector, query_vector));
+        }
+    }
+    let outcome = rank_hybrid(&HybridInput {
+        index,
+        query: request.query,
+        kinds: request.kinds,
+        cosine: &cosine,
+        max_results: request.max_results,
+        keyword_weight: request.keyword_weight,
+    });
+    let ranking = SearchRanking {
+        mode: SearchMode::Hybrid,
+        keyword_weight: Some(request.keyword_weight),
+        pool: Some(outcome.pool),
+        lexicon: Some(if outcome.lexicon_full {
+            "full"
+        } else {
+            "names_only"
+        }),
+    };
+    let mut notes = vec![HYBRID_NOTE];
+    if !outcome.lexicon_full {
+        notes.push(NAMES_ONLY_NOTE);
+    }
+    (outcome.ranked, ranking, notes)
+}
+
+/// The ranking notes, plus the no-match note when no indexed file passes the path filter.
+fn search_notes(
+    index: &LoadedIndex,
+    path: Option<&PathFilter>,
+    ranking_notes: Vec<&'static str>,
+) -> Vec<String> {
+    let mut notes: Vec<String> = ranking_notes.into_iter().map(str::to_owned).collect();
     if let Some(filter) = path
         && !index.by_file.keys().any(|file| filter.matches(file))
     {
@@ -197,12 +291,19 @@ fn passes(index: &LoadedIndex, row: usize, request: &SearchRequest<'_>) -> bool 
             .is_none_or(|prefix| prefix.matches(&record.file))
 }
 
-fn hit(index: &LoadedIndex, rank: usize, row: usize, score: f32) -> SearchHit {
-    let record = &index.records[index.matrix.record[row]];
+fn round4(value: f64) -> f64 {
+    (value * 1e4).round() / 1e4
+}
+
+fn hit(index: &LoadedIndex, rank: usize, ranked: Ranked) -> SearchHit {
+    let record = &index.records[ranked.position];
     let line = &record.line;
     SearchHit {
         rank,
-        score: (f64::from(score) * 1e4).round() / 1e4,
+        score: ranked.score.map(round4),
+        cosine: round4(f64::from(ranked.cosine)),
+        keyword: ranked.keyword.map(|bm25| round4(f64::from(bm25))),
+        channels: ranked.channels,
         id: line.id.clone(),
         kind: line.kind.clone(),
         name: line.name.clone(),
@@ -216,7 +317,7 @@ fn hit(index: &LoadedIndex, rank: usize, row: usize, score: f32) -> SearchHit {
     }
 }
 
-/// Build the format-agnostic document for a `knot-lite/search/v1` value.
+/// Build the format-agnostic document for a `knot-lite/search/v2` value.
 pub fn search_doc(value: &Value, format: OutputFormat) -> RenderDoc {
     let repo = str_at(value, &["repo"]).unwrap_or("-");
     let results = value
@@ -238,6 +339,7 @@ pub fn search_doc(value: &Value, format: OutputFormat) -> RenderDoc {
             u64_at(value, &["candidates"]).unwrap_or(0),
             u64_at(value, &["max_results"]).unwrap_or(0)
         ),
+        ranking_line(value),
     ];
     summary.extend(filter_lines(value));
 
@@ -257,18 +359,47 @@ pub fn search_doc(value: &Value, format: OutputFormat) -> RenderDoc {
         sections: vec![RenderSection {
             caption: None,
             heading: None,
-            columns: vec![
-                Column::right("#"),
-                Column::right("SCORE"),
-                Column::left("KIND"),
-                Column::left("NAME"),
-                Column::left("LOCATION"),
-                Column::right("CALLERS"),
-            ],
+            columns: search_columns(markdown),
             rows,
         }],
         notes,
     }
+}
+
+/// `ranking: hybrid (pool 61, keyword weight 0.5, lexicon full)` or `ranking: vector`.
+fn ranking_line(value: &Value) -> String {
+    let mode = str_at(value, &["ranking", "mode"]).unwrap_or("-");
+    match (
+        u64_at(value, &["ranking", "pool"]),
+        value
+            .pointer("/ranking/keyword_weight")
+            .and_then(Value::as_f64),
+        str_at(value, &["ranking", "lexicon"]),
+    ) {
+        (Some(pool), Some(weight), Some(lexicon)) => {
+            format!("ranking: {mode} (pool {pool}, keyword weight {weight}, lexicon {lexicon})")
+        }
+        _ => format!("ranking: {mode}"),
+    }
+}
+
+/// `#`, `SCORE`, `COS`, `KW`, `KIND`, `NAME`, `LOCATION`, `CALLERS`; markdown
+/// adds `CHANNELS`.
+fn search_columns(markdown: bool) -> Vec<Column> {
+    let mut columns = vec![
+        Column::right("#"),
+        Column::right("SCORE"),
+        Column::right("COS"),
+        Column::right("KW"),
+        Column::left("KIND"),
+        Column::left("NAME"),
+        Column::left("LOCATION"),
+        Column::right("CALLERS"),
+    ];
+    if markdown {
+        columns.push(Column::left("CHANNELS"));
+    }
+    columns
 }
 
 fn filter_lines(value: &Value) -> Vec<String> {
@@ -303,12 +434,16 @@ fn search_row(hit: &Value, markdown: bool) -> Vec<String> {
         (true, Some(fqn)) if fqn != name => format!("{name} — {fqn}"),
         _ => name.to_owned(),
     };
-    vec![
+    let number = |key: &str| {
+        hit.get(key)
+            .and_then(Value::as_f64)
+            .map_or_else(|| "-".to_owned(), |n| format!("{n:.4}"))
+    };
+    let mut row = vec![
         u64_at(hit, &["rank"]).unwrap_or(0).to_string(),
-        format!(
-            "{:.4}",
-            hit.get("score").and_then(Value::as_f64).unwrap_or(0.0)
-        ),
+        number("score"),
+        number("cosine"),
+        number("keyword"),
         str_at(hit, &["kind"]).unwrap_or("-").to_owned(),
         name_cell,
         format!(
@@ -318,7 +453,11 @@ fn search_row(hit: &Value, markdown: bool) -> Vec<String> {
             u64_at(hit, &["l1"]).unwrap_or(0)
         ),
         u64_at(hit, &["callers"]).unwrap_or(0).to_string(),
-    ]
+    ];
+    if markdown {
+        row.push(string_array(hit, "channels").join(", "));
+    }
+    row
 }
 
 /// `#1 \`signature\`` for a result that has one (markdown notes).
@@ -392,12 +531,15 @@ mod tests {
 
     fn sample() -> Value {
         serde_json::json!({
-            "schema": SEARCH_SCHEMA_V1, "repo": "demo", "query": "find me",
+            "schema": SEARCH_SCHEMA_V2, "repo": "demo", "query": "find me",
+            "provenance": "hybrid",
+            "ranking": {"mode": "hybrid", "keyword_weight": 0.5, "pool": 61, "lexicon": "full"},
             "index": {"model": "M", "updated_at": "2026-10-05T10:00:00Z"},
             "filters": {"kinds": ["rust_function"], "path": "src"},
             "max_results": 5, "candidates": 40,
             "results": [{
-                "rank": 1, "score": 0.5, "id": "i", "kind": "rust_function", "name": "run",
+                "rank": 1, "score": 0.0312, "cosine": 0.5, "keyword": null,
+                "channels": ["cosine", "bridge"], "id": "i", "kind": "rust_function", "name": "run",
                 "fqn": "m::run", "file": "src/a.rs", "l0": 3, "l1": 9,
                 "signature": "(x: u8)", "lang": "rust", "callers": 2
             }],
@@ -415,9 +557,23 @@ mod tests {
         );
         assert!(doc.summary.contains(&"kinds: rust_function".to_owned()));
         assert!(doc.summary.contains(&"path: src".to_owned()));
+        assert!(
+            doc.summary.contains(
+                &"ranking: hybrid (pool 61, keyword weight 0.5, lexicon full)".to_owned()
+            )
+        );
         assert_eq!(
             doc.sections[0].rows[0],
-            vec!["1", "0.5000", "rust_function", "run", "src/a.rs:3-9", "2"]
+            vec![
+                "1",
+                "0.0312",
+                "0.5000",
+                "-",
+                "rust_function",
+                "run",
+                "src/a.rs:3-9",
+                "2"
+            ]
         );
         assert_eq!(doc.notes, vec!["a note"]);
     }
@@ -425,7 +581,8 @@ mod tests {
     #[test]
     fn doc_for_markdown_has_fqn_names_and_signature_bullets() {
         let doc = search_doc(&sample(), OutputFormat::Markdown);
-        assert_eq!(doc.sections[0].rows[0][3], "run — m::run");
+        assert_eq!(doc.sections[0].rows[0][5], "run — m::run");
+        assert_eq!(doc.sections[0].rows[0][8], "cosine, bridge");
         assert_eq!(doc.notes, vec!["#1 `(x: u8)`", "a note"]);
     }
 
@@ -435,5 +592,11 @@ mod tests {
         value["results"] = serde_json::json!([]);
         let doc = search_doc(&value, OutputFormat::Table);
         assert!(doc.sections[0].rows.is_empty());
+        value["ranking"] = serde_json::json!({"mode": "vector", "keyword_weight": null, "pool": null, "lexicon": null});
+        assert!(
+            search_doc(&value, OutputFormat::Table)
+                .summary
+                .contains(&"ranking: vector".to_owned())
+        );
     }
 }
