@@ -16,12 +16,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Instant;
 
+use knot::pipeline::parser::ParseConfig;
+
 use super::callers::{CallerRow, CallerTarget, CallersContext, RelationGroups, TargetLspInfo};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::graph::containers::{ContainerKey, FILE_LEVEL_NAME};
 use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::{LoadedIndex, LoadedRecord};
 use crate::index::lsp_records::LspTargetLine;
+use crate::index::reparse::{FreshFiles, match_all};
 use crate::lsp::normalize::{LspGroups, TargetInfo, group_locations};
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::pool::LspPool;
@@ -190,10 +193,15 @@ pub fn indexed_answer(index: &LoadedIndex, position: usize) -> Answer {
 }
 
 /// Who references the record at `position` according to a live outcome.
-fn live_answer(index: &LoadedIndex, position: usize, outcome: &LiveOutcome) -> Answer {
+fn live_answer(
+    index: &LoadedIndex,
+    own: ContainerKey,
+    position: usize,
+    outcome: &LiveOutcome,
+) -> Answer {
     let target = TargetInfo {
         shape: shape_of(&index.records[position].line.kind),
-        own: own_container(index, position),
+        own,
     };
     let LspGroups {
         groups,
@@ -258,10 +266,11 @@ fn indexed_info(line: &LspTargetLine, heuristic_extra: usize) -> TargetLspInfo {
         retried_empty: false,
         ms: line.ms,
         heuristic_extra,
+        reanchored: false,
     }
 }
 
-fn live_info(outcome: &LiveOutcome, heuristic_extra: usize) -> TargetLspInfo {
+fn live_info(outcome: &LiveOutcome, heuristic_extra: usize, reanchored: bool) -> TargetLspInfo {
     TargetLspInfo {
         status: outcome.status.as_str(),
         ops: outcome.op_counts,
@@ -270,6 +279,7 @@ fn live_info(outcome: &LiveOutcome, heuristic_extra: usize) -> TargetLspInfo {
         retried_empty: outcome.retried_empty,
         ms: outcome.ms,
         heuristic_extra,
+        reanchored,
     }
 }
 
@@ -282,6 +292,7 @@ fn fallback_info(status: &'static str) -> TargetLspInfo {
         retried_empty: false,
         ms: 0,
         heuristic_extra: 0,
+        reanchored: false,
     }
 }
 
@@ -300,10 +311,17 @@ impl Fallback {
     }
 }
 
+/// Extra information about a live request.
+#[derive(Debug, Clone)]
+struct TargetLiveInfo {
+    own: ContainerKey,
+    reanchored: bool,
+}
+
 /// The source chosen for one target.
 enum Plan<'a> {
     Indexed(&'a LspTargetLine),
-    Live(&'a LspPool, LiveRequest),
+    Live(&'a LspPool, LiveRequest, TargetLiveInfo),
     /// `None`: no language server is relevant (not an LSP language).
     Heuristic(Option<Fallback>),
 }
@@ -318,13 +336,32 @@ struct Described {
 /// The diagnostics a call collected (`(status, detail)`), shown as notes.
 pub type Diagnostics = Vec<(&'static str, String)>;
 
+/// Arguments of [`Describer::ask`] (kept together to stay under the
+/// `too_many_arguments` threshold).
+struct AskArgs {
+    position: usize,
+    heuristic: Answer,
+    live_info: TargetLiveInfo,
+}
+
+/// Arguments of [`Describer::reanchor`].
+struct ReanchorArgs<'r, 'a> {
+    record: &'r LoadedRecord,
+    position: usize,
+    lang: LspLang,
+    hint: usize,
+    pool: &'a LspPool,
+}
+
 /// Describes the targets of one `find_callers` call, sharing its live budget,
 /// deadline and file reads.
 pub struct Describer<'c, 'a> {
     ctx: &'c CallersContext<'a>,
     files: SourceFiles<'a>,
+    fresh: FreshFiles,
     deadline: Instant,
     live_used: usize,
+    reanchored_targets: usize,
     diagnostics: Diagnostics,
 }
 
@@ -334,10 +371,22 @@ impl<'c, 'a> Describer<'c, 'a> {
         Self {
             ctx,
             files: SourceFiles::new(ctx.lsp.repo_root),
+            fresh: FreshFiles::new(),
             deadline: Instant::now() + ctx.lsp.settings.deadline,
             live_used: 0,
+            reanchored_targets: 0,
             diagnostics: Vec::new(),
         }
+    }
+
+    /// Number of targets that were re-anchored in changed files.
+    pub fn reanchored_count(&self) -> usize {
+        self.reanchored_targets
+    }
+
+    /// Number of files successfully re-parsed.
+    pub fn reparsed_count(&self) -> usize {
+        self.fresh.count()
     }
 
     /// What the live attempts reported, to be shown as notes.
@@ -350,7 +399,7 @@ impl<'c, 'a> Describer<'c, 'a> {
         let index = self.ctx.index;
         let record = &index.records[position];
         let heuristic = heuristic_answer(index, position);
-        let described = match self.plan(record, heuristic.containers.len()) {
+        let described = match self.plan(record, position, heuristic.containers.len()) {
             Plan::Indexed(line) => {
                 let answer = indexed_answer(index, position);
                 let extra = heuristic.containers.difference(&answer.containers).count();
@@ -360,7 +409,15 @@ impl<'c, 'a> Describer<'c, 'a> {
                     lsp: Some(indexed_info(line, extra)),
                 }
             }
-            Plan::Live(pool, request) => self.ask(pool, request, position, heuristic),
+            Plan::Live(pool, request, live_info) => self.ask(
+                pool,
+                request,
+                AskArgs {
+                    position,
+                    heuristic,
+                    live_info,
+                },
+            ),
             Plan::Heuristic(fallback) => {
                 let lsp = fallback.map(|fallback| {
                     if let Some(detail) = fallback.detail {
@@ -379,7 +436,7 @@ impl<'c, 'a> Describer<'c, 'a> {
     }
 
     /// Choose the source for `record`, in the order of P3-D10.
-    fn plan(&mut self, record: &LoadedRecord, hint: usize) -> Plan<'a> {
+    fn plan(&mut self, record: &LoadedRecord, position: usize, hint: usize) -> Plan<'a> {
         let index = self.ctx.index;
         if let Some(line) = index
             .lsp_targets
@@ -402,7 +459,16 @@ impl<'c, 'a> Describer<'c, 'a> {
         }
         let request = match self.request(record, lang, hint) {
             Ok(request) => request,
-            Err(Unlocated::Stale) => return Fallback::status("stale_target"),
+            Err(Unlocated::Stale) => {
+                // P6-D6: re-parse the changed file and re-anchor the target.
+                return self.reanchor(ReanchorArgs {
+                    record,
+                    position,
+                    lang,
+                    hint,
+                    pool,
+                });
+            }
             Err(why) => {
                 return Plan::Heuristic(Some(Fallback {
                     status: "no_position",
@@ -417,7 +483,95 @@ impl<'c, 'a> Describer<'c, 'a> {
             return Fallback::status("deadline");
         }
         self.live_used += 1;
-        Plan::Live(pool, request)
+        let own = own_container(self.ctx.index, position);
+        Plan::Live(
+            pool,
+            request,
+            TargetLiveInfo {
+                own,
+                reanchored: false,
+            },
+        )
+    }
+
+    /// Re-anchor a stale target in its changed file (P6-D6).
+    fn reanchor(&mut self, args: ReanchorArgs<'_, 'a>) -> Plan<'a> {
+        let ReanchorArgs {
+            record,
+            position,
+            lang,
+            hint,
+            pool,
+        } = args;
+        let parse_cfg = ParseConfig {
+            repo_root: self.ctx.lsp.repo_root.to_path_buf(),
+            custom_queries_path: None,
+            repo_name: self.ctx.repo.to_owned(),
+            include_config_files: false,
+            repo_path: self.ctx.lsp.repo_root.to_str().map(str::to_owned),
+        };
+        let fresh = match self
+            .fresh
+            .get(self.ctx.lsp.repo_root, &record.file, &parse_cfg)
+        {
+            Ok(fresh) => fresh,
+            Err(err) => {
+                return Plan::Heuristic(Some(Fallback {
+                    status: "stale_target",
+                    detail: Some(err.to_owned()),
+                }));
+            }
+        };
+
+        let mapping = match_all(self.ctx.index, &record.file, &fresh.records);
+        let matched = fresh
+            .records
+            .iter()
+            .enumerate()
+            .find(|(j, _)| mapping[*j] == Some(position));
+
+        let Some((_, fresh_line)) = matched else {
+            return Plan::Heuristic(Some(Fallback {
+                status: "stale_target",
+                detail: Some("the declaration was not found in the changed file".to_owned()),
+            }));
+        };
+
+        let fresh_target = Target {
+            rel: &record.file,
+            line: fresh_line,
+            lang,
+            indexed_sha16: None,
+        };
+        let pacing = Pacing {
+            heuristic_hint: hint,
+            deadline: self.deadline,
+        };
+        match live_request(&mut self.files, &fresh_target, pacing) {
+            Ok(request) => {
+                if self.live_used >= self.ctx.lsp.settings.max_live_targets {
+                    return Fallback::status("budget");
+                }
+                if Instant::now() >= self.deadline {
+                    return Fallback::status("deadline");
+                }
+                self.live_used += 1;
+                self.reanchored_targets += 1;
+                let own = fresh.containers.container_at(&record.file, fresh_line.l0).0;
+                Plan::Live(
+                    pool,
+                    request,
+                    TargetLiveInfo {
+                        own,
+                        reanchored: true,
+                    },
+                )
+            }
+            Err(why) => Plan::Heuristic(Some(Fallback {
+                status: "no_position",
+                detail: Some(why.detail()),
+            })),
+        }
     }
 
     fn request(
@@ -445,13 +599,12 @@ impl<'c, 'a> Describer<'c, 'a> {
     }
 
     /// Ask the language server; an answer that is not `ok` falls back to the heuristic one.
-    fn ask(
-        &mut self,
-        pool: &LspPool,
-        request: LiveRequest,
-        position: usize,
-        heuristic: Answer,
-    ) -> Described {
+    fn ask(&mut self, pool: &LspPool, request: LiveRequest, args: AskArgs) -> Described {
+        let AskArgs {
+            position,
+            heuristic,
+            live_info: target_info,
+        } = args;
         let outcome = pool.query(request);
         if outcome.status != LiveStatus::Ok {
             if let Some(detail) = &outcome.detail {
@@ -461,15 +614,15 @@ impl<'c, 'a> Describer<'c, 'a> {
             return Described {
                 answer: heuristic,
                 provenance: PROVENANCE_HEURISTIC,
-                lsp: Some(live_info(&outcome, 0)),
+                lsp: Some(live_info(&outcome, 0, target_info.reanchored)),
             };
         }
-        let answer = live_answer(self.ctx.index, position, &outcome);
+        let answer = live_answer(self.ctx.index, target_info.own, position, &outcome);
         let extra = heuristic.containers.difference(&answer.containers).count();
         Described {
             answer,
             provenance: PROVENANCE_LIVE,
-            lsp: Some(live_info(&outcome, extra)),
+            lsp: Some(live_info(&outcome, extra, target_info.reanchored)),
         }
     }
 }

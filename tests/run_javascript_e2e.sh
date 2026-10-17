@@ -121,8 +121,13 @@ export function unitPrice(price) {
 JS
 if lsp_or_skip J20 "stale target" ts; then
   rc="$(cli J20 -- callers discountedPrice -o json)"; assert_rc J20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq J20 "the edited file's target is stale and falls back" "$(J J20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
-  text_in J20 "a note says the file changed since the last index" "$(J J20)" 'changed since the last index'
+  assert_jq J20 "the edited file's target is reanchored live" "$(J J20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  text_in J20 "a note says target was re-anchored" "$(J J20)" 're-anchored'
+  cp "$J_REPO/src/pricing.js" "$J_REPO/src/pricing.js.bak"
+  grep -v 'export function discountedPrice' "$J_REPO/src/pricing.js.bak" > "$J_REPO/src/pricing.js"
+  rc="$(cli J44 -- callers discountedPrice -o json)"; assert_rc J44 "callers with deleted declaration exits 0" 0 "$rc"
+  assert_jq J44 "target declaration gone is stale_target" "$(J J44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
+  mv "$J_REPO/src/pricing.js.bak" "$J_REPO/src/pricing.js"
   rc="$(cli J41 -- explore src/pricing.js -o json)"; assert_rc J41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq J41 "outline from the server; unitPrice listed, not indexed" "$(J J41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "unitPrice") | .indexed] == [false])'

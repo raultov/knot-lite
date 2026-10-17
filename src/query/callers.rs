@@ -244,6 +244,8 @@ pub struct CallersContext<'a> {
     pub filter: &'a KindFilter,
     /// What language servers may be asked.
     pub lsp: LspContext<'a>,
+    /// Changed files since the index (P6-D3); `None` skips edit-awareness.
+    pub edits: Option<&'a crate::query::edits::EditedFiles>,
 }
 
 /// The `lsp` object of one target (§10.1).
@@ -265,6 +267,9 @@ pub struct TargetLspInfo {
     pub ms: u64,
     /// Caller containers the heuristic found and the server did not.
     pub heuristic_extra: usize,
+    /// The target's file changed and the request used the re-parsed position (P6-D6).
+    #[serde(default)]
+    pub reanchored: bool,
 }
 
 /// State of one language server, in the top-level `lsp.languages`.
@@ -324,6 +329,14 @@ pub struct CallerTarget {
     pub callers: RelationGroups,
 }
 
+/// What changed-file detection did on this call (P6-D3, P6-D7).
+#[derive(Debug, Clone, Serialize)]
+pub struct CallersEdits {
+    pub changed_files: usize,
+    pub reparsed: usize,
+    pub ms: u64,
+}
+
 /// The `knot-lite/callers/v2` document (§10.1).
 #[derive(Debug, Clone, Serialize)]
 pub struct CallersResponse {
@@ -342,6 +355,9 @@ pub struct CallersResponse {
     /// Language-server summary; `null` when servers are off and the index has no
     /// pre-computed data.
     pub lsp: Option<TopLspInfo>,
+    /// When changed files mattered, their counts and detection time (P6-D3, P6-D7).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edits: Option<CallersEdits>,
     /// How the query was resolved.
     pub resolution: Resolution,
     /// The resolved targets (possibly truncated).
@@ -363,6 +379,20 @@ pub fn callers_response(ctx: &CallersContext<'_>) -> CallersResponse {
         .map(|&position| describer.describe(position))
         .collect();
     let languages = touched_languages(ctx, &targets);
+    let reanchored = describer.reanchored_count();
+    let reparsed = describer.reparsed_count();
+    let edits = ctx.edits.and_then(|e| {
+        let stats = e.stats();
+        if reanchored > 0 || reparsed > 0 {
+            Some(CallersEdits {
+                changed_files: stats.changed,
+                reparsed,
+                ms: stats.ms,
+            })
+        } else {
+            None
+        }
+    });
     let notes = response_notes(
         ctx,
         &Findings {
@@ -383,6 +413,7 @@ pub fn callers_response(ctx: &CallersContext<'_>) -> CallersResponse {
             updated_at: ctx.index.manifest.updated_at.clone(),
         },
         lsp: top_lsp(ctx, languages),
+        edits,
         resolution: Resolution {
             tier,
             kind_filter: ctx.filter.wire_label(),
@@ -506,6 +537,16 @@ fn response_notes(ctx: &CallersContext<'_>, findings: &Findings<'_>) -> Vec<Stri
         notes.push(format!(
             "Language-server answers were limited to the first {} targets (KNOT_LITE_LSP_MAX_LIVE_TARGETS); {budget} target(s) answered from heuristic edges.",
             settings.max_live_targets
+        ));
+    }
+    let reanchored = findings
+        .targets
+        .iter()
+        .filter(|t| t.lsp.as_ref().is_some_and(|l| l.reanchored))
+        .count();
+    if reanchored > 0 {
+        notes.push(format!(
+            "re-anchored {reanchored} target(s) in files changed since the last index"
         ));
     }
     let stale = findings.with_status("stale_target").len();
@@ -741,6 +782,7 @@ pub(crate) mod test_support {
                 repo_root: Path::new("/nonexistent"),
                 pool: None,
             },
+            edits: None,
         })
     }
 }
@@ -1399,6 +1441,7 @@ mod tests {
                 repo_root: root,
                 pool,
             },
+            edits: None,
         })
     }
 
@@ -1699,6 +1742,7 @@ mod tests {
                 repo_root: tmp.path(),
                 pool: Some(&pool),
             },
+            edits: None,
         });
         assert!(response.targets[0].lsp.is_none());
         let value = serde_json::to_value(&response).expect("json");
@@ -1706,12 +1750,53 @@ mod tests {
     }
 
     #[test]
-    fn stale_target_falls_back_to_heuristic() {
+    fn shifted_target_is_asked_at_fresh_position() {
         let (tmp, index) = fixture_index();
         let lib = tmp.path().join("src/lib.rs");
         let text = std::fs::read_to_string(&lib).expect("read");
-        std::fs::write(&lib, format!("{text}// edited after the index\n")).expect("edit");
+        let shifted =
+            format!("// 1\n// 2\n// 3\n// 4\n// 5\n// 6\n// 7\n// 8\n// 9\n// 10\n{text}");
+        std::fs::write(&lib, shifted).expect("write");
 
+        let scene = Scene::new(tmp.path());
+        let fresh_pos = async_lsp::lsp_types::Position::new(12, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(fresh_pos, vec![scene.item("target", "src/lib.rs", 12)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![scene.call("caller", "src/lib.rs", 16)],
+            )],
+            references: vec![(fresh_pos, vec![scene.location("src/lib.rs", 17)])],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("lsp-live", "ok"),
+            "target is asked at fresh position and answered live"
+        );
+        assert!(target.lsp.as_ref().is_some_and(|l| l.reanchored));
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.contains("re-anchored 1 target(s)"))
+        );
+    }
+
+    #[test]
+    fn deleted_declaration_is_stale_target() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::write(&lib, "pub fn unrelated() {}\n").expect("write");
         let servers = FakeServers::new(fixture_target_script(tmp.path()));
         let starts = servers.starts();
         let pool = servers.pool();
@@ -1727,9 +1812,74 @@ mod tests {
             (target.provenance, status_of(target)),
             ("heuristic", "stale_target")
         );
-        assert_eq!(target.caller_count, 3, "the heuristic answer is intact");
-        assert!(response.notes.contains(&"1 target(s) changed since the last index and were answered from heuristic edges; run knot-lite index to refresh.".to_owned()), "{:?}", response.notes);
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(response.notes.iter().any(|n| {
+            n.contains("changed since the last index and were answered from heuristic edges")
+        }));
+    }
+
+    #[test]
+    fn reanchored_flag_and_note() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, format!("{text}\n// edited\n")).expect("edit");
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert!(target.lsp.as_ref().unwrap().reanchored);
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.starts_with("re-anchored 1 target(s)"))
+        );
+    }
+
+    #[test]
+    fn unchanged_file_keeps_old_path() {
+        let (tmp, index) = fixture_index();
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert!(!target.lsp.as_ref().unwrap().reanchored);
+        assert!(!response.notes.iter().any(|n| n.contains("re-anchored")));
+    }
+
+    #[test]
+    fn reparse_limit_respected() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let big = "pub fn target() {}\n".to_owned() + &"// pad\n".repeat(40_000);
+        std::fs::write(&lib, big).expect("write");
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
     }
 
     #[test]
@@ -1945,7 +2095,7 @@ mod tests {
                     "status": "ok",
                     "ops": { "incoming": 2, "references": 3, "implementation": null },
                     "external": 0, "comment_filtered": 0, "retried_empty": false,
-                    "ms": 0, "heuristic_extra": 0
+                    "ms": 0, "heuristic_extra": 0, "reanchored": false
                 },
                 "caller_count": 3, "self_references": 0,
                 "callers": {

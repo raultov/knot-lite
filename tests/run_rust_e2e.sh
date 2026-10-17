@@ -130,8 +130,13 @@ pub fn triple_circle(size: f64) -> f64 {
 RS
 if lsp_or_skip R20 "stale target" rust; then
   rc="$(cli R20 -- callers total_area -o json)"; assert_rc R20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq R20 "the edited file's target is stale and falls back" "$(J R20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
-  text_in R20 "a note says the file changed since the last index" "$(J R20)" 'changed since the last index'
+  assert_jq R20 "the edited file's target is reanchored live" "$(J R20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  text_in R20 "a note says target was re-anchored" "$(J R20)" 're-anchored'
+  cp "$R/src/geometry.rs" "$R/src/geometry.rs.bak"
+  grep -v 'pub fn total_area' "$R/src/geometry.rs.bak" > "$R/src/geometry.rs"
+  rc="$(cli R44 -- callers total_area -o json)"; assert_rc R44 "callers with deleted declaration exits 0" 0 "$rc"
+  assert_jq R44 "target declaration gone is stale_target" "$(J R44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
+  mv "$R/src/geometry.rs.bak" "$R/src/geometry.rs"
   rc="$(cli R41 -- explore src/geometry.rs -o json)"; assert_rc R41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq R41 "outline from the server; triple_circle listed, not indexed" "$(J R41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "triple_circle") | .indexed] == [false])'

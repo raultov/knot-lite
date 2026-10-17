@@ -348,6 +348,7 @@ impl<'a> ParityRun<'a> {
                 repo_root: &self.root,
                 pool: Some(&self.pool),
             },
+            edits: None,
         });
         (
             response,
@@ -867,6 +868,7 @@ pub(super) fn timed_callers(
             repo_root: root,
             pool,
         },
+        edits: None,
     });
     (
         response,

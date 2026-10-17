@@ -105,6 +105,7 @@ pub fn run_find_callers(
             .live_lsp
             .then(|| services.lsp_pool(cfg, index))
             .flatten();
+        let edits = crate::query::edits::EditedFiles::new(index, &cfg.repo_path);
         let response = callers_response(&CallersContext {
             index,
             repo: &cfg.repo_name,
@@ -116,6 +117,7 @@ pub fn run_find_callers(
                 repo_root: &cfg.repo_path,
                 pool: pool.as_deref(),
             },
+            edits: Some(&edits),
         });
         to_json(&response, CALLERS_TOOL)
     })

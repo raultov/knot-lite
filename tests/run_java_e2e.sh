@@ -129,8 +129,13 @@ sed '$d' "$order" > "$order.tmp"
 rm -f "$order.tmp"
 if lsp_or_skip V20 "stale target" java; then
   rc="$(cli V20 -- callers Order.getItems -o json)"; assert_rc V20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq V20 "the edited file's target is stale and falls back" "$(J V20)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
-  text_in V20 "a note says the file changed since the last index" "$(J V20)" 'changed since the last index'
+  assert_jq V20 "the edited file's target is reanchored live" "$(J V20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  text_in V20 "a note says target was re-anchored" "$(J V20)" 're-anchored'
+  cp "$order" "$order.bak"
+  grep -v 'public List<Item> getItems()' "$order.bak" > "$order"
+  rc="$(cli V44 -- callers Order.getItems -o json)"; assert_rc V44 "callers with deleted declaration exits 0" 0 "$rc"
+  assert_jq V44 "target declaration gone is stale_target" "$(J V44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
+  mv "$order.bak" "$order"
   rc="$(cli V41 -- explore "$P/model/Order.java" -o json)"; assert_rc V41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq V41 "outline from the server; size listed, not indexed" "$(J V41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "size") | .indexed] == [false])'
