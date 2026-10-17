@@ -556,7 +556,7 @@ fn parse_selection(
 /// `parse_files_stream` blocks and only sends after every file is parsed; a
 /// collector draining the channel concurrently avoids the deadlock that
 /// `parse_files` hits above 1024 entities (Phase 0 T3).
-fn parse_all(
+pub(crate) fn parse_all(
     files: &[PathBuf],
     cfg: &ParseConfig,
     jobs: usize,
@@ -707,26 +707,41 @@ pub(crate) fn normalise_and_sort(entities: &mut [ParsedEntity]) {
     });
 }
 
-fn entity_records(entities: &[ParsedEntity]) -> Vec<PendingRecord> {
+/// Convert parsed entities to shard-line records (the shared path used by
+/// both `index` and `reparse`).  Vector fields (`q`, `s`) are left empty;
+/// `h` is the hash of `embed_text` when present, empty otherwise.
+pub(crate) fn records_from_entities(entities: &[ParsedEntity]) -> Vec<ShardLine> {
     entities
         .iter()
-        .map(|entity| PendingRecord {
-            file: entity.file_path.clone(),
-            line: ShardLine {
-                id: entity.uuid.to_string(),
-                kind: entity.kind.to_string(),
-                name: entity.name.clone(),
-                fqn: entity.fqn.clone(),
-                lang: entity.language.clone(),
-                l0: entity.start_line,
-                l1: entity.end_line,
-                col: None,
-                sig: entity.signature.clone(),
-                h: text_hash(&entity.embed_text),
-                q: None,
-                s: None,
-                tc: entity.is_test_context,
+        .map(|entity| ShardLine {
+            id: entity.uuid.to_string(),
+            kind: entity.kind.to_string(),
+            name: entity.name.clone(),
+            fqn: entity.fqn.clone(),
+            lang: entity.language.clone(),
+            l0: entity.start_line,
+            l1: entity.end_line,
+            col: None,
+            sig: entity.signature.clone(),
+            h: if entity.embed_text.is_empty() {
+                String::new()
+            } else {
+                text_hash(&entity.embed_text)
             },
+            q: None,
+            s: None,
+            tc: entity.is_test_context,
+        })
+        .collect()
+}
+
+fn entity_records(entities: &[ParsedEntity]) -> Vec<PendingRecord> {
+    records_from_entities(entities)
+        .into_iter()
+        .zip(entities)
+        .map(|(line, entity)| PendingRecord {
+            file: entity.file_path.clone(),
+            line,
             text: entity.embed_text.clone(),
         })
         .collect()
