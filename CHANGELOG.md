@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned (Phase 6)
+- **Re-anchor stale targets:** `find_callers` and `explore_file` re-parse a changed file and ask the language server at the fresh position instead of falling back to `stale_target`.
+- **Fresh caller attribution:** server locations in changed files are grouped by the current containers of the re-parsed file (overlay); unknown containers are reported with `indexed: false`.
+- **Freshness rule for pre-computed answers:** `lsp-indexed` is served only when no edit can have changed it; otherwise the target is asked live and the pre-computed answer becomes a marked fallback (`outdated: true`).
+- **Edit sync for jdtls:** the server is told about changed files before each request (modes selected by measurement); the Phase 4 V21b retry loop is removed.
+
 ## [0.5.0] - 2026-10-10
 
 ### Added
