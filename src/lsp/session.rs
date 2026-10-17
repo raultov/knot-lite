@@ -17,7 +17,8 @@ use std::time::{Duration, Instant, SystemTime};
 use anyhow::{Context as _, anyhow};
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::lsp_types::notification::{
-    DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized, Notification,
+    DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
+    Notification,
 };
 use async_lsp::lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyPrepare, DocumentSymbolRequest, GotoImplementation,
@@ -26,12 +27,12 @@ use async_lsp::lsp_types::request::{
 use async_lsp::lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallHierarchyItem,
     CallHierarchyPrepareParams, ClientCapabilities, ClientInfo, ConfigurationParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolClientCapabilities,
-    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
-    InitializeParams, InitializeResult, InitializedParams, Location, NumberOrString, Position,
-    ProgressParamsValue, ReferenceContext, ReferenceParams, ServerCapabilities,
-    TextDocumentClientCapabilities, TextDocumentIdentifier, TextDocumentItem,
-    TextDocumentPositionParams, Url, WindowClientCapabilities, WorkDoneProgress,
+    DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DocumentSymbolClientCapabilities, DocumentSymbolParams, DocumentSymbolResponse, FileEvent,
+    GotoDefinitionParams, GotoDefinitionResponse, InitializeParams, InitializeResult,
+    InitializedParams, Location, NumberOrString, Position, ProgressParamsValue, ReferenceContext,
+    ReferenceParams, ServerCapabilities, TextDocumentClientCapabilities, TextDocumentIdentifier,
+    TextDocumentItem, TextDocumentPositionParams, Url, WindowClientCapabilities, WorkDoneProgress,
     WorkDoneProgressParams, WorkspaceClientCapabilities, WorkspaceFolder,
 };
 use async_lsp::panic::CatchUnwindLayer;
@@ -721,6 +722,40 @@ impl LspSession {
             .map_err(|error| anyhow!("didOpen failed: {error}"))?;
         self.opened.insert(uri, mtime);
         Ok(())
+    }
+
+    /// `textDocument/didClose` for `abs`, if it was previously opened.
+    pub fn did_close(&mut self, abs: &Path) -> anyhow::Result<()> {
+        let uri = path_to_uri(abs)?;
+        if self.opened.remove(&uri).is_some() {
+            self.server
+                .notify::<DidCloseTextDocument>(DidCloseTextDocumentParams {
+                    text_document: TextDocumentIdentifier { uri },
+                })
+                .map_err(|error| anyhow!("didClose failed: {error}"))?;
+        }
+        Ok(())
+    }
+
+    /// `workspace/didChangeWatchedFiles` notification with `events` (P6-D11).
+    pub fn did_change_watched_files(&mut self, events: Vec<FileEvent>) -> anyhow::Result<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        self.server
+            .notify::<DidChangeWatchedFiles>(DidChangeWatchedFilesParams { changes: events })
+            .map_err(|error| anyhow!("didChangeWatchedFiles failed: {error}"))
+    }
+
+    /// Wait for the server to settle, bounded by `timeout`.
+    pub async fn wait_settle(&mut self, timeout: Duration) {
+        let _ = crate::lsp::readiness::wait_ready(
+            &mut self.events,
+            crate::lsp::readiness::ReadinessKind::ProgressIdle,
+            Duration::from_millis(500),
+            timeout,
+        )
+        .await;
     }
 
     /// `textDocument/prepareCallHierarchy` at `position`.

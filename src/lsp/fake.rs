@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::lsp_types::notification::{
-    DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized, Progress,
+    DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized, Progress,
 };
 use async_lsp::lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyPrepare, DocumentSymbolRequest, GotoImplementation,
@@ -129,6 +129,10 @@ pub(crate) struct FakeScript {
     /// The first this many query answers are empty (a server that is still
     /// indexing: the lag artefact behind Phase 0's `retried_empty`).
     pub empty_first: usize,
+    /// Answers from `stale_incoming` until `did_open` or `did_change_watched_files` is received.
+    pub stale_until_synced: bool,
+    /// The stale answers served before sync (P6-D14).
+    pub stale_incoming: Vec<(String, Vec<CallHierarchyIncomingCall>)>,
 }
 
 impl FakeScript {
@@ -155,6 +159,8 @@ pub(crate) struct FakeCounters {
     replies: Mutex<Vec<(String, Value)>>,
     did_open: AtomicUsize,
     did_close: AtomicUsize,
+    did_change_watched_files: AtomicUsize,
+    synced: AtomicBool,
     shutdown_seen: AtomicBool,
     exit_seen: AtomicBool,
     content_modified_left: AtomicUsize,
@@ -190,6 +196,16 @@ impl FakeCounters {
     /// `didClose` notifications received.
     pub(crate) fn did_close_count(&self) -> usize {
         self.did_close.load(Ordering::SeqCst)
+    }
+
+    /// `workspace/didChangeWatchedFiles` notifications received.
+    pub(crate) fn did_change_watched_files_count(&self) -> usize {
+        self.did_change_watched_files.load(Ordering::SeqCst)
+    }
+
+    /// Whether a sync notification arrived.
+    pub(crate) fn synced(&self) -> bool {
+        self.synced.load(Ordering::SeqCst)
     }
 
     /// Whether `shutdown` was requested.
@@ -545,10 +561,19 @@ fn build_router(state: FakeState) -> Router<FakeState> {
     router
         .notification::<DidOpenTextDocument>(|state, _| {
             state.counters.did_open.fetch_add(1, Ordering::SeqCst);
+            state.counters.synced.store(true, Ordering::SeqCst);
             ControlFlow::Continue(())
         })
         .notification::<DidCloseTextDocument>(|state, _| {
             state.counters.did_close.fetch_add(1, Ordering::SeqCst);
+            ControlFlow::Continue(())
+        })
+        .notification::<DidChangeWatchedFiles>(|state, _| {
+            state
+                .counters
+                .did_change_watched_files
+                .fetch_add(1, Ordering::SeqCst);
+            state.counters.synced.store(true, Ordering::SeqCst);
             ControlFlow::Continue(())
         })
         .unhandled_notification(|_, _| ControlFlow::Continue(()));
@@ -596,6 +621,14 @@ fn register_queries(router: &mut Router<FakeState>) {
     router.request::<CallHierarchyIncomingCalls, _>(|state, params| {
         let gate = gate(state, CallHierarchyIncomingCalls::METHOD);
         let calls = answer(state, |script| {
+            if script.stale_until_synced && !state.counters.synced() {
+                return script
+                    .stale_incoming
+                    .iter()
+                    .find(|(name, _)| *name == params.item.name)
+                    .map(|(_, calls)| calls.clone())
+                    .unwrap_or_default();
+            }
             script
                 .incoming
                 .iter()

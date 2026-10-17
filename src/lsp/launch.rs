@@ -34,6 +34,8 @@ pub fn start_pool(
     let settings = PoolSettings {
         ready_wait: cfg.lsp.ready_wait.unwrap_or(ready_wait),
         idle: cfg.lsp.idle,
+        sync: cfg.lsp.sync,
+        cache_dir: cfg.lsp.cache_root.clone(),
         ..PoolSettings::default()
     };
     match LspPool::new(std::sync::Arc::new(factory), settings, stamp) {

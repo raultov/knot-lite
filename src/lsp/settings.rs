@@ -29,6 +29,8 @@ pub const ENV_MAX_LIVE_TARGETS: &str = "KNOT_LITE_LSP_MAX_LIVE_TARGETS";
 pub const ENV_DEADLINE: &str = "KNOT_LITE_LSP_DEADLINE_SECS";
 /// Start the servers of the indexed languages when the MCP server starts: `on|off` (default `off`).
 pub const ENV_WARMUP: &str = "KNOT_LITE_LSP_WARMUP";
+/// Edit-sync mode for language servers: `off|open|watched|open+watched` (default `off`, P6-D10).
+pub const ENV_SYNC: &str = "KNOT_LITE_LSP_SYNC";
 
 /// Default idle shutdown, in seconds.
 pub const DEFAULT_IDLE_SECS: u64 = 900;
@@ -79,6 +81,8 @@ pub struct LspSettings {
     pub deadline: Duration,
     /// Whether the MCP server starts the servers of the indexed languages eagerly.
     pub warmup: bool,
+    /// Edit-sync mode (P6-D10, P6-D11).
+    pub sync: crate::lsp::sync::SyncMode,
     /// Invalid or clamped values, one human-readable line each.
     pub warnings: Vec<String>,
 }
@@ -122,6 +126,18 @@ pub fn resolve_lsp_settings(
         .map(PathBuf::from)
         .or_else(|| user_cache_subdir(lookup, CACHE_LEAF))
         .unwrap_or_else(|| temp_dir.join(TEMP_CACHE_DIR));
+    let sync = match (lookup)(ENV_SYNC).as_deref().map(str::trim) {
+        None | Some("") => crate::lsp::sync::SyncMode::Off,
+        Some(val) => match crate::lsp::sync::SyncMode::parse(val) {
+            Some(mode) => mode,
+            None => {
+                reader.warnings.push(format!(
+                    "{ENV_SYNC}='{val}' is invalid; must be one of off|open|watched|open+watched (using default 'off')"
+                ));
+                crate::lsp::sync::SyncMode::Off
+            }
+        },
+    };
     LspSettings {
         enabled,
         build_exec,
@@ -131,6 +147,7 @@ pub fn resolve_lsp_settings(
         max_live_targets,
         deadline,
         warmup,
+        sync,
         warnings: reader.warnings,
     }
 }

@@ -25,6 +25,7 @@ mod worker;
 mod tests;
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -130,6 +131,10 @@ pub struct PoolSettings {
     pub idle: Duration,
     /// Additional time given to the pool channel reply before the caller times out.
     pub reply_slack: Duration,
+    /// Edit synchronization mode (P6-D10, P6-D11).
+    pub sync: crate::lsp::sync::SyncMode,
+    /// Root scratch directory for ledgers and server state.
+    pub cache_dir: PathBuf,
 }
 
 impl Default for PoolSettings {
@@ -138,6 +143,8 @@ impl Default for PoolSettings {
             ready_wait: Duration::from_secs(20),
             idle: Duration::from_secs(super::settings::DEFAULT_IDLE_SECS),
             reply_slack: Duration::from_secs(5),
+            sync: crate::lsp::sync::SyncMode::Off,
+            cache_dir: std::env::temp_dir().join("knot-lite-lsp"),
         }
     }
 }

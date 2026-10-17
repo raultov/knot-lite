@@ -65,6 +65,8 @@ pub struct ServerSpec {
     pub request_timeout: Duration,
     /// LSP `languageId` of a source file.
     pub language_id_for: fn(&Path) -> &'static str,
+    /// Whether this server requires edit synchronization (P6-D10).
+    pub sync_edits: bool,
 }
 
 /// What [`spec_for`] needs.
@@ -205,6 +207,7 @@ impl ServerSpec {
             first_request_timeout: timeouts.first_request,
             request_timeout: timeouts.request,
             language_id_for,
+            sync_edits: crate::lsp::sync::sync_edits(inputs.lang),
         }
     }
 }

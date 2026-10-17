@@ -170,6 +170,7 @@ fn not_ready_within_wait_returns_not_ready_and_keeps_starting() {
         ready_wait: Duration::from_millis(20),
         idle: Duration::from_secs(900),
         reply_slack: Duration::from_secs(5),
+        ..PoolSettings::default()
     };
     let pool = LspPool::new(factory, settings, None).expect("pool");
 
@@ -203,6 +204,7 @@ fn not_ready_server_returns_outline_request_without_blocking() {
         ready_wait: Duration::from_millis(20),
         idle: Duration::from_secs(900),
         reply_slack: Duration::from_secs(5),
+        ..PoolSettings::default()
     };
     let pool = LspPool::new(factory, settings, None).expect("pool");
     let mut req = dummy_request(LspLang::Rust, repo.path());
@@ -335,6 +337,7 @@ fn idle_server_is_stopped_and_restarted_on_demand() {
         ready_wait: Duration::from_secs(5),
         idle: Duration::from_secs(10),
         reply_slack: Duration::from_secs(5),
+        ..PoolSettings::default()
     };
     let pool = LspPool::new_with_clock(
         factory,
@@ -507,6 +510,7 @@ fn wedged_pool_reply_times_out_at_deadline_plus_slack() {
         ready_wait: Duration::from_millis(50),
         idle: Duration::from_secs(900),
         reply_slack: Duration::from_millis(100),
+        ..PoolSettings::default()
     };
     let pool = LspPool::new(factory, settings, None).expect("pool");
 
@@ -794,6 +798,7 @@ async fn idle_reaper_skips_a_language_with_a_query_in_flight() {
         ready_wait: Duration::from_secs(5),
         idle: Duration::from_secs(10),
         reply_slack: Duration::from_secs(5),
+        ..PoolSettings::default()
     };
     let ctx = TaskCtx {
         shared: Arc::new(Shared::new(None)),

@@ -35,5 +35,6 @@ pub mod request;
 pub mod session;
 pub mod settings;
 pub mod spec;
+pub mod sync;
 pub mod target;
 pub mod uri;

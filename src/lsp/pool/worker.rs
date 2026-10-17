@@ -106,7 +106,7 @@ pub(super) async fn query_task(ctx: TaskCtx, req: LiveRequest) -> LiveOutcome {
             let root_path = repo_root_from_abs_rel(&req.abs_file, &req.rel_file);
             let root = CanonicalRoot::new(&root_path);
             let filter = LocationFilter { root: &root, lang };
-            run_target_on_slot(&mut slot, &req, &filter, ctx.clock.as_ref())
+            run_target_on_slot(&mut slot, &req, &filter, ctx.clock.as_ref(), &ctx)
                 .await
                 .0
         }
@@ -135,6 +135,7 @@ async fn run_target_on_slot(
     req: &LiveRequest,
     filter: &LocationFilter<'_>,
     clock: &dyn Clock,
+    ctx: &TaskCtx,
 ) -> (LiveOutcome, bool) {
     let (outcome, prev_attempts) = {
         let Slot::Ready {
@@ -150,6 +151,31 @@ async fn run_target_on_slot(
             );
         };
         let prev_attempts = *attempts;
+
+        // Run edit sync if applicable (P6-D10).
+        if crate::lsp::sync::sync_edits(req.lang)
+            && ctx.settings.sync != crate::lsp::sync::SyncMode::Off
+        {
+            let repo_root = repo_root_from_abs_rel(&req.abs_file, &req.rel_file);
+            let repo_key = crate::lsp::settings::repo_key(&repo_root);
+            let ledger_path =
+                crate::lsp::sync::ledger_path(&ctx.settings.cache_dir, &repo_key, req.lang);
+            let mut ledger = crate::lsp::sync::Ledger::load(&ledger_path, "");
+            let universe = vec![(req.rel_file.clone(), req.abs_file.clone())];
+            let _ = crate::lsp::sync::sync_before(
+                &mut started.session,
+                &mut ledger,
+                crate::lsp::sync::SyncInput {
+                    mode: ctx.settings.sync,
+                    repo_root: &repo_root,
+                    universe: &universe,
+                    deadline: req.deadline,
+                },
+            )
+            .await;
+            let _ = ledger.save(&ledger_path);
+        }
+
         let outcome = run_target(&mut started.session, req, filter).await;
         *last_used = clock.now();
         (outcome, prev_attempts)
