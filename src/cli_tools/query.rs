@@ -137,6 +137,7 @@ pub fn run_explore_file(
 ) -> anyhow::Result<Value> {
     with_index(cfg, services, EXPLORE_TOOL, |index| {
         let pool = services.lsp_pool(cfg, index);
+        let edits = crate::query::edits::EditedFiles::new(index, &cfg.repo_path);
         let response = explore_response(&ExploreContext {
             index,
             repo: &cfg.repo_name,
@@ -147,6 +148,7 @@ pub fn run_explore_file(
                 repo_root: &cfg.repo_path,
                 pool: pool.as_deref(),
             },
+            edits: Some(&edits),
         });
         to_json(&response, EXPLORE_TOOL)
     })

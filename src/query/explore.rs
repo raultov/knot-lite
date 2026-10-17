@@ -17,6 +17,8 @@ use knot::cli_tools::kinds::{
 use serde::Serialize;
 use serde_json::Value;
 
+use knot::pipeline::parser::ParseConfig;
+
 use super::callers::LspContext;
 use super::explore_refs::{ExploreLive, ExploreLsp, RefTarget, family_rank, on_disk_candidate};
 use super::outline::{OutlineRow, match_symbols, symbol_family, symbol_kind_label, symbol_shape};
@@ -27,7 +29,9 @@ use super::sources::{
 };
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::OutputFormat;
+use crate::graph::containers::{ContainerLookup, FreshOverlay};
 use crate::index::load::LoadedIndex;
+use crate::index::reparse::{FreshFile, match_all};
 use crate::index::shard::{KIND_CHUNK, KIND_FILE};
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::outline::OutlineSymbol;
@@ -243,6 +247,9 @@ pub struct ExploreResponse {
     pub outline: OutlineInfo,
     /// What the language server did for this call.
     pub lsp: ExploreLsp,
+    /// When changed files mattered, their counts and detection time (P6-D3, P6-D7).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edits: Option<super::callers::CallersEdits>,
     /// Entities grouped by family, in family order.
     pub groups: Vec<ExploreGroup>,
     /// Markup summary (when markup exists and `include_markup` is off).
@@ -265,6 +272,8 @@ pub struct ExploreContext<'a> {
     pub include_markup: bool,
     /// What language servers may be asked (and the repository root).
     pub lsp: LspContext<'a>,
+    /// Changed files since the index (P6-D13); `None` skips overlay.
+    pub edits: Option<&'a crate::query::edits::EditedFiles>,
 }
 
 /// Note of a changed file described from the index (no outline from a server).
@@ -297,6 +306,7 @@ pub fn explore_response(ctx: &ExploreContext<'_>) -> ExploreResponse {
         markup: None,
         candidates: Vec::new(),
         notes: Vec::new(),
+        edits: None,
     };
     match resolution {
         FileResolution::Exact(file) | FileResolution::Suffix(file) => {
@@ -316,32 +326,68 @@ pub fn explore_response(ctx: &ExploreContext<'_>) -> ExploreResponse {
     response
 }
 
-fn live_for<'a>(ctx: &'a ExploreContext<'a>, rel: &'a str) -> ExploreLive<'a> {
+fn live_for<'a>(
+    ctx: &'a ExploreContext<'a>,
+    rel: &'a str,
+    lookup: Option<&'a ContainerLookup<'a>>,
+) -> ExploreLive<'a> {
     ExploreLive {
         index: ctx.index,
         lsp: &ctx.lsp,
         lang: lsp_lang_for_label(label_for(Path::new(rel))),
         rel,
+        lookup,
     }
 }
 
 /// An indexed file: the server's outline when it changed since the index,
 /// else the indexed entities; then live reference counts.
 fn explore_indexed(ctx: &ExploreContext<'_>, file: &str, response: &mut ExploreResponse) {
-    let live = live_for(ctx, file);
-    if live.lang.is_some() && is_stale(ctx, file) {
-        match live.outline() {
-            Ok(symbols) => {
-                describe_outline(ctx, &live, file, symbols, response);
-                response.outline.reason = Some("changed_since_index");
-                return;
-            }
-            Err(lsp) => {
-                response.lsp = lsp;
-                response.notes.push(STALE_NOTE.to_owned());
+    if is_stale(ctx, file) {
+        let parse_cfg = ParseConfig {
+            repo_root: ctx.lsp.repo_root.to_path_buf(),
+            custom_queries_path: None,
+            repo_name: ctx.repo.to_owned(),
+            include_config_files: false,
+            repo_path: ctx.lsp.repo_root.to_str().map(str::to_owned),
+        };
+        let fresh_file = crate::index::reparse::reparse(ctx.lsp.repo_root, file, &parse_cfg).ok();
+        let mapping = fresh_file
+            .as_ref()
+            .map(|f| match_all(ctx.index, file, &f.records));
+        let mut overlays = HashMap::new();
+        if let (Some(fresh), Some(mapping)) = (fresh_file.as_ref(), mapping) {
+            overlays.insert(
+                file,
+                FreshOverlay {
+                    table: &fresh.containers,
+                    records: &fresh.records,
+                    mapping,
+                },
+            );
+        }
+        let lookup = ContainerLookup::new(&ctx.index.containers, overlays);
+        let live = live_for(ctx, file, Some(&lookup));
+        if live.lang.is_some() {
+            match live.outline() {
+                Ok(symbols) => {
+                    describe_outline(ctx, &live, symbols, response, fresh_file.as_ref());
+                    response.outline.reason = Some("changed_since_index");
+                    response.edits = ctx.edits.map(|e| super::callers::CallersEdits {
+                        changed_files: e.stats().changed,
+                        reparsed: fresh_file.is_some() as usize,
+                        ms: e.stats().ms,
+                    });
+                    return;
+                }
+                Err(lsp) => {
+                    response.lsp = lsp;
+                    response.notes.push(STALE_NOTE.to_owned());
+                }
             }
         }
     }
+    let live = live_for(ctx, file, None);
     let positions = describe_file(ctx.index, file, ctx.include_markup, response);
     if response.notes.iter().any(|note| note == STALE_NOTE) {
         return;
@@ -353,11 +399,11 @@ fn explore_indexed(ctx: &ExploreContext<'_>, file: &str, response: &mut ExploreR
 /// A path the index does not know: the server's outline of the file on disk,
 /// when it is a candidate the index could describe; else `not_found`.
 fn explore_unindexed(ctx: &ExploreContext<'_>, rel: &str, response: &mut ExploreResponse) {
-    let live = live_for(ctx, rel);
+    let live = live_for(ctx, rel, None);
     if live.lang.is_some() && on_disk_candidate(ctx.lsp.repo_root, rel) {
         match live.outline() {
             Ok(symbols) => {
-                describe_outline(ctx, &live, rel, symbols, response);
+                describe_outline(ctx, &live, symbols, response, None);
                 response.outline.reason = Some("not_indexed");
                 response.resolution = "not_indexed";
                 response.file = Some(rel.to_owned());
@@ -374,6 +420,9 @@ fn explore_unindexed(ctx: &ExploreContext<'_>, rel: &str, response: &mut Explore
 
 /// Whether `file` differs from the content the index was built from.
 fn is_stale(ctx: &ExploreContext<'_>, file: &str) -> bool {
+    if let Some(edits) = ctx.edits {
+        return edits.is_changed(file);
+    }
     let Some(indexed) = ctx.index.file_sha16.get(file) else {
         return false;
     };
@@ -524,10 +573,11 @@ fn finish_groups(
 fn describe_outline(
     ctx: &ExploreContext<'_>,
     live: &ExploreLive<'_>,
-    rel: &str,
     symbols: Vec<OutlineSymbol>,
     response: &mut ExploreResponse,
+    fresh_file: Option<&FreshFile>,
 ) {
+    let rel = live.rel;
     let index = ctx.index;
     let indexed_file = index.by_file.contains_key(rel).then_some(rel);
     let rows = match_symbols(index, indexed_file, symbols);
@@ -548,11 +598,17 @@ fn describe_outline(
         .into_iter()
         .map(|(family, mut entities)| {
             entities.sort_by_key(|(entity, _)| (entity.l0, entity.name.clone()));
+            let target_ctx = OutlineTargetCtx {
+                index,
+                rel,
+                family,
+                fresh_file,
+            };
             let entities = entities
                 .into_iter()
                 .map(|(entity, row)| {
                     let number = targets.len();
-                    targets.push(outline_target(index, rel, number, family, &row));
+                    targets.push(outline_target(&target_ctx, number, &row));
                     entity
                 })
                 .collect();
@@ -561,6 +617,13 @@ fn describe_outline(
         .collect();
     let targets: Vec<RefTarget> = targets.into_iter().flatten().collect();
     apply_live_counts(live, targets, response);
+}
+
+struct OutlineTargetCtx<'a> {
+    index: &'a LoadedIndex,
+    rel: &'a str,
+    family: KindFamily,
+    fresh_file: Option<&'a FreshFile>,
 }
 
 /// The entity row of an outline symbol and its family.
@@ -598,10 +661,8 @@ fn outline_entity(index: &LoadedIndex, row: &OutlineRow) -> (KindFamily, Explore
 
 /// The live-count target of an outline symbol, at its current position.
 fn outline_target(
-    index: &LoadedIndex,
-    rel: &str,
+    ctx: &OutlineTargetCtx<'_>,
     row: usize,
-    family: KindFamily,
     outline: &OutlineRow,
 ) -> Option<RefTarget> {
     let symbol = &outline.symbol;
@@ -610,12 +671,16 @@ fn outline_target(
         return None;
     }
     let line1 = symbol.selection_line0 as usize + 1;
+    let own = match ctx.fresh_file {
+        Some(fresh) => fresh.containers.container_at(ctx.rel, line1).0,
+        None => ctx.index.containers.container_at(ctx.rel, line1).0,
+    };
     Some(RefTarget {
         row,
         position: async_lsp::lsp_types::Position::new(symbol.selection_line0, symbol.selection_col),
         shape,
-        own: index.containers.container_at(rel, line1).0,
-        rank: (family_rank(family), line1),
+        own,
+        rank: (family_rank(ctx.family), line1),
     })
 }
 
@@ -874,6 +939,7 @@ mod tests {
                 repo_root: root,
                 pool: None,
             },
+            edits: None,
         })
     }
 
@@ -1199,6 +1265,7 @@ mod lsp_tests {
                 repo_root: root,
                 pool,
             },
+            edits: None,
         })
     }
 
@@ -1360,6 +1427,7 @@ mod lsp_tests {
             lsp: &lsp_ctx,
             lang: Some(LspLang::Rust),
             rel: "src/lib.rs",
+            lookup: None,
         };
         let own = index.containers.container_at("src/lib.rs", 3).0;
         let targets: Vec<RefTarget> = (0..45)
@@ -1389,6 +1457,7 @@ mod lsp_tests {
             lsp: &lsp_ctx,
             lang: Some(LspLang::Rust),
             rel: "src/lib.rs",
+            lookup: None,
         };
         let own = index.containers.container_at("src/lib.rs", 3).0;
         let target = |row, rank| RefTarget {
@@ -1464,6 +1533,33 @@ mod lsp_tests {
         assert_eq!(response.outline.reason, Some("not_indexed"));
         assert_eq!(row(&response, "fresh").kind, "lsp:function");
         assert_eq!(response.language.as_deref(), Some("rust"));
+    }
+
+    #[test]
+    fn explore_counts_use_overlay() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        let with_new = format!("{text}\npub fn newly_added() {{\n    target();\n}}\n");
+        std::fs::write(&lib, with_new).expect("write");
+
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        let response = explore_response(&ExploreContext {
+            index: &index,
+            repo: "demo",
+            requested: "src/lib.rs",
+            include_markup: false,
+            lsp: LspContext {
+                settings: &settings(),
+                repo_root: tmp.path(),
+                pool: Some(&pool),
+            },
+            edits: Some(&edits),
+        });
+        assert_eq!(response.outline.provenance, PROVENANCE_LIVE);
+        assert_eq!(response.outline.reason, Some("changed_since_index"));
+        assert!(response.edits.is_some());
     }
 
     #[test]

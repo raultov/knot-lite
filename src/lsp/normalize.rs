@@ -21,7 +21,7 @@ use async_lsp::lsp_types::{Range, Url};
 use super::ops::{Op, TargetShape, implementation_relation};
 use super::uri::{CanonicalRoot, uri_to_repo_relative_with};
 use crate::capability::languages::LspLang;
-use crate::graph::containers::{ContainerKey, ContainerTable};
+use crate::graph::containers::{ContainerKey, ContainerLookup, FreshContainer};
 use crate::graph::heuristic::EDGE_REL_LABELS;
 
 /// An in-repository location a server returned.
@@ -124,8 +124,12 @@ pub struct TargetInfo {
 pub struct CallerHit {
     /// The container.
     pub key: ContainerKey,
-    /// Index of the container's record in the index; `None` at file level.
+    /// Index of the container's record in the index; `None` at file level or
+    /// for overlay containers that have no indexed counterpart.
     pub record: Option<usize>,
+    /// Metadata from the re-parsed file when this is an overlay container
+    /// unknown to the index (`indexed: false`).
+    pub fresh: Option<FreshContainer>,
     /// Reference sites merged into the container.
     pub sites: usize,
 }
@@ -146,6 +150,7 @@ pub struct LspGroups {
 #[derive(Default)]
 struct Accumulated {
     record: Option<usize>,
+    fresh: Option<FreshContainer>,
     /// `incoming`: the sum of the call ranges; the others: distinct positions.
     sites: usize,
     positions: BTreeSet<(String, u32, u32)>,
@@ -167,14 +172,14 @@ struct Accumulated {
 pub fn group_locations(
     locations: &[RawLocation],
     target: &TargetInfo,
-    containers: &ContainerTable,
+    containers: &ContainerLookup<'_>,
 ) -> LspGroups {
     let mut per_op: BTreeMap<Op, BTreeMap<ContainerKey, Accumulated>> = BTreeMap::new();
     let mut own_positions: BTreeSet<(String, u32, u32)> = BTreeSet::new();
     let mut own_incoming = 0;
     for location in locations {
         let line = usize::try_from(location.line0).map_or(usize::MAX, |n| n.saturating_add(1));
-        let (key, record) = containers.container_at(&location.rel, line);
+        let (key, record, fresh) = containers.container_at(&location.rel, line);
         if key == target.own {
             if location.op == Op::Incoming {
                 own_incoming += 1;
@@ -189,6 +194,7 @@ pub fn group_locations(
             .entry(key)
             .or_default();
         entry.record = record;
+        entry.fresh = fresh;
         match location.op {
             Op::Incoming => entry.sites += usize::try_from(location.sites.max(1)).unwrap_or(1),
             Op::References | Op::Implementation => {
@@ -224,6 +230,7 @@ pub fn group_locations(
                 .or_insert_with(|| CallerHit {
                     key,
                     record: accumulated.record,
+                    fresh: accumulated.fresh,
                     sites: 0,
                 });
             hit.sites += accumulated.sites;
@@ -268,8 +275,13 @@ mod tests {
     use async_lsp::lsp_types::Position;
 
     use super::*;
+    use crate::graph::containers::ContainerTable;
     use crate::index::shard::ShardLine;
     use crate::lsp::uri::path_to_uri;
+
+    fn lookup(table: &ContainerTable) -> ContainerLookup<'_> {
+        ContainerLookup::index_only(table)
+    }
 
     fn record(kind: &str, name: &str, l0: usize, l1: usize) -> ShardLine {
         ShardLine {
@@ -530,7 +542,7 @@ mod tests {
         let groups = group_locations(
             &[raw(Op::References, "src/a.rs", 21, 4, 1)],
             &target(TargetShape::Callable),
-            &table(),
+            &lookup(&table()),
         );
         // Line 22 (1-based) is inside `leaf` (20–24), the innermost; `outer` also holds it.
         assert_eq!(names(&groups, "REFERENCES"), vec![("leaf".to_owned(), 1)]);
@@ -543,7 +555,7 @@ mod tests {
         let groups = group_locations(
             &[raw(Op::References, "src/a.rs", 98, 0, 1)],
             &target(TargetShape::Callable),
-            &table(),
+            &lookup(&table()),
         );
         let hit = &groups.groups[0].1[0];
         assert_eq!(hit.key, ContainerKey::file_level("src/a.rs"));
@@ -551,7 +563,7 @@ mod tests {
         let unknown_file = group_locations(
             &[raw(Op::References, "docs/x.md", 0, 0, 1)],
             &target(TargetShape::Callable),
-            &table(),
+            &lookup(&table()),
         );
         assert_eq!(
             unknown_file.groups[0].1[0].key,
@@ -571,7 +583,7 @@ mod tests {
             raw(Op::References, "src/a.rs", 7, 4, 1),
             raw(Op::References, "src/b.rs", 2, 0, 1),
         ];
-        let groups = group_locations(&locations, &own, &table());
+        let groups = group_locations(&locations, &own, &lookup(&table()));
         assert_eq!(
             groups.self_references, 2,
             "distinct positions inside `inner`"
@@ -591,9 +603,12 @@ mod tests {
             raw(Op::Incoming, "src/a.rs", 4, 3, 1),
             raw(Op::References, "src/a.rs", 7, 8, 1),
         ];
-        assert_eq!(group_locations(&both, &own, &table()).self_references, 1);
+        assert_eq!(
+            group_locations(&both, &own, &lookup(&table())).self_references,
+            1
+        );
         let incoming_only = [raw(Op::Incoming, "src/a.rs", 4, 3, 1)];
-        let groups = group_locations(&incoming_only, &own, &table());
+        let groups = group_locations(&incoming_only, &own, &lookup(&table()));
         assert_eq!(
             groups.self_references, 1,
             "the call hierarchy alone still counts"
@@ -611,7 +626,11 @@ mod tests {
             // `other` only mentions it.
             raw(Op::References, "src/b.rs", 3, 0, 1),
         ];
-        let groups = group_locations(&locations, &target(TargetShape::Callable), &table());
+        let groups = group_locations(
+            &locations,
+            &target(TargetShape::Callable),
+            &lookup(&table()),
+        );
         assert_eq!(labels(&groups), vec!["CALLS", "REFERENCES"]);
         assert_eq!(names(&groups, "CALLS"), vec![("leaf".to_owned(), 2)]);
         assert_eq!(names(&groups, "REFERENCES"), vec![("other".to_owned(), 1)]);
@@ -631,7 +650,7 @@ mod tests {
             (TargetShape::InterfaceLike, "IMPLEMENTS"),
             (TargetShape::ClassLike, "EXTENDS"),
         ] {
-            let groups = group_locations(&locations, &target(shape), &table());
+            let groups = group_locations(&locations, &target(shape), &lookup(&table()));
             assert_eq!(
                 names(&groups, label),
                 vec![("leaf".to_owned(), 1)],
@@ -650,7 +669,7 @@ mod tests {
         let groups = group_locations(
             &[raw(Op::Implementation, "src/a.rs", 21, 4, 1)],
             &target(TargetShape::TypeLike),
-            &table(),
+            &lookup(&table()),
         );
         assert_eq!(labels(&groups), vec!["REFERENCES"]);
     }
@@ -663,7 +682,11 @@ mod tests {
             raw(Op::References, "src/a.rs", 21, 12, 1),
             raw(Op::References, "src/a.rs", 22, 4, 1),
         ];
-        let groups = group_locations(&locations, &target(TargetShape::Callable), &table());
+        let groups = group_locations(
+            &locations,
+            &target(TargetShape::Callable),
+            &lookup(&table()),
+        );
         assert_eq!(names(&groups, "REFERENCES"), vec![("leaf".to_owned(), 3)]);
     }
 
@@ -673,7 +696,11 @@ mod tests {
             raw(Op::Incoming, "src/a.rs", 5, 4, 3),
             raw(Op::Incoming, "src/b.rs", 2, 4, 0),
         ];
-        let groups = group_locations(&locations, &target(TargetShape::Callable), &table());
+        let groups = group_locations(
+            &locations,
+            &target(TargetShape::Callable),
+            &lookup(&table()),
+        );
         assert_eq!(
             names(&groups, "CALLS"),
             vec![("inner".to_owned(), 3), ("other".to_owned(), 1)]
@@ -687,11 +714,19 @@ mod tests {
             raw(Op::References, "src/b.rs", 3, 0, 1),
             raw(Op::Incoming, "src/a.rs", 6, 4, 1),
         ];
-        let method = group_locations(&locations, &target(TargetShape::Method), &table());
+        let method = group_locations(&locations, &target(TargetShape::Method), &lookup(&table()));
         assert_eq!(labels(&method), vec!["CALLS", "REFERENCES", "OVERRIDES"]);
-        let class = group_locations(&locations, &target(TargetShape::ClassLike), &table());
+        let class = group_locations(
+            &locations,
+            &target(TargetShape::ClassLike),
+            &lookup(&table()),
+        );
         assert_eq!(labels(&class), vec!["CALLS", "EXTENDS", "REFERENCES"]);
-        let interface = group_locations(&locations, &target(TargetShape::InterfaceLike), &table());
+        let interface = group_locations(
+            &locations,
+            &target(TargetShape::InterfaceLike),
+            &lookup(&table()),
+        );
         assert_eq!(
             labels(&interface),
             vec!["CALLS", "IMPLEMENTS", "REFERENCES"]
@@ -714,7 +749,11 @@ mod tests {
             raw(Op::References, "src/a.rs", 21, 0, 1),
             raw(Op::References, "src/a.rs", 6, 0, 1),
         ];
-        let groups = group_locations(&locations, &target(TargetShape::Callable), &table());
+        let groups = group_locations(
+            &locations,
+            &target(TargetShape::Callable),
+            &lookup(&table()),
+        );
         let order: Vec<&str> = groups.groups[0]
             .1
             .iter()
@@ -725,7 +764,7 @@ mod tests {
 
     #[test]
     fn no_locations_means_no_groups() {
-        let groups = group_locations(&[], &target(TargetShape::Callable), &table());
+        let groups = group_locations(&[], &target(TargetShape::Callable), &lookup(&table()));
         assert_eq!(groups, LspGroups::default());
     }
 }

@@ -26,6 +26,7 @@ fn explore(
             repo_root: root,
             pool: Some(pool),
         },
+        edits: None,
     });
     let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     (response, ms)

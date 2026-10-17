@@ -12,7 +12,7 @@
 //! Every source reports an [`Answer`]: callers merged to their innermost
 //! container and grouped by relationship, in the shape `find_callers` returns.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::time::Instant;
 
@@ -20,12 +20,14 @@ use knot::pipeline::parser::ParseConfig;
 
 use super::callers::{CallerRow, CallerTarget, CallersContext, RelationGroups, TargetLspInfo};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
-use crate::graph::containers::{ContainerKey, FILE_LEVEL_NAME};
+use crate::graph::containers::{
+    ContainerKey, ContainerLookup, FILE_LEVEL_NAME, FreshContainer, FreshOverlay,
+};
 use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::{LoadedIndex, LoadedRecord};
 use crate::index::lsp_records::LspTargetLine;
 use crate::index::reparse::{FreshFiles, match_all};
-use crate::lsp::normalize::{LspGroups, TargetInfo, group_locations};
+use crate::lsp::normalize::{LspGroups, RawLocation, TargetInfo, group_locations};
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::pool::LspPool;
 use crate::lsp::request::{Pacing, SourceFiles, Target, Unlocated, live_request};
@@ -111,7 +113,7 @@ impl<'a> Grouper<'a> {
             .map(|((_, relation), hits)| {
                 let rows = hits
                     .into_iter()
-                    .map(|(key, (container, sites))| caller_row(index, key, container, sites))
+                    .map(|(key, (container, sites))| caller_row(index, key, container, None, sites))
                     .collect();
                 (relation, rows)
             })
@@ -128,18 +130,15 @@ impl<'a> Grouper<'a> {
 /// Distinct caller containers of a live answer about a target of `shape`
 /// declared in `own` — the grouping `find_callers` uses (P5-D14).
 pub(crate) fn live_container_count(
-    index: &LoadedIndex,
+    _index: &LoadedIndex,
     outcome: &LiveOutcome,
     shape: TargetShape,
     own: ContainerKey,
+    containers: &ContainerLookup<'_>,
 ) -> usize {
-    group_locations(
-        &outcome.locations,
-        &TargetInfo { shape, own },
-        &index.containers,
-    )
-    .containers
-    .len()
+    group_locations(&outcome.locations, &TargetInfo { shape, own }, containers)
+        .containers
+        .len()
 }
 
 /// The innermost container of the record at `position`'s own declaration.
@@ -198,6 +197,7 @@ fn live_answer(
     own: ContainerKey,
     position: usize,
     outcome: &LiveOutcome,
+    containers: &ContainerLookup<'_>,
 ) -> Answer {
     let target = TargetInfo {
         shape: shape_of(&index.records[position].line.kind),
@@ -206,23 +206,23 @@ fn live_answer(
     let LspGroups {
         groups,
         self_references,
-        containers,
-    } = group_locations(&outcome.locations, &target, &index.containers);
+        containers: group_containers,
+    } = group_locations(&outcome.locations, &target, containers);
     let groups = groups
         .into_iter()
         .map(|(relation, hits)| {
             let rows = hits
                 .into_iter()
-                .map(|hit| caller_row(index, hit.key, hit.record, hit.sites))
+                .map(|hit| caller_row(index, hit.key, hit.record, hit.fresh.as_ref(), hit.sites))
                 .collect();
             (relation, rows)
         })
         .collect();
     Answer {
         groups: RelationGroups(groups),
-        caller_count: containers.len(),
+        caller_count: group_containers.len(),
         self_references,
-        containers,
+        containers: group_containers,
     }
 }
 
@@ -231,20 +231,40 @@ pub fn caller_row(
     index: &LoadedIndex,
     key: ContainerKey,
     container: Option<usize>,
+    fresh: Option<&FreshContainer>,
     sites: usize,
 ) -> CallerRow {
-    match container.map(|position| &index.records[position]) {
-        Some(record) => CallerRow {
+    if let Some(pos) = container {
+        let record = &index.records[pos];
+        CallerRow {
             id: Some(record.line.id.clone()),
             kind: record.line.kind.clone(),
             name: record.line.name.clone(),
             fqn: Some(record.line.fqn.clone()),
             file: record.file.clone(),
-            l0: record.line.l0,
+            l0: if key.line > 0 {
+                key.line
+            } else {
+                record.line.l0
+            },
             signature: record.line.sig.clone(),
             sites,
-        },
-        None => CallerRow {
+            indexed: true,
+        }
+    } else if let Some(fresh) = fresh {
+        CallerRow {
+            id: None,
+            kind: fresh.kind.clone(),
+            name: key.name,
+            fqn: Some(fresh.fqn.clone()),
+            file: key.file,
+            l0: key.line,
+            signature: fresh.signature.clone(),
+            sites,
+            indexed: false,
+        }
+    } else {
+        CallerRow {
             id: None,
             kind: "file".to_owned(),
             name: FILE_LEVEL_NAME.to_owned(),
@@ -253,7 +273,8 @@ pub fn caller_row(
             l0: 0,
             signature: None,
             sites,
-        },
+            indexed: true,
+        }
     }
 }
 
@@ -617,7 +638,11 @@ impl<'c, 'a> Describer<'c, 'a> {
                 lsp: Some(live_info(&outcome, 0, target_info.reanchored)),
             };
         }
-        let answer = live_answer(self.ctx.index, target_info.own, position, &outcome);
+        let (lookup, note) = build_lookup(&mut self.fresh, self.ctx, &outcome.locations);
+        if let Some(note) = note {
+            self.diagnostics.push(("reparse_limit", note));
+        }
+        let answer = live_answer(self.ctx.index, target_info.own, position, &outcome, &lookup);
         let extra = heuristic.containers.difference(&answer.containers).count();
         Described {
             answer,
@@ -625,6 +650,74 @@ impl<'c, 'a> Describer<'c, 'a> {
             lsp: Some(live_info(&outcome, extra, target_info.reanchored)),
         }
     }
+}
+
+fn build_lookup<'s, 'c, 'a>(
+    fresh: &'s mut FreshFiles,
+    ctx: &'c CallersContext<'a>,
+    locations: &[RawLocation],
+) -> (ContainerLookup<'s>, Option<String>)
+where
+    'a: 's,
+{
+    let index = ctx.index;
+    let Some(edits) = ctx.edits else {
+        return (ContainerLookup::index_only(&index.containers), None);
+    };
+    if edits.all_changed().is_empty() {
+        return (ContainerLookup::index_only(&index.containers), None);
+    }
+
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for loc in locations {
+        if edits.is_changed(&loc.rel) {
+            *counts.entry(loc.rel.as_str()).or_default() += 1;
+        }
+    }
+    if counts.is_empty() {
+        return (ContainerLookup::index_only(&index.containers), None);
+    }
+
+    let mut sorted_files: Vec<(&str, usize)> = counts.into_iter().collect();
+    sorted_files.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+
+    let parse_cfg = ParseConfig {
+        repo_root: ctx.lsp.repo_root.to_path_buf(),
+        custom_queries_path: None,
+        repo_name: ctx.repo.to_owned(),
+        include_config_files: false,
+        repo_path: ctx.lsp.repo_root.to_str().map(str::to_owned),
+    };
+
+    let mut approximate_files = 0usize;
+    for (rel, _) in sorted_files {
+        if fresh.count() < crate::index::reparse::MAX_REPARSE_PER_CALL {
+            let _ = fresh.get(ctx.lsp.repo_root, rel, &parse_cfg);
+        } else if !fresh.contains(rel) {
+            approximate_files += 1;
+        }
+    }
+
+    let note = (approximate_files > 0).then(|| {
+        format!(
+            "{approximate_files} changed file(s) attributed through the last index (re-parse limit)"
+        )
+    });
+
+    let mut overlays = HashMap::new();
+    for (rel, fresh_file) in fresh.files() {
+        let mapping = match_all(index, rel, &fresh_file.records);
+        overlays.insert(
+            rel,
+            FreshOverlay {
+                table: &fresh_file.containers,
+                records: &fresh_file.records,
+                mapping,
+            },
+        );
+    }
+
+    (ContainerLookup::new(&index.containers, overlays), note)
 }
 
 fn target_of(record: &LoadedRecord, described: Described) -> CallerTarget {

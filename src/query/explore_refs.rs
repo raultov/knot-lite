@@ -81,6 +81,8 @@ pub struct ExploreLive<'a> {
     pub lang: Option<LspLang>,
     /// The repo-relative file.
     pub rel: &'a str,
+    /// Optional overlay lookup for changed files (P6-D13).
+    pub lookup: Option<&'a crate::graph::containers::ContainerLookup<'a>>,
 }
 
 /// How a run of requests ended.
@@ -195,8 +197,17 @@ impl ExploreLive<'_> {
             match outcome.status {
                 LiveStatus::Ok => {
                     tally.answered += 1;
-                    let count =
-                        live_container_count(self.index, &outcome, target.shape, target.own);
+                    let default_lookup = crate::graph::containers::ContainerLookup::index_only(
+                        &self.index.containers,
+                    );
+                    let lookup = self.lookup.unwrap_or(&default_lookup);
+                    let count = live_container_count(
+                        self.index,
+                        &outcome,
+                        target.shape,
+                        target.own,
+                        lookup,
+                    );
                     counts.push((target.row, count));
                 }
                 LiveStatus::NoPosition => {}

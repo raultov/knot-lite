@@ -131,6 +131,74 @@ impl ContainerTable {
     }
 }
 
+/// Metadata of a container found in a re-parsed file that has no indexed counterpart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FreshContainer {
+    pub kind: String,
+    pub fqn: String,
+    pub signature: Option<String>,
+}
+
+/// An overlay for one re-parsed file (P6-D7).
+pub struct FreshOverlay<'a> {
+    pub table: &'a ContainerTable,
+    pub records: &'a [ShardLine],
+    pub mapping: Vec<Option<usize>>,
+}
+
+/// Container lookup that uses fresh overlays for changed files and the index
+/// table for unchanged files (P6-D7).
+pub struct ContainerLookup<'a> {
+    index: &'a ContainerTable,
+    fresh: HashMap<&'a str, FreshOverlay<'a>>,
+}
+
+impl<'a> ContainerLookup<'a> {
+    /// A lookup that only consults the index table.
+    pub fn index_only(index: &'a ContainerTable) -> Self {
+        Self {
+            index,
+            fresh: HashMap::new(),
+        }
+    }
+
+    /// A lookup that consults `fresh` overlays for changed files and `index` for the rest.
+    pub fn new(index: &'a ContainerTable, fresh: HashMap<&'a str, FreshOverlay<'a>>) -> Self {
+        Self { index, fresh }
+    }
+
+    /// The container holding `line` of `file`.
+    ///
+    /// Returns `(key, indexed_record_idx, fresh_unmatched_info)`.
+    pub fn container_at(
+        &self,
+        file: &str,
+        line: usize,
+    ) -> (ContainerKey, Option<usize>, Option<FreshContainer>) {
+        if let Some(overlay) = self.fresh.get(file) {
+            let (key, fresh_idx) = overlay.table.container_at(file, line);
+            if let Some(idx) = fresh_idx {
+                if let Some(indexed_idx) = overlay.mapping.get(idx).copied().flatten() {
+                    return (key, Some(indexed_idx), None);
+                } else if let Some(fresh_line) = overlay.records.get(idx) {
+                    return (
+                        key,
+                        None,
+                        Some(FreshContainer {
+                            kind: fresh_line.kind.clone(),
+                            fqn: fresh_line.fqn.clone(),
+                            signature: fresh_line.sig.clone(),
+                        }),
+                    );
+                }
+            }
+            return (key, None, None);
+        }
+        let (key, record) = self.index.container_at(file, line);
+        (key, record, None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

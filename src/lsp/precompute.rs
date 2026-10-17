@@ -26,7 +26,7 @@ use super::pool::LspPool;
 use super::request::{Pacing, SourceFiles, Target, live_request};
 use super::target::{LiveOutcome, LiveStatus};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
-use crate::graph::containers::ContainerTable;
+use crate::graph::containers::{ContainerLookup, ContainerTable};
 use crate::index::hash::{sha256_hex, short16};
 use crate::index::inventory::{Inventory, InventoryEntry};
 use crate::index::layout::{IndexLayout, rel_of_record};
@@ -492,11 +492,8 @@ fn collect_edges(
     outcome: &LiveOutcome,
     shards: &mut BTreeMap<String, Vec<LspEdgeLine>>,
 ) {
-    let groups = group_locations(
-        &outcome.locations,
-        &target_info(ctx, candidate),
-        ctx.container_table,
-    );
+    let lookup = ContainerLookup::index_only(ctx.container_table);
+    let groups = group_locations(&outcome.locations, &target_info(ctx, candidate), &lookup);
     for (relation, hits) in groups.groups {
         for hit in hits {
             shards.entry(hit.key.file).or_default().push(LspEdgeLine {
@@ -549,13 +546,11 @@ fn run_probe(
         );
         match outcome.status {
             LiveStatus::Ok => {
-                let count = group_locations(
-                    &outcome.locations,
-                    &target_info(ctx, candidate),
-                    ctx.container_table,
-                )
-                .containers
-                .len();
+                let lookup = ContainerLookup::index_only(ctx.container_table);
+                let count =
+                    group_locations(&outcome.locations, &target_info(ctx, candidate), &lookup)
+                        .containers
+                        .len();
                 run.probes
                     .insert(candidate.line.id.clone(), Probe { outcome, count });
             }

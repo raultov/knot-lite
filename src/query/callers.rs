@@ -203,6 +203,9 @@ pub struct CallerRow {
     pub signature: Option<String>,
     /// Reference sites merged into this container.
     pub sites: usize,
+    /// Whether the index knows this container (P6-D7).  `false` only for
+    /// overlay containers of changed files that have no indexed counterpart.
+    pub indexed: bool,
 }
 
 /// Callers grouped by relationship, serialised as a JSON object in the order
@@ -1208,6 +1211,7 @@ mod tests {
         assert_eq!(response.resolution.tier, Some(MatchTier::ExactName));
         assert_eq!(response.targets.len(), 1);
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.name.as_str(), target.fqn.as_str()),
             ("target", "fixture::target")
@@ -1325,6 +1329,7 @@ mod tests {
         );
         let response = heuristic_response(&index, "demo", "target", 25, &code());
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(target.caller_count, 1, "all three sites sit inside `outer`");
         let groups: Vec<(&str, usize, usize)> = target
             .callers
@@ -1430,6 +1435,7 @@ mod tests {
         pool: Option<&LspPool>,
         query: &str,
     ) -> CallersResponse {
+        let edits = crate::query::edits::EditedFiles::new(index, root);
         callers_response(&CallersContext {
             index,
             repo: "demo",
@@ -1441,7 +1447,7 @@ mod tests {
                 repo_root: root,
                 pool,
             },
-            edits: None,
+            edits: Some(&edits),
         })
     }
 
@@ -1478,6 +1484,7 @@ mod tests {
         );
 
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(target.provenance, "lsp-live");
         let lsp = target.lsp.as_ref().expect("lsp");
         assert_eq!(lsp.status, "ok");
@@ -1556,6 +1563,7 @@ mod tests {
         // No pool: pre-computed edges are data, used even with servers off.
         let response = respond(&index, tmp.path(), &default_settings(), None, "target");
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(target.provenance, "lsp-indexed");
         let lsp = target.lsp.as_ref().expect("lsp");
         assert_eq!((lsp.status, lsp.ms), ("indexed", 812));
@@ -1605,6 +1613,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         // The server's answer wins; `helper` and `run` are the heuristic's extras.
         assert_eq!(target.caller_count, 1);
         assert_eq!(target.lsp.as_ref().expect("lsp").heuristic_extra, 2);
@@ -1696,6 +1705,7 @@ mod tests {
             "Thing",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "unsupported_kind")
@@ -1711,6 +1721,7 @@ mod tests {
         let pool = FakeServers::missing().pool();
         let response = respond(&index, tmp.path(), &default_settings(), Some(&pool), "run");
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "no_column")
@@ -1778,6 +1789,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("lsp-live", "ok"),
@@ -1808,6 +1820,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "stale_target")
@@ -1834,6 +1847,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert!(target.lsp.as_ref().unwrap().reanchored);
         assert!(
             response
@@ -1856,6 +1870,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert!(!target.lsp.as_ref().unwrap().reanchored);
         assert!(!response.notes.iter().any(|n| n.contains("re-anchored")));
     }
@@ -1876,9 +1891,140 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "stale_target")
+        );
+    }
+
+    #[test]
+    fn location_in_changed_file_uses_fresh_container() {
+        let (tmp, index) = fixture_index();
+        let util = tmp.path().join("src/util.rs");
+        let text = std::fs::read_to_string(&util).expect("read");
+        let shifted = "// pad\n".repeat(10) + &text;
+        std::fs::write(&util, shifted).expect("write");
+
+        let scene = Scene::new(tmp.path());
+        let pos = Position::new(2, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(pos, vec![scene.item("target", "src/lib.rs", 2)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![scene.call("helper", "src/util.rs", 10)],
+            )],
+            references: vec![(pos, vec![scene.location("src/util.rs", 11)])],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-live");
+        let calls = &target
+            .callers
+            .0
+            .iter()
+            .find(|(rel, _)| rel == "CALLS")
+            .unwrap()
+            .1;
+        let helper = calls.iter().find(|c| c.name == "helper").unwrap();
+        assert_eq!(helper.l0, 11, "helper container must use the fresh line 11");
+        assert!(helper.indexed, "matched container keeps indexed true");
+        assert!(helper.id.is_some(), "matched container keeps its id");
+    }
+
+    #[test]
+    fn new_container_has_indexed_false() {
+        let (tmp, index) = fixture_index();
+        let util = tmp.path().join("src/util.rs");
+        let text = std::fs::read_to_string(&util).expect("read");
+        let with_new = format!("{text}\n\npub fn brand_new_caller() {{\n    target();\n}}\n");
+        std::fs::write(&util, with_new).expect("write");
+
+        let scene = Scene::new(tmp.path());
+        let pos = Position::new(2, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(pos, vec![scene.item("target", "src/lib.rs", 2)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![scene.call("brand_new_caller", "src/util.rs", 15)],
+            )],
+            references: vec![(pos, vec![scene.location("src/util.rs", 16)])],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
+        let calls = &target
+            .callers
+            .0
+            .iter()
+            .find(|(rel, _)| rel == "CALLS")
+            .unwrap()
+            .1;
+        let new_c = calls.iter().find(|c| c.name == "brand_new_caller").unwrap();
+        assert!(
+            !new_c.indexed,
+            "new container unknown to index must have indexed == false"
+        );
+        assert_eq!(new_c.id, None, "new container has id None");
+    }
+
+    #[test]
+    fn self_reference_uses_fresh_own_container() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        let shifted = "// pad\n".repeat(10) + &text;
+        std::fs::write(&lib, shifted).expect("write");
+
+        let scene = Scene::new(tmp.path());
+        let fresh_pos = Position::new(12, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(fresh_pos, vec![scene.item("target", "src/lib.rs", 12)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![
+                    scene.call("target", "src/lib.rs", 13),
+                    scene.call("caller", "src/lib.rs", 16),
+                ],
+            )],
+            references: vec![(
+                fresh_pos,
+                vec![
+                    scene.location("src/lib.rs", 14),
+                    scene.location("src/lib.rs", 17),
+                ],
+            )],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
+        assert_eq!(
+            target.self_references, 1,
+            "recursion inside fresh own container is excluded and counted"
         );
     }
 
@@ -1899,6 +2045,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "not_ready")
@@ -1927,6 +2074,7 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "no_server")
@@ -2012,6 +2160,7 @@ mod tests {
         let (tmp, index) = fixture_index();
         let response = respond(&index, tmp.path(), &default_settings(), None, "target");
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(target.provenance, "heuristic");
         assert_eq!(status_of(target), "disabled");
         assert_eq!(target.caller_count, 3);
@@ -2064,7 +2213,7 @@ mod tests {
         let caller = |name: &str, fqn: &str, kind: &str, file: &str, l0: u32, sig: &str| {
             serde_json::json!({
                 "id": "<id>", "kind": kind, "name": name, "fqn": fqn, "file": file,
-                "l0": l0, "signature": sig, "sites": 1
+                "l0": l0, "signature": sig, "sites": 1, "indexed": true
             })
         };
         let expected = serde_json::json!({
@@ -2132,6 +2281,7 @@ mod tests {
         );
         let response = respond(&index, tmp.path(), &default_settings(), None, "target");
         let target = &response.targets[0];
+        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "disabled")

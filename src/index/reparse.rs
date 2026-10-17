@@ -96,6 +96,11 @@ impl FreshFiles {
     pub fn count(&self) -> usize {
         self.cache.values().filter(|r| r.is_ok()).count()
     }
+
+    /// Whether `rel` is in the cache.
+    pub fn contains(&self, rel: &str) -> bool {
+        self.cache.contains_key(rel)
+    }
 }
 
 /// Re-parse `rels` (repo-relative) under `repo_root` in one parser call.
@@ -154,7 +159,7 @@ pub fn reparse_batch(
                 normalise_and_sort(&mut file_entities);
                 prepare_entities(&mut file_entities);
                 let records = records_from_entities(&file_entities);
-                let containers = fresh_containers(&records);
+                let containers = fresh_containers(&rel, &records);
                 out.insert(
                     rel.clone(),
                     Ok(FreshFile {
@@ -256,14 +261,13 @@ pub fn match_all(index: &LoadedIndex, rel: &str, fresh: &[ShardLine]) -> Vec<Opt
         .collect()
 }
 
-/// Build a [`ContainerTable`] from fresh records (record index = position
-/// in the slice).
-pub fn fresh_containers(records: &[ShardLine]) -> ContainerTable {
+/// Build a [`ContainerTable`] from fresh records of `rel`.
+pub fn fresh_containers(rel: &str, records: &[ShardLine]) -> ContainerTable {
     ContainerTable::from_records(
         records
             .iter()
             .enumerate()
-            .map(|(idx, line)| (idx, "", line)),
+            .map(|(idx, line)| (idx, rel, line)),
     )
 }
 
