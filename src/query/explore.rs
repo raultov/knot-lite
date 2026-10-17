@@ -388,7 +388,7 @@ fn explore_indexed(ctx: &ExploreContext<'_>, file: &str, response: &mut ExploreR
         }
     }
     let live = live_for(ctx, file, None);
-    let positions = describe_file(ctx.index, file, ctx.include_markup, response);
+    let positions = describe_file(ctx, file, response);
     if response.notes.iter().any(|note| note == STALE_NOTE) {
         return;
     }
@@ -450,7 +450,10 @@ fn indexed_targets(
         .filter_map(|&(row, at)| {
             let line = &index.records[at].line;
             let shape = shape_of(&line.kind);
-            if line.col.is_none() || shape == TargetShape::None || has_indexed_answer(index, at) {
+            if line.col.is_none()
+                || shape == TargetShape::None
+                || has_indexed_answer(ctx, &mut files, at)
+            {
                 return None;
             }
             let target = Target {
@@ -471,11 +474,17 @@ fn indexed_targets(
         .collect()
 }
 
-fn has_indexed_answer(index: &LoadedIndex, at: usize) -> bool {
-    index
+fn has_indexed_answer(ctx: &ExploreContext<'_>, files: &mut SourceFiles<'_>, at: usize) -> bool {
+    let index = ctx.index;
+    let record = &index.records[at];
+    if !index
         .lsp_targets
-        .get(&index.records[at].line.id)
+        .get(&record.line.id)
         .is_some_and(|line| line.status == "ok")
+    {
+        return false;
+    }
+    super::sources::indexed_is_current(index, ctx.edits, files, record).is_ok()
 }
 
 /// Ask the server and write the answered counts into the response rows
@@ -504,13 +513,14 @@ fn apply_live_counts(
 /// `(row, record position)` for every listed entity, rows numbered in the
 /// order the groups list them.
 fn describe_file(
-    index: &LoadedIndex,
+    ctx: &ExploreContext<'_>,
     file: &str,
-    include_markup: bool,
     response: &mut ExploreResponse,
 ) -> Vec<(usize, usize)> {
+    let index = ctx.index;
     let positions = index.by_file.get(file).map_or(&[][..], Vec::as_slice);
     let mut families: BTreeMap<KindFamily, Vec<(ExploreEntity, usize)>> = BTreeMap::new();
+    let mut files = SourceFiles::new(ctx.lsp.repo_root);
     for &position in positions {
         let line = &index.records[position].line;
         if line.is_tier1() {
@@ -521,7 +531,7 @@ fn describe_file(
         families
             .entry(family_of(&line.kind))
             .or_default()
-            .push((entity_row(index, position), position));
+            .push((entity_row(ctx, &mut files, position), position));
     }
     // A file with entities reports the language of an entity, not of a chunk.
     let lines: Vec<_> = positions.iter().map(|&p| &index.records[p].line).collect();
@@ -531,7 +541,9 @@ fn describe_file(
         .or(lines.first())
         .map(|line| line.lang.clone());
 
-    if !include_markup && let Some(markup) = families.remove(&KindFamily::Markup) {
+    if !ctx.include_markup
+        && let Some(markup) = families.remove(&KindFamily::Markup)
+    {
         let entities: Vec<ExploreEntity> = markup.into_iter().map(|(entity, _)| entity).collect();
         response.markup = Some(markup_summary(&entities));
         response
@@ -582,8 +594,9 @@ fn describe_outline(
     let indexed_file = index.by_file.contains_key(rel).then_some(rel);
     let rows = match_symbols(index, indexed_file, symbols);
     let mut families: BTreeMap<KindFamily, Vec<(ExploreEntity, OutlineRow)>> = BTreeMap::new();
+    let mut files = SourceFiles::new(ctx.lsp.repo_root);
     for row in rows {
-        let (family, entity) = outline_entity(index, &row);
+        let (family, entity) = outline_entity(ctx, &mut files, &row);
         families.entry(family).or_default().push((entity, row));
     }
     response.entities = families.values().map(Vec::len).sum();
@@ -627,7 +640,12 @@ struct OutlineTargetCtx<'a> {
 }
 
 /// The entity row of an outline symbol and its family.
-fn outline_entity(index: &LoadedIndex, row: &OutlineRow) -> (KindFamily, ExploreEntity) {
+fn outline_entity(
+    ctx: &ExploreContext<'_>,
+    files: &mut SourceFiles<'_>,
+    row: &OutlineRow,
+) -> (KindFamily, ExploreEntity) {
+    let index = ctx.index;
     let symbol = &row.symbol;
     let (l0, l1) = (
         symbol.first_line0 as usize + 1,
@@ -636,7 +654,7 @@ fn outline_entity(index: &LoadedIndex, row: &OutlineRow) -> (KindFamily, Explore
     match row.record {
         Some(at) => {
             let line = &index.records[at].line;
-            let mut entity = entity_row(index, at);
+            let mut entity = entity_row(ctx, files, at);
             entity.l0 = l0;
             entity.l1 = l1;
             (family_of(&line.kind), entity)
@@ -686,11 +704,16 @@ fn outline_target(
 
 /// An indexed record's row, counted from the pre-computed answer when it is
 /// fresh, else from the heuristic edges (distinct caller containers).
-fn entity_row(index: &LoadedIndex, position: usize) -> ExploreEntity {
+fn entity_row(
+    ctx: &ExploreContext<'_>,
+    files: &mut SourceFiles<'_>,
+    position: usize,
+) -> ExploreEntity {
+    let index = ctx.index;
     let line = &index.records[position].line;
     let (referenced_by, provenance) = if line.is_tier1() {
         (None, None)
-    } else if has_indexed_answer(index, position) {
+    } else if has_indexed_answer(ctx, files, position) {
         (
             Some(indexed_answer(index, position).caller_count),
             Some(PROVENANCE_INDEXED),
@@ -1560,6 +1583,56 @@ mod lsp_tests {
         assert_eq!(response.outline.provenance, PROVENANCE_LIVE);
         assert_eq!(response.outline.reason, Some("changed_since_index"));
         assert!(response.edits.is_some());
+    }
+
+    #[test]
+    fn explore_precomputed_count_follows_rule() {
+        use crate::index::load::LspIncoming;
+        let (tmp, mut index) = fixture_index();
+        let target = index.records[index.by_name["target"][0]].line.id.clone();
+        let helper = index.records[index.by_name["helper"][0]].line.id.clone();
+        index.lsp_targets.insert(
+            target.clone(),
+            crate::index::lsp_records::LspTargetLine {
+                id: target.clone(),
+                status: "ok".to_owned(),
+                ms: 10,
+                ops: crate::lsp::target::OpCounts::default(),
+                server: "rust-analyzer".to_owned(),
+                refs: None,
+                h: None,
+            },
+        );
+        index.lsp_incoming.insert(
+            target,
+            vec![LspIncoming {
+                rel: "src/util.rs".to_owned(),
+                src: Some(helper),
+                relation: "CALLS".to_owned(),
+                n: 2,
+            }],
+        );
+
+        // Edit src/util.rs: precomputed count of target in lib.rs is now outdated!
+        let util = tmp.path().join("src/util.rs");
+        let text = std::fs::read_to_string(&util).expect("read");
+        std::fs::write(&util, format!("{text}\n// edit\n")).expect("write");
+
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        let response = explore_response(&ExploreContext {
+            index: &index,
+            repo: "demo",
+            requested: "src/lib.rs",
+            include_markup: false,
+            lsp: LspContext {
+                settings: &settings(),
+                repo_root: tmp.path(),
+                pool: None,
+            },
+            edits: Some(&edits),
+        });
+        let target_entity = row(&response, "target");
+        assert_ne!(target_entity.refs_provenance, Some(PROVENANCE_INDEXED));
     }
 
     #[test]

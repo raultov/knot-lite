@@ -278,7 +278,71 @@ pub fn caller_row(
     }
 }
 
-fn indexed_info(line: &LspTargetLine, heuristic_extra: usize) -> TargetLspInfo {
+/// Why a pre-computed answer is no longer current (P6-D8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outdated {
+    /// The target's own file changed.
+    OwnFile,
+    /// A file that references the target changed.
+    EdgeFile(String),
+    /// A changed file mentions the target's name as an identifier.
+    Mention(String),
+}
+
+impl Outdated {
+    /// Human-readable reason for the diagnostic notes.
+    pub fn reason(&self) -> String {
+        match self {
+            Self::OwnFile => "its file changed".to_owned(),
+            Self::EdgeFile(rel) => format!("a file that references it changed ({rel})"),
+            Self::Mention(rel) => format!("{rel} changed and mentions it"),
+        }
+    }
+}
+
+/// P6-D8 freshness rule: a pre-computed answer is current iff (a) its own
+/// file is unchanged, (b) no pre-computed edge comes from a changed file,
+/// and (c) no changed file of its language contains the target's name as an
+/// identifier.
+pub fn indexed_is_current(
+    index: &LoadedIndex,
+    edits: Option<&crate::query::edits::EditedFiles>,
+    files: &mut SourceFiles<'_>,
+    record: &LoadedRecord,
+) -> Result<(), Outdated> {
+    let Some(edits) = edits else {
+        return Ok(());
+    };
+    if edits.all_changed().is_empty() {
+        return Ok(());
+    }
+    // (a) own file unchanged
+    if edits.is_changed(&record.file) {
+        return Err(Outdated::OwnFile);
+    }
+    // (b) no pre-computed edge from a changed file
+    if let Some(incoming) = index.lsp_incoming.get(&record.line.id) {
+        for edge in incoming {
+            if edits.is_changed(&edge.rel) {
+                return Err(Outdated::EdgeFile(edge.rel.clone()));
+            }
+        }
+    }
+    // (c) no changed file of its language contains the target's name as an identifier
+    let Some(lang) = lsp_lang_for_label(label_for(Path::new(&record.file))) else {
+        return Ok(());
+    };
+    for rel in edits.changed(lang) {
+        if let Ok(source) = files.get(rel)
+            && crate::lsp::position::text_has_ident(source.text(), &record.line.name)
+        {
+            return Err(Outdated::Mention(rel.clone()));
+        }
+    }
+    Ok(())
+}
+
+fn indexed_info(line: &LspTargetLine, heuristic_extra: usize, outdated: bool) -> TargetLspInfo {
     TargetLspInfo {
         status: "indexed",
         ops: line.ops,
@@ -288,6 +352,7 @@ fn indexed_info(line: &LspTargetLine, heuristic_extra: usize) -> TargetLspInfo {
         ms: line.ms,
         heuristic_extra,
         reanchored: false,
+        outdated,
     }
 }
 
@@ -301,6 +366,7 @@ fn live_info(outcome: &LiveOutcome, heuristic_extra: usize, reanchored: bool) ->
         ms: outcome.ms,
         heuristic_extra,
         reanchored,
+        outdated: false,
     }
 }
 
@@ -314,6 +380,7 @@ fn fallback_info(status: &'static str) -> TargetLspInfo {
         ms: 0,
         heuristic_extra: 0,
         reanchored: false,
+        outdated: false,
     }
 }
 
@@ -342,6 +409,8 @@ struct TargetLiveInfo {
 /// The source chosen for one target.
 enum Plan<'a> {
     Indexed(&'a LspTargetLine),
+    /// Pre-computed answer served as the P6-D9 fallback (outdated).
+    IndexedOutdated(&'a LspTargetLine),
     Live(&'a LspPool, LiveRequest, TargetLiveInfo),
     /// `None`: no language server is relevant (not an LSP language).
     Heuristic(Option<Fallback>),
@@ -427,7 +496,16 @@ impl<'c, 'a> Describer<'c, 'a> {
                 Described {
                     answer,
                     provenance: PROVENANCE_INDEXED,
-                    lsp: Some(indexed_info(line, extra)),
+                    lsp: Some(indexed_info(line, extra, false)),
+                }
+            }
+            Plan::IndexedOutdated(line) => {
+                let answer = indexed_answer(index, position);
+                let extra = heuristic.containers.difference(&answer.containers).count();
+                Described {
+                    answer,
+                    provenance: PROVENANCE_INDEXED,
+                    lsp: Some(indexed_info(line, extra, true)),
                 }
             }
             Plan::Live(pool, request, live_info) => self.ask(
@@ -456,52 +534,123 @@ impl<'c, 'a> Describer<'c, 'a> {
         target_of(record, described)
     }
 
-    /// Choose the source for `record`, in the order of P3-D10.
-    fn plan(&mut self, record: &LoadedRecord, position: usize, hint: usize) -> Plan<'a> {
-        let index = self.ctx.index;
-        if let Some(line) = index
+    fn check_precomputed(
+        &mut self,
+        record: &LoadedRecord,
+    ) -> (Option<&'a LspTargetLine>, Option<Outdated>) {
+        let precomputed = self
+            .ctx
+            .index
             .lsp_targets
             .get(&record.line.id)
-            .filter(|line| line.status == "ok")
-        {
+            .filter(|line| line.status == "ok");
+        let Some(line) = precomputed else {
+            return (None, None);
+        };
+        match indexed_is_current(self.ctx.index, self.ctx.edits, &mut self.files, record) {
+            Ok(()) => (Some(line), None),
+            Err(reason) => {
+                self.diagnostics.push((
+                    "precomputed_outdated",
+                    format!(
+                        "pre-computed answer of {} is outdated ({}); asked the language server",
+                        record.line.name,
+                        reason.reason()
+                    ),
+                ));
+                (Some(line), Some(reason))
+            }
+        }
+    }
+
+    /// Choose the source for `record`, in the order of P3-D10.
+    fn plan(&mut self, record: &LoadedRecord, position: usize, hint: usize) -> Plan<'a> {
+        let (precomputed, outdated_reason) = self.check_precomputed(record);
+        if let (Some(line), None) = (precomputed, &outdated_reason) {
             return Plan::Indexed(line);
         }
+        let fallback_plan = |this: &mut Self| {
+            if let Some(line) = precomputed {
+                let reason_str = outdated_reason
+                    .as_ref()
+                    .map(|r| r.reason())
+                    .unwrap_or_default();
+                this.diagnostics.push((
+                    "precomputed_outdated_fallback",
+                    format!(
+                        "pre-computed answer of {} is outdated ({}); callers added there are missing (run knot-lite index)",
+                        record.line.name,
+                        reason_str
+                    ),
+                ));
+                Plan::IndexedOutdated(line)
+            } else {
+                Plan::Heuristic(None)
+            }
+        };
         let Some(lang) = lsp_lang_for_label(label_for(Path::new(&record.file))) else {
-            return Plan::Heuristic(None);
+            return fallback_plan(self);
         };
         let Some(pool) = self.ctx.lsp.pool else {
-            return Fallback::status("disabled");
+            return if precomputed.is_some() {
+                fallback_plan(self)
+            } else {
+                Fallback::status("disabled")
+            };
         };
         if shape_of(&record.line.kind) == TargetShape::None {
-            return Fallback::status("unsupported_kind");
+            return if precomputed.is_some() {
+                fallback_plan(self)
+            } else {
+                Fallback::status("unsupported_kind")
+            };
         }
         if record.line.col.is_none() {
-            return Fallback::status("no_column");
+            return if precomputed.is_some() {
+                fallback_plan(self)
+            } else {
+                Fallback::status("no_column")
+            };
         }
         let request = match self.request(record, lang, hint) {
             Ok(request) => request,
             Err(Unlocated::Stale) => {
-                // P6-D6: re-parse the changed file and re-anchor the target.
-                return self.reanchor(ReanchorArgs {
+                let reanchor_plan = self.reanchor(ReanchorArgs {
                     record,
                     position,
                     lang,
                     hint,
                     pool,
                 });
+                if matches!(reanchor_plan, Plan::Heuristic(_)) && precomputed.is_some() {
+                    return fallback_plan(self);
+                }
+                return reanchor_plan;
             }
             Err(why) => {
-                return Plan::Heuristic(Some(Fallback {
-                    status: "no_position",
-                    detail: Some(why.detail()),
-                }));
+                return if precomputed.is_some() {
+                    fallback_plan(self)
+                } else {
+                    Plan::Heuristic(Some(Fallback {
+                        status: "no_position",
+                        detail: Some(why.detail()),
+                    }))
+                };
             }
         };
         if self.live_used >= self.ctx.lsp.settings.max_live_targets {
-            return Fallback::status("budget");
+            return if precomputed.is_some() {
+                fallback_plan(self)
+            } else {
+                Fallback::status("budget")
+            };
         }
         if Instant::now() >= self.deadline {
-            return Fallback::status("deadline");
+            return if precomputed.is_some() {
+                fallback_plan(self)
+            } else {
+                Fallback::status("deadline")
+            };
         }
         self.live_used += 1;
         let own = own_container(self.ctx.index, position);

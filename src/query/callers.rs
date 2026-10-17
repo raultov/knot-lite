@@ -273,6 +273,10 @@ pub struct TargetLspInfo {
     /// The target's file changed and the request used the re-parsed position (P6-D6).
     #[serde(default)]
     pub reanchored: bool,
+    /// `status == "indexed"` served as the P6-D9 fallback because an edit may
+    /// have changed the answer.
+    #[serde(default)]
+    pub outdated: bool,
 }
 
 /// State of one language server, in the top-level `lsp.languages`.
@@ -1563,7 +1567,6 @@ mod tests {
         // No pool: pre-computed edges are data, used even with servers off.
         let response = respond(&index, tmp.path(), &default_settings(), None, "target");
         let target = &response.targets[0];
-        println!("TARGET={:#?}", target);
         assert_eq!(target.provenance, "lsp-indexed");
         let lsp = target.lsp.as_ref().expect("lsp");
         assert_eq!((lsp.status, lsp.ms), ("indexed", 812));
@@ -1968,7 +1971,6 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
-        println!("TARGET={:#?}", target);
         let calls = &target
             .callers
             .0
@@ -2021,10 +2023,183 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
-        println!("TARGET={:#?}", target);
         assert_eq!(
             target.self_references, 1,
             "recursion inside fresh own container is excluded and counted"
+        );
+    }
+
+    fn with_precomputed_target(index: &mut LoadedIndex) {
+        let target = id_of(index, "target");
+        let (caller, helper) = (id_of(index, "caller"), id_of(index, "helper"));
+        index.lsp_targets.insert(
+            target.clone(),
+            LspTargetLine {
+                id: target.clone(),
+                status: "ok".to_owned(),
+                ms: 812,
+                ops: OpCounts {
+                    incoming: Some(2),
+                    references: Some(3),
+                    implementation: None,
+                },
+                server: "rust-analyzer".to_owned(),
+                refs: None,
+                h: None,
+            },
+        );
+        let edge = |rel: &str, src: Option<&str>, relation: &str, n: u32| LspIncoming {
+            rel: rel.to_owned(),
+            src: src.map(str::to_owned),
+            relation: relation.to_owned(),
+            n,
+        };
+        index.lsp_incoming.insert(
+            target,
+            vec![
+                edge("src/lib.rs", Some(&caller), "CALLS", 1),
+                edge("src/util.rs", Some(&helper), "CALLS", 2),
+                edge("src/main.rs", None, "REFERENCES", 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn nothing_changed_serves_indexed() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-indexed");
+        assert!(!target.lsp.as_ref().unwrap().outdated);
+    }
+
+    #[test]
+    fn own_file_changed_goes_live() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, format!("{text}\n// edited\n")).expect("edit");
+
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-live");
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.contains("outdated (its file changed); asked the language server"))
+        );
+    }
+
+    #[test]
+    fn edge_file_changed_goes_live() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let util = tmp.path().join("src/util.rs");
+        let text = std::fs::read_to_string(&util).expect("read");
+        std::fs::write(&util, format!("{text}\n// edited\n")).expect("edit");
+
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-live");
+        assert!(response.notes.iter().any(|n| n.contains(
+            "outdated (a file that references it changed (src/util.rs)); asked the language server"
+        )));
+    }
+
+    #[test]
+    fn mention_in_changed_file_goes_live() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let other = tmp.path().join("src/other.rs");
+        std::fs::write(&other, "pub fn foo() {}\n").expect("write");
+        let (sha, bytes) = crate::index::inventory::file_sha16(&other).unwrap();
+        index.file_sha16.insert("src/other.rs".into(), sha);
+        index.file_bytes.insert("src/other.rs".into(), bytes);
+
+        std::fs::write(&other, "pub fn foo() { target(); }\n").expect("write");
+
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-live");
+        assert!(response.notes.iter().any(|n| n.contains(
+            "outdated (src/other.rs changed and mentions it); asked the language server"
+        )));
+    }
+
+    #[test]
+    fn unrelated_change_serves_indexed() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let other = tmp.path().join("src/other.rs");
+        std::fs::write(&other, "pub fn foo() {}\n").expect("write");
+        let (sha, bytes) = crate::index::inventory::file_sha16(&other).unwrap();
+        index.file_sha16.insert("src/other.rs".into(), sha);
+        index.file_bytes.insert("src/other.rs".into(), bytes);
+
+        std::fs::write(&other, "pub fn foo() { 1 + 2; }\n").expect("write");
+
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-indexed");
+        assert!(!target.lsp.as_ref().unwrap().outdated);
+    }
+
+    #[test]
+    fn live_failure_falls_back_to_outdated_indexed() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let util = tmp.path().join("src/util.rs");
+        let text = std::fs::read_to_string(&util).expect("read");
+        std::fs::write(&util, format!("{text}\n// edited\n")).expect("edit");
+
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(target.provenance, "lsp-indexed");
+        let lsp = target.lsp.as_ref().unwrap();
+        assert!(lsp.outdated);
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.contains("callers added there are missing (run knot-lite index)"))
         );
     }
 
@@ -2045,7 +2220,6 @@ mod tests {
             "target",
         );
         let target = &response.targets[0];
-        println!("TARGET={:#?}", target);
         assert_eq!(
             (target.provenance, status_of(target)),
             ("heuristic", "not_ready")
@@ -2244,7 +2418,7 @@ mod tests {
                     "status": "ok",
                     "ops": { "incoming": 2, "references": 3, "implementation": null },
                     "external": 0, "comment_filtered": 0, "retried_empty": false,
-                    "ms": 0, "heuristic_extra": 0, "reanchored": false
+                    "ms": 0, "heuristic_extra": 0, "reanchored": false, "outdated": false
                 },
                 "caller_count": 3, "self_references": 0,
                 "callers": {

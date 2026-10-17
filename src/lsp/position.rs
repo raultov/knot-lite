@@ -139,8 +139,13 @@ fn is_annotation_or_comment(line: &str) -> bool {
 }
 
 /// Whether `name` occurs on `line` with identifier boundaries.
-fn line_has_ident(line: &str, name: &str) -> bool {
+pub fn line_has_ident(line: &str, name: &str) -> bool {
     ident_occurrences(line, name).next().is_some()
+}
+
+/// Whether `name` occurs with identifier boundaries anywhere in `text`.
+pub fn text_has_ident(text: &str, name: &str) -> bool {
+    text.lines().any(|line| line_has_ident(line, name))
 }
 
 /// Byte offsets of `name` in `line` where the surrounding characters are not
