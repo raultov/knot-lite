@@ -247,6 +247,7 @@ pub fn build_index(
     progress: &mut dyn FnMut(ProgressEvent),
 ) -> anyhow::Result<BuildReport> {
     let started = Instant::now();
+    let run_started_at = now_rfc3339();
     let spec = embedder.spec();
     let mut dir = prepare_dir(cfg, opts)?;
     let mut timings = IndexTimings::default();
@@ -330,6 +331,7 @@ pub fn build_index(
             timings,
             lexicon: lexicon.manifest(),
             lsp: lsp_manifest,
+            started_at: run_started_at,
         },
     );
     write_manifest_atomic(&dir.layout.manifest, &manifest)?;
@@ -1125,6 +1127,7 @@ struct ManifestParts<'a> {
     timings: IndexTimings,
     lexicon: Option<LexiconManifest>,
     lsp: Option<LspManifest>,
+    started_at: String,
 }
 
 fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manifest {
@@ -1138,6 +1141,7 @@ fn build_manifest(cfg: &Config, dir: &RunDir, parts: ManifestParts<'_>) -> Manif
             .previous
             .as_ref()
             .map_or_else(|| now.clone(), |manifest| manifest.created_at.clone()),
+        started_at: parts.started_at,
         updated_at: now,
         source_fingerprint: parts.source_fingerprint,
         commit_mode: dir.commit_mode,
@@ -1434,6 +1438,7 @@ mod tests {
             let mut manifest: Manifest =
                 toml::from_str(std::str::from_utf8(bytes).expect("utf8")).expect("manifest");
             manifest.created_at.clear();
+            manifest.started_at.clear();
             manifest.updated_at.clear();
             manifest.timings_ms = IndexTimings::default();
             manifest

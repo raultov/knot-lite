@@ -114,6 +114,8 @@ pub struct LoadedIndex {
     pub lsp_targets: HashMap<String, LspTargetLine>,
     /// Inventory file sha16 per repo-relative path (for stale target detection).
     pub file_sha16: HashMap<String, String>,
+    /// Inventory file bytes per repo-relative path (for candidate check P6-D3).
+    pub file_bytes: HashMap<String, u64>,
     /// Milliseconds the load took.
     pub load_ms: u64,
     /// Where the index was read from (`None` when assembled in memory).
@@ -174,13 +176,15 @@ pub fn load_index(layout: &IndexLayout) -> Result<LoadedIndex, IndexUnavailable>
     let manifest = read_valid_manifest(layout)?;
     let dim = usize::try_from(manifest.embedding.dim).unwrap_or(usize::MAX);
     let (records, matrix) = load_records(layout, dim)?;
+    let (file_sha16, file_bytes) = load_inventory_meta(layout);
     let loaded = Loaded {
         records,
         matrix,
         edges: load_edges(layout)?,
         lsp_incoming: load_lsp_incoming(layout)?,
         lsp_targets: load_lsp_targets(layout)?,
-        file_sha16: load_file_sha16(layout),
+        file_sha16,
+        file_bytes,
         layout: Some(layout.clone()),
     };
     Ok(assemble(manifest, loaded, started))
@@ -249,11 +253,17 @@ fn load_lsp_targets(
     Ok(map)
 }
 
-fn load_file_sha16(layout: &IndexLayout) -> HashMap<String, String> {
+fn load_inventory_meta(layout: &IndexLayout) -> (HashMap<String, String>, HashMap<String, u64>) {
     let Ok(inv) = read_inventory(&layout.inventory) else {
-        return HashMap::new();
+        return (HashMap::new(), HashMap::new());
     };
-    inv.entries.into_iter().map(|e| (e.rel, e.sha)).collect()
+    let mut sha16 = HashMap::with_capacity(inv.entries.len());
+    let mut bytes = HashMap::with_capacity(inv.entries.len());
+    for e in inv.entries {
+        bytes.insert(e.rel.clone(), e.bytes);
+        sha16.insert(e.rel, e.sha);
+    }
+    (sha16, bytes)
 }
 
 /// Everything read from disk, before the lookup maps are derived.
@@ -265,6 +275,7 @@ struct Loaded {
     lsp_incoming: HashMap<String, Vec<LspIncoming>>,
     lsp_targets: HashMap<String, LspTargetLine>,
     file_sha16: HashMap<String, String>,
+    file_bytes: HashMap<String, u64>,
     layout: Option<IndexLayout>,
 }
 
@@ -278,6 +289,7 @@ fn assemble(manifest: Manifest, loaded: Loaded, started: Instant) -> LoadedIndex
         lsp_incoming,
         lsp_targets,
         file_sha16,
+        file_bytes,
         layout,
     } = loaded;
     let mut by_id = HashMap::with_capacity(records.len());
@@ -313,6 +325,7 @@ fn assemble(manifest: Manifest, loaded: Loaded, started: Instant) -> LoadedIndex
         lsp_incoming,
         lsp_targets,
         file_sha16,
+        file_bytes,
         load_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         layout,
         search_aux: OnceLock::new(),

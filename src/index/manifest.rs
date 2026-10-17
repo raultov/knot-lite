@@ -40,6 +40,9 @@ pub struct Manifest {
     pub repo_name: String,
     /// First creation time, RFC 3339 UTC with seconds (`2026-10-05T10:00:00Z`).
     pub created_at: String,
+    /// Start of the last run, same format (P6-D3: the changed-set boundary).
+    #[serde(default)]
+    pub started_at: String,
     /// Last successful run, same format.
     pub updated_at: String,
     /// 64 hex characters over the inventory (freshness stamp).
@@ -332,6 +335,7 @@ pub(crate) mod test_support {
             knot_version: KNOT_VERSION.to_string(),
             repo_name: "demo".to_string(),
             created_at: "2026-10-05T10:00:00Z".to_string(),
+            started_at: "2026-10-05T10:00:00Z".to_string(),
             updated_at: "2026-10-05T11:30:00Z".to_string(),
             source_fingerprint: "ab".repeat(32),
             commit_mode: CommitMode::Gitignore,

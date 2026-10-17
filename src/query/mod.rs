@@ -3,6 +3,7 @@
 
 pub mod callers;
 pub mod coverage;
+pub mod edits;
 pub mod explore;
 pub mod explore_refs;
 pub mod files;
