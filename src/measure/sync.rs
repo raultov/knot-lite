@@ -1,28 +1,58 @@
-//! Gate J1: Java edit synchronization across persistent workspaces (P6-D10, P6-D11).
+//! Gate J1: Java edit synchronization across persistent workspaces
+//! (P6-D10, P6-D11, P6 plan P6.8 steps 1–3) and gate P6-D12 (Rust/TS edits).
 //!
-//! Measures sync modes (off, open, watched) across scenarios S1, S2, S3
-//! without external shelling or process signalling by name.
+//! J1 has three scenarios, each measured in the four modes of P6-D11
+//! (`off`, `open`, `watched`, `open+watched`):
+//!
+//! - **S1** (`j1_s1.json`): the Maven fixture, one fresh pool per session
+//!   after an edit plus a re-index (P6.8 step 1, the CLI case).
+//! - **S2** (`j1_s2.json`): the Maven fixture, one long pool, no re-index
+//!   (P6.8 step 3, the MCP case).
+//! - **S3** (`j1_s3.json`): the `spring-ai` work copy, no re-index, with the
+//!   new caller in another module (P6.8 step 2).
+//!
+//! `j1_verdict` reads the three reports and computes the winner from the
+//! numbers; nothing about the outcome is hard-coded (decision R-D4).
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use super::edits::copy_dir_all;
+use super::edits::{EditGuard, copy_dir_all, ensure_work_copy};
 use super::lsp::{measurement_settings, pool_for_root_with, timed_callers};
-use super::{work_copy_path, write_gate};
+use super::{read_gate, sandbox_path, work_copy_path, write_gate};
+use crate::index::layout::IndexLayout;
+use crate::index::load::{LoadedIndex, LoadedRecord, load_index};
 use crate::lsp::sync::SyncMode;
+use crate::query::callers::CallersResponse;
+use crate::query::edits::EditedFiles;
+use crate::query::sources::heuristic_answer;
 
-/// What one session produced.
-#[derive(Debug, Serialize, Clone)]
+/// The modes of P6-D11; all four are measured in every scenario.
+const MODES: [SyncMode; 4] = [
+    SyncMode::Off,
+    SyncMode::Open,
+    SyncMode::Watched,
+    SyncMode::OpenWatched,
+];
+
+/// The edited file of the Maven fixture.
+const ORDER_JAVA: &str = "src/main/java/com/example/shop/model/Order.java";
+
+/// What one session produced. `first_answer_ms` is the first answer obtained
+/// after this session's edit: in S1 that includes the language server's cold
+/// start on a fresh pool, in S2 and S3 the pool is already warm.
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct J1SessionResult {
     session: usize,
     complete: bool,
-    ms: u64,
+    provenance: String,
+    first_answer_ms: u64,
+    edit_detected: bool,
 }
 
-/// Results of one mode in a scenario.
-#[derive(Debug, Serialize, Clone)]
+/// Results of one mode in one scenario.
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct J1ModeResult {
     mode: String,
     completed: usize,
@@ -31,20 +61,94 @@ struct J1ModeResult {
     sessions: Vec<J1SessionResult>,
 }
 
-/// Results of a scenario.
-#[derive(Debug, Serialize, Clone)]
-struct J1ScenarioResult {
+/// The report of one scenario: written by its own test, read by `j1_verdict`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct J1ScenarioReport {
+    gate: String,
     scenario: String,
     modes: Vec<J1ModeResult>,
 }
 
-/// Overall report for gate J1.
-#[derive(Debug, Serialize)]
-struct J1GateReport {
-    gate: &'static str,
-    scenarios: Vec<J1ScenarioResult>,
+/// The computed verdict of the gate.
+#[derive(Debug, Serialize, Deserialize)]
+struct J1VerdictReport {
+    gate: String,
     winner: String,
     note: String,
+    /// The three scenario reports this verdict is computed from.
+    scenarios: Vec<J1ScenarioReport>,
+    /// Sum of the per-scenario `avg_ms` of each mode.
+    cost: Vec<(String, u64)>,
+    /// Whether every scenario is complete for each mode.
+    passes: Vec<(String, bool)>,
+    /// Whether each mode stays within `off avg_ms + SYNC_WAIT` in every scenario.
+    bound_ok: Vec<(String, bool)>,
+    /// Historical 0.5.0 figure (P6 plan Appendix D), context only.
+    baseline_0_5_0_first_answer_ms: u64,
+}
+
+/// Whether the answer is live and lists the new caller, plus its provenance.
+fn answer_completeness(resp: &CallersResponse, caller: &str) -> (bool, String) {
+    let Some(target) = resp.targets.first() else {
+        return (false, "no_target".to_owned());
+    };
+    let has_caller = callers_contain(resp, caller);
+    let complete = target.provenance == "lsp-live" && has_caller;
+    (complete, target.provenance.to_owned())
+}
+
+/// Whether any caller row of the first target is named `caller`.
+fn callers_contain(resp: &CallersResponse, caller: &str) -> bool {
+    resp.targets.first().is_some_and(|target| {
+        target
+            .callers
+            .0
+            .iter()
+            .flat_map(|(_, rows)| rows)
+            .any(|row| row.name == caller)
+    })
+}
+
+/// The printable label of a session outcome.
+fn outcome(complete: bool) -> &'static str {
+    if complete { "COMPLETE" } else { "STALE" }
+}
+
+/// Turn the per-session answers into the mode summary.
+fn summarise(mode: SyncMode, sessions: Vec<J1SessionResult>) -> J1ModeResult {
+    let completed = sessions.iter().filter(|row| row.complete).count();
+    let total = sessions.len();
+    let avg_ms = if total == 0 {
+        0
+    } else {
+        sessions.iter().map(|row| row.first_answer_ms).sum::<u64>() / total as u64
+    };
+    J1ModeResult {
+        mode: mode.label().to_owned(),
+        completed,
+        total,
+        avg_ms,
+        sessions,
+    }
+}
+
+/// Run every mode of one scenario and write its report.
+fn run_scenario(name: &str, run: impl Fn(SyncMode) -> J1ModeResult) -> J1ScenarioReport {
+    let mut modes = Vec::with_capacity(MODES.len());
+    for mode in MODES {
+        println!("--- {name}: mode {:?} ---", mode);
+        modes.push(run(mode));
+    }
+    let report = J1ScenarioReport {
+        gate: "J1".to_owned(),
+        scenario: name.to_owned(),
+        modes,
+    };
+    write_gate(
+        &format!("j1_{}", name.split('_').next().unwrap_or(name)),
+        &report,
+    );
+    report
 }
 
 fn fixture_java_path() -> PathBuf {
@@ -72,7 +176,7 @@ fn run_warm_index(dir: &Path) {
             selection: crate::lsp::precompute::Selection::Heuristic,
             min_fanin: 20,
             max_targets: 200,
-            budget: Duration::from_secs(60),
+            budget: std::time::Duration::from_secs(60),
             probe_min_fanin: 3,
         },
     };
@@ -80,7 +184,7 @@ fn run_warm_index(dir: &Path) {
 }
 
 fn edit_order_add_caller(dir: &Path, caller_name: &str) {
-    let order = dir.join("src/main/java/com/example/shop/model/Order.java");
+    let order = dir.join(ORDER_JAVA);
     let content = std::fs::read_to_string(&order).expect("read order");
     if let Some(pos) = content.rfind('}') {
         let (head, tail) = content.split_at(pos);
@@ -92,74 +196,75 @@ fn edit_order_add_caller(dir: &Path, caller_name: &str) {
     }
 }
 
-/// Scenario S1: CLI after re-index on Maven fixture.
-fn run_s1_mode(mode: SyncMode, sessions_count: usize) -> J1ModeResult {
+// ---------------------------------------------------------------------------
+// S1: the Maven fixture, fresh pool per session, after an edit plus a re-index
+// ---------------------------------------------------------------------------
+
+/// One S1 session (P6.8 step 1).
+fn run_s1_session(mode: SyncMode, session: usize) -> J1SessionResult {
     let base_dir = work_copy_path("j1_s1");
-    let mut sessions = Vec::with_capacity(sessions_count);
-    let mut completed = 0;
-    let mut total_ms = 0;
+    setup_maven_fixture(&base_dir);
+    run_warm_index(&base_dir);
+    let before = load_index(&IndexLayout::for_repo(&base_dir)).expect("index before the edit");
 
-    for i in 1..=sessions_count {
-        setup_maven_fixture(&base_dir);
-        run_warm_index(&base_dir);
+    let mut warm = measurement_settings();
+    warm.sync = mode;
+    let (widx, ws, _root, wpool) = pool_for_root_with(&base_dir, warm);
+    let _ = timed_callers(&widx, &ws, &base_dir, "Order.getItems", Some(&wpool));
+    drop(wpool);
 
-        // Pre-warm query before edit
-        let mut warm_settings = measurement_settings();
-        warm_settings.sync = mode;
-        let (_idx, _s, _r, pool) = pool_for_root_with(&base_dir, warm_settings);
-        let _ = timed_callers(&_idx, &_s, &base_dir, "Order.getItems", Some(&pool));
-        drop(pool);
+    edit_order_add_caller(&base_dir, "size");
+    let edit_detected = EditedFiles::new(&before, &base_dir).is_changed(ORDER_JAVA);
+    assert!(
+        edit_detected,
+        "S1 session {session}: the edit must be visible before the re-index"
+    );
 
-        // Edit and re-index
-        edit_order_add_caller(&base_dir, "size");
-        run_warm_index(&base_dir);
+    run_warm_index(&base_dir);
+    let mut settings = measurement_settings();
+    settings.sync = mode;
+    let (index, settings, _root, pool) = pool_for_root_with(&base_dir, settings);
+    let (resp, ms) = timed_callers(&index, &settings, &base_dir, "Order.getItems", Some(&pool));
+    drop(pool);
 
-        // Measured query on new pool
-        let mut measure_settings = measurement_settings();
-        measure_settings.sync = mode;
-        let (index, settings, _r, pool) = pool_for_root_with(&base_dir, measure_settings);
-        let (resp, ms) = timed_callers(&index, &settings, &base_dir, "Order.getItems", Some(&pool));
-        drop(pool);
-
-        let complete = resp
-            .targets
-            .first()
-            .map(|t| {
-                t.callers
-                    .0
-                    .iter()
-                    .flat_map(|(_, rows)| rows)
-                    .any(|r| r.name == "size")
-            })
-            .unwrap_or(false);
-
-        if complete {
-            completed += 1;
-        }
-        total_ms += ms;
-        println!(
-            "  S1 {:?} session {i}/{sessions_count}: {} in {ms} ms",
-            mode,
-            if complete { "COMPLETE" } else { "STALE" }
-        );
-        sessions.push(J1SessionResult {
-            session: i,
-            complete,
-            ms,
-        });
-    }
-
-    let avg_ms = (total_ms as f64 / sessions_count as f64).round() as u64;
-    J1ModeResult {
-        mode: mode.label().to_owned(),
-        completed,
-        total: sessions_count,
-        avg_ms,
-        sessions,
+    let (complete, provenance) = answer_completeness(&resp, "size");
+    J1SessionResult {
+        session,
+        complete,
+        provenance,
+        first_answer_ms: ms,
+        edit_detected,
     }
 }
 
-/// Scenario S2: Long session without re-index on Maven fixture.
+/// Scenario S1: `sessions` fresh sessions per mode.
+fn run_s1_mode(mode: SyncMode, sessions: usize) -> J1ModeResult {
+    let rows = (1..=sessions)
+        .map(|i| {
+            let row = run_s1_session(mode, i);
+            println!(
+                "  S1 {:?} session {i}/{sessions}: {} in {} ms",
+                mode,
+                outcome(row.complete),
+                row.first_answer_ms
+            );
+            row
+        })
+        .collect();
+    summarise(mode, rows)
+}
+
+#[test]
+#[ignore = "J1 S1: Maven fixture, fresh session per edit (KNOT_LITE_MEASURE_WORK, KNOT_LITE_MEASURE_OUT)"]
+fn j1_s1_maven_cli() {
+    run_scenario("s1_maven_cli", |mode| run_s1_mode(mode, 16));
+}
+
+// ---------------------------------------------------------------------------
+// S2: the Maven fixture, one long pool, no re-index
+// ---------------------------------------------------------------------------
+
+/// Scenario S2 (P6.8 step 3): `iterations` edits in one session per mode.
 fn run_s2_mode(mode: SyncMode, iterations: usize) -> J1ModeResult {
     let base_dir = work_copy_path("j1_s2");
     setup_maven_fixture(&base_dir);
@@ -167,112 +272,389 @@ fn run_s2_mode(mode: SyncMode, iterations: usize) -> J1ModeResult {
 
     let mut settings = measurement_settings();
     settings.sync = mode;
-    let (index, settings, _r, pool) = pool_for_root_with(&base_dir, settings);
-
-    // Initial query
+    let (index, settings, _root, pool) = pool_for_root_with(&base_dir, settings);
     let _ = timed_callers(&index, &settings, &base_dir, "Order.getItems", Some(&pool));
 
-    let mut sessions = Vec::with_capacity(iterations);
-    let mut completed = 0;
-    let mut total_ms = 0;
-
+    let mut rows = Vec::with_capacity(iterations);
     for i in 1..=iterations {
-        let caller_name = format!("longCaller{i}");
-        edit_order_add_caller(&base_dir, &caller_name);
+        let caller = format!("longCaller{i}");
+        edit_order_add_caller(&base_dir, &caller);
+        let edit_detected = EditedFiles::new(&index, &base_dir).is_changed(ORDER_JAVA);
+        assert!(
+            edit_detected,
+            "S2 iter {i}: the edit must be visible to changed-set detection"
+        );
 
         let (resp, ms) = timed_callers(&index, &settings, &base_dir, "Order.getItems", Some(&pool));
-        let complete = resp
-            .targets
-            .first()
-            .map(|t| {
-                t.callers
-                    .0
-                    .iter()
-                    .flat_map(|(_, rows)| rows)
-                    .any(|r| r.name == caller_name)
-            })
-            .unwrap_or(false);
-
-        if complete {
-            completed += 1;
-        }
-        total_ms += ms;
+        let (complete, provenance) = answer_completeness(&resp, &caller);
         println!(
             "  S2 {:?} iter {i}/{iterations}: {} in {ms} ms",
             mode,
-            if complete { "COMPLETE" } else { "STALE" }
+            outcome(complete)
         );
-        sessions.push(J1SessionResult {
+        rows.push(J1SessionResult {
             session: i,
             complete,
-            ms,
+            provenance,
+            first_answer_ms: ms,
+            edit_detected,
         });
     }
-
     drop(pool);
-    let avg_ms = (total_ms as f64 / iterations as f64).round() as u64;
-    J1ModeResult {
-        mode: mode.label().to_owned(),
-        completed,
-        total: iterations,
-        avg_ms,
-        sessions,
-    }
+    summarise(mode, rows)
 }
 
 #[test]
-#[ignore = "J1: Java edit synchronization gate across scenarios"]
-fn j1_sync_gate() {
-    println!("=== J1 Gate: testing scenarios ===");
-
-    // Step 1: probe S1 with off, open, watched
-    println!("--- Scenario S1: CLI after re-index ---");
-    let s1_off = run_s1_mode(SyncMode::Off, 8);
-    let s1_open = run_s1_mode(SyncMode::Open, 8);
-    let s1_watched = run_s1_mode(SyncMode::Watched, 8);
-
-    println!("--- Scenario S2: Long MCP-like session ---");
-    let s2_off = run_s2_mode(SyncMode::Off, 8);
-    let s2_open = run_s2_mode(SyncMode::Open, 8);
-    let s2_watched = run_s2_mode(SyncMode::Watched, 8);
-
-    let scenarios = vec![
-        J1ScenarioResult {
-            scenario: "S1_maven_reindex".to_owned(),
-            modes: vec![s1_off.clone(), s1_open, s1_watched.clone()],
-        },
-        J1ScenarioResult {
-            scenario: "S2_maven_long_session".to_owned(),
-            modes: vec![s2_off.clone(), s2_open, s2_watched.clone()],
-        },
-    ];
-
-    let off_stale = (s1_off.total - s1_off.completed) + (s2_off.total - s2_off.completed);
-    let (winner, note) = if off_stale > 0 {
-        (
-            "watched".to_owned(),
-            format!("off had {off_stale} stale answers; watched completes all"),
-        )
-    } else {
-        (
-            "watched".to_owned(),
-            "off did not fail in isolated fixture runs; watched retained per P6-D11 decision D2"
-                .to_owned(),
-        )
-    };
-
-    println!("J1 Winner: {winner} ({note})");
-    write_gate(
-        "j1_sync",
-        &J1GateReport {
-            gate: "J1",
-            scenarios,
-            winner,
-            note,
-        },
-    );
+#[ignore = "J1 S2: Maven fixture, one long session (KNOT_LITE_MEASURE_WORK, KNOT_LITE_MEASURE_OUT)"]
+fn j1_s2_maven_mcp() {
+    run_scenario("s2_maven_mcp", |mode| run_s2_mode(mode, 8));
 }
 
+// ---------------------------------------------------------------------------
+// S3: the spring-ai work copy, the new caller in another module, no re-index
+// ---------------------------------------------------------------------------
+
+/// The pre-selected S3 pair (P6.8 step 2): a public no-argument method of
+/// `spring-ai-model` and a class of `models/spring-ai-openai` that calls it.
+#[derive(Debug, Clone)]
+struct S3Setup {
+    /// FQN of the method, as `find_callers` wants it.
+    target_fqn: String,
+    /// Method name.
+    method: String,
+    /// FQN of the declaring class, spelled as a Java type.
+    class_fqn: String,
+    /// Repo-relative path of the caller file.
+    caller_file: String,
+}
+
+/// The module of the S3 target.
+const S3_MODEL_PREFIX: &str = "spring-ai-model/src/main/java/";
+/// The module of the S3 caller; its pom depends on `spring-ai-model`.
+const S3_CALLER_PREFIX: &str = "models/spring-ai-openai/src/main/java/";
+
+/// Whether the declaration of `record` is a public instance method.
+fn is_public_instance_method(text: &str, record: &LoadedRecord) -> bool {
+    let start = record.line.l0.saturating_sub(1);
+    let end = record.line.l1.min(start + 6);
+    let decl = text
+        .lines()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .find(|line| line.contains(&format!("{}(", record.line.name)))
+        .unwrap_or("");
+    let head = decl.trim_start();
+    (head.starts_with("public ") || head.contains(" public "))
+        && !head.contains("static ")
+        && !head.contains("abstract ")
+}
+
+/// Whether the line looks like a declaration rather than a comment.
+fn decl_line(line: &str) -> bool {
+    let head = line.trim_start();
+    !head.is_empty() && !head.starts_with("//") && !head.starts_with('*') && !head.starts_with("/*")
+}
+
+/// Whether the file is one plain class: a class declaration and no interface,
+/// record or nested class on any declaration line.
+fn is_plain_class_file(text: &str) -> bool {
+    let mut class_decls = 0;
+    for line in text.lines() {
+        if !decl_line(line) {
+            continue;
+        }
+        if line.contains("interface ") || line.contains("record ") {
+            return false;
+        }
+        if line.contains("class ") {
+            if line.contains("abstract class") || line.contains("static class") {
+                return false;
+            }
+            class_decls += 1;
+        }
+    }
+    class_decls == 1
+}
+
+/// Choose the S3 target and caller file deterministically (lowest record id).
+fn select_s3_setup(index: &LoadedIndex, root: &Path) -> S3Setup {
+    let pom = std::fs::read_to_string(root.join("models/spring-ai-openai/pom.xml"))
+        .expect("spring-ai-openai pom");
+    assert!(
+        pom.contains("spring-ai-model"),
+        "models/spring-ai-openai must depend on spring-ai-model"
+    );
+
+    let target = index
+        .records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            record.file.starts_with(S3_MODEL_PREFIX)
+                && record.line.kind == "method"
+                && record.line.col.is_some()
+                && record.line.sig.as_deref() == Some("()")
+                && !record.line.tc
+        })
+        .filter(|(pos, record)| {
+            std::fs::read_to_string(root.join(&record.file)).is_ok_and(|text| {
+                is_plain_class_file(&text) && is_public_instance_method(&text, record)
+            }) && !heuristic_answer(index, *pos).containers.is_empty()
+        })
+        .min_by_key(|(_, record)| record.line.id.clone())
+        .map(|(_, record)| record)
+        .expect("an S3 target: a public no-arg method of spring-ai-model");
+
+    let mut callers: Vec<String> = index
+        .file_sha16
+        .keys()
+        .filter(|rel| rel.starts_with(S3_CALLER_PREFIX) && rel.ends_with(".java"))
+        .cloned()
+        .collect();
+    callers.sort();
+    let caller_file = callers
+        .into_iter()
+        .find(|rel| {
+            std::fs::read_to_string(root.join(rel))
+                .is_ok_and(|text| is_plain_class_file(&text) && text.rfind('}').is_some())
+        })
+        .expect("an S3 caller class of spring-ai-openai");
+
+    let method = target.line.name.clone();
+    let class_fqn = target
+        .line
+        .fqn
+        .strip_suffix(&format!(".{method}"))
+        .unwrap_or(&target.line.fqn)
+        .to_owned();
+    S3Setup {
+        target_fqn: target.line.fqn.clone(),
+        method,
+        class_fqn,
+        caller_file,
+    }
+}
+
+/// Add the S3 caller of `setup` to its file (before the final `}`).
+fn edit_s3_add_caller(root: &Path, setup: &S3Setup, caller: &str) {
+    let path = root.join(&setup.caller_file);
+    let content = std::fs::read_to_string(&path).expect("read S3 caller file");
+    let pos = content.rfind('}').expect("a closing brace");
+    let (head, tail) = content.split_at(pos);
+    let addition = format!(
+        "\n    public void {caller}({} t) {{ t.{}(); }}\n",
+        setup.class_fqn, setup.method
+    );
+    std::fs::write(&path, format!("{head}{addition}{tail}")).expect("write S3 caller file");
+}
+
+/// One S3 session: a fresh pool on the work copy, one edit, no re-index.
+fn run_s3_session(setup: &S3Setup, mode: SyncMode, session: usize) -> J1SessionResult {
+    let root = work_copy_path("spring-ai");
+    let caller = format!("klJ1Caller{session}");
+    let guard = EditGuard::new(root.join(&setup.caller_file));
+    edit_s3_add_caller(&root, setup, &caller);
+
+    let mut settings = measurement_settings();
+    settings.sync = mode;
+    let (index, settings, _root, pool) = pool_for_root_with(&root, settings);
+    let edit_detected = EditedFiles::new(&index, &root).is_changed(&setup.caller_file);
+    assert!(
+        edit_detected,
+        "S3 session {session}: the edit must be visible to changed-set detection"
+    );
+
+    let (resp, ms) = timed_callers(&index, &settings, &root, &setup.target_fqn, Some(&pool));
+    drop(pool);
+    drop(guard);
+
+    let (complete, provenance) = answer_completeness(&resp, &caller);
+    J1SessionResult {
+        session,
+        complete,
+        provenance,
+        first_answer_ms: ms,
+        edit_detected,
+    }
+}
+
+/// Scenario S3 (P6.8 step 2): `sessions` fresh sessions per mode.
+fn run_s3_mode(setup: &S3Setup, mode: SyncMode, sessions: usize) -> J1ModeResult {
+    let rows = (1..=sessions)
+        .map(|i| {
+            let row = run_s3_session(setup, mode, i);
+            println!(
+                "  S3 {:?} session {i}/{sessions}: {} in {} ms",
+                mode,
+                outcome(row.complete),
+                row.first_answer_ms
+            );
+            row
+        })
+        .collect();
+    summarise(mode, rows)
+}
+
+#[test]
+#[ignore = "J1 S3: spring-ai work copy, the caller in another module (KNOT_LITE_MEASURE_WORK, KNOT_LITE_MEASURE_OUT)"]
+fn j1_s3_spring_ai() {
+    let root = work_copy_path("spring-ai");
+    let _ = ensure_spring_ai_work_copy(&root);
+    let index = load_index(&IndexLayout::for_repo(&root)).expect("spring-ai index");
+    let setup = select_s3_setup(&index, &root);
+    println!(
+        "S3 target: {} in {} (class {}), caller {}",
+        setup.method, setup.target_fqn, setup.class_fqn, setup.caller_file
+    );
+    run_scenario("s3_spring_ai", |mode| run_s3_mode(&setup, mode, 8));
+}
+
+/// Make sure the `spring-ai` work copy exists and carries its index.
+fn ensure_spring_ai_work_copy(root: &Path) -> PathBuf {
+    let src = sandbox_path("spring-ai");
+    if !root.join(".knot-lite/manifest.toml").exists() {
+        ensure_work_copy("spring-ai");
+    }
+    assert!(
+        root.join(".knot-lite/manifest.toml").exists(),
+        "the spring-ai work copy must carry its index ({} -> {})",
+        src.display(),
+        root.display()
+    );
+    root.to_path_buf()
+}
+
+// ---------------------------------------------------------------------------
+// Verdict: computed from the three reports, never hard-coded (R-D4)
+// ---------------------------------------------------------------------------
+
+/// The 0.5.0 first-answer figure (P6 plan Appendix D), context only.
+const BASELINE_0_5_0_FIRST_ANSWER_MS: u64 = 9_700;
+
+/// Every scenario a mode must complete to pass J1 (P6 §11).
+const REQUIRED: [(&str, usize); 3] = [
+    ("s1_maven_cli", 16),
+    ("s2_maven_mcp", 8),
+    ("s3_spring_ai", 8),
+];
+
+/// Compute the verdict from the three scenario reports.
+fn compute_verdict(reports: &[J1ScenarioReport]) -> J1VerdictReport {
+    let off_avg: Vec<u64> = reports
+        .iter()
+        .map(|report| {
+            report
+                .modes
+                .iter()
+                .find(|m| m.mode == "off")
+                .map_or(0, |m| m.avg_ms)
+        })
+        .collect();
+
+    let mut cost = Vec::new();
+    let mut passes = Vec::new();
+    let mut bound_ok = Vec::new();
+    for mode in MODES {
+        let label = mode.label().to_owned();
+        let mut total = 0;
+        let mut complete_all = true;
+        let mut within_bound = true;
+        for (idx, report) in reports.iter().enumerate() {
+            let Some(row) = report.modes.iter().find(|m| m.mode == label) else {
+                complete_all = false;
+                within_bound = false;
+                continue;
+            };
+            total += row.avg_ms;
+            let need = REQUIRED[idx].1;
+            if row.completed < need || row.total != need {
+                complete_all = false;
+            }
+            if row.avg_ms > off_avg[idx] + 10_000 {
+                within_bound = false;
+            }
+        }
+        cost.push((label.clone(), total));
+        passes.push((label.clone(), complete_all));
+        bound_ok.push((label.clone(), within_bound));
+    }
+
+    let watched_cost = cost
+        .iter()
+        .find(|(name, _)| name == "watched")
+        .map_or(0, |(_, ms)| *ms);
+    let best = cost
+        .iter()
+        .filter(|(name, _)| {
+            passes.iter().any(|(p_name, ok)| p_name == name && *ok)
+                && bound_ok.iter().any(|(b_name, ok)| b_name == name && *ok)
+        })
+        .min_by_key(|(_, ms)| *ms)
+        .map(|(name, _)| name.clone());
+
+    let (winner, note) = match best {
+        Some(name) if name == "watched" => (
+            name,
+            "watched is the cheapest mode that completes every scenario and stays within the bound"
+                .to_owned(),
+        ),
+        Some(name) if watched_cost > 0 && name_cost(&cost, &name) * 105 >= watched_cost * 100 => (
+            "watched".to_owned(),
+            format!(
+                "{name} is within 5% of watched and both pass; watched stays the default (noise rule, decision D2)"
+            ),
+        ),
+        Some(name) => (
+            name.clone(),
+            format!("{name} is the cheapest mode that completes every scenario within the bound"),
+        ),
+        None => (
+            "none".to_owned(),
+            "no mode completed every scenario within the bound (decision R-D4: stop and report)"
+                .to_owned(),
+        ),
+    };
+
+    J1VerdictReport {
+        gate: "J1".to_owned(),
+        winner,
+        note,
+        scenarios: reports.to_vec(),
+        cost,
+        passes,
+        bound_ok,
+        baseline_0_5_0_first_answer_ms: BASELINE_0_5_0_FIRST_ANSWER_MS,
+    }
+}
+
+/// The cost of one mode, as recorded by [`compute_verdict`].
+fn name_cost(cost: &[(String, u64)], name: &str) -> u64 {
+    cost.iter()
+        .find(|(n, _)| n == name)
+        .map_or(0, |(_, ms)| *ms)
+}
+
+#[test]
+#[ignore = "J1 verdict: read j1_s1/j1_s2/j1_s3 and compute the winner (KNOT_LITE_MEASURE_OUT)"]
+fn j1_verdict() {
+    let reports: Vec<J1ScenarioReport> = REQUIRED
+        .iter()
+        .map(|(name, _)| read_gate(&format!("j1_{}", name.split('_').next().unwrap_or(name))))
+        .collect();
+    for (report, (name, need)) in reports.iter().zip(REQUIRED) {
+        for mode in &report.modes {
+            println!(
+                "  {} {:>13}: {}/{} complete (need {need}), avg {} ms",
+                name, mode.mode, mode.completed, mode.total, mode.avg_ms
+            );
+        }
+    }
+    let verdict = compute_verdict(&reports);
+    println!("J1 winner: {} ({})", verdict.winner, verdict.note);
+    write_gate("j1_sync", &verdict);
+}
+
+// ---------------------------------------------------------------------------
 #[derive(Debug, Serialize, Clone)]
 struct RustTsEditResult {
     lang: String,

@@ -127,6 +127,15 @@ fn write_gate(name: &str, value: &impl Serialize) {
     std::fs::write(measure_out_dir().join(format!("{name}.json")), text).expect("write gate");
 }
 
+/// Read back a report written by [`write_gate`] (the verdict of a gate that
+/// only summarises what its parts measured).
+fn read_gate<T: serde::de::DeserializeOwned>(name: &str) -> T {
+    let path = measure_out_dir().join(format!("{name}.json"));
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+}
+
 mod edits;
 mod explore;
 mod hybrid;
