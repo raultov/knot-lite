@@ -34,14 +34,14 @@ knot-lite files -p src/                       # list indexed files
 knot-lite files -p 'src/**/*.rs'              # ... or the files matching a glob
 ```
 
-## Tools & Capabilities (0.5.0)
+## Tools & Capabilities (0.6.0)
 
 | Tool | Capability | Provenance |
 |---|---|---|
-| `status` | Capability matrix (tiers 3/2/1/0 per language) + index details, counts, model, freshness; language-server state (running, version, memory, pre-computed or not) | — |
+| `status` | Capability matrix (tiers 3/2/1/0 per language) + index details, counts, model, freshness; language-server state (running, version, memory, sync mode, pre-computed or not) | — |
 | `search_hybrid_context` | Cosine top-k over entities and tier-1 line-window chunks (default), or opt-in hybrid ranking with `KNOT_LITE_SEARCH=hybrid`: recall pool + BM25 keyword channel, knot's kind-aware re-rank, reciprocal-rank fusion | `vector` / `hybrid` |
-| `find_callers` | knot's target tiers (exact FQN → FQN suffix → exact name → signature prefix → name prefix / fuzzy substring), container-level callers grouped by relationship; per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
-| `explore_file` | File entities grouped by family, with distinct-caller counts per entity and markup summaries; a changed or unindexed file of a language-server language is described by the server's outline | `lsp-live` / `lsp-indexed` / `heuristic` per entity |
+| `find_callers` | knot's target tiers (exact FQN → FQN suffix → exact name → signature prefix → name prefix / fuzzy substring), container-level callers grouped by relationship; targets in changed files re-anchored live (`lsp.reanchored = true`) and attributed through fresh overlay containers (`indexed: false` for new containers); per-target source | `lsp-live` / `lsp-indexed` / `heuristic` |
+| `explore_file` | File entities grouped by family, with distinct-caller counts per entity and markup summaries; counts on changed files attributed through fresh overlay containers; a changed or unindexed file of a language-server language is described by the server's outline | `lsp-live` / `lsp-indexed` / `heuristic` per entity |
 | `list_files` | Indexed files with entity and chunk counts, prefix or glob filter | — |
 
 ## Indexing (`knot-lite index`)
@@ -115,6 +115,19 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
 - **Memory** (resident, measured): rust-analyzer ≈ 3.1 GiB on a 4.8 k-entity repository, jdtls ≈ 1.4 GiB on
   `spring-ai` (it may grow up to its `-Xmx8g`), typescript-language-server ≈ 0.6 GiB on a 1.5 k-entity repository.
   `status` shows each running server's pid, readiness time and memory.
+- **Edit awareness (0.6.0).** Language servers no longer fall back to heuristic when a file is edited. On each query,
+  knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks:
+  - *Re-anchoring:* If a target's declaration moved or its file changed, the file is re-parsed with knot's parser,
+    the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
+  - *Overlay attribution:* Server response locations in changed files are mapped to fresh containers; newly added methods/functions
+    unknown to the index are emitted with `indexed: false`.
+  - *Freshness rule for pre-computed answers:* Pre-computed targets are served `lsp-indexed` only when their own file is unchanged,
+    no pre-computed caller is in a changed file, and no changed file of that language mentions the target's name as an identifier.
+    Otherwise, knot-lite asks the language server live and, if the live query fails, falls back to the pre-computed answer marked with
+    `lsp.outdated = true`.
+  - *Edit synchronization:* For language servers that need workspace change notifications (jdtls), knot-lite synchronizes changed files
+    before each query via `workspace/didChangeWatchedFiles` (`SyncMode::Watched`, configured by `KNOT_LITE_LSP_SYNC`), ensuring the server's
+    in-memory index stays fresh.
 
 ## Security
 
@@ -210,12 +223,23 @@ re-measured the same day (see `docs/PLAN_PHASE5_SEARCH_LSP_CI.md`, Appendix D):
   The bars for making it the default were 85 % overlap, +10 points and ×1.10, so `heuristic` stays the default.
   Answers pre-computed with `lsp-refs`: p95 2 ms, 10/10 identical to the live answer.
 
+## Performance & Baselines (Phase 6 Measurements)
+
+Measured with the release build of 0.6.0 (knot 1.11.3) on work copies of `knot`, `knot-site`, and `spring-ai` (see `docs/PLAN_PHASE6_EDIT_AWARE_LSP.md`, Appendix D):
+
+- **Changed-set detection (Gate E1):** p95 latency ≤ 3 ms on `knot` and ≤ 18 ms on `spring-ai` with 0 changes (stat-first, hashes candidates only); with 20 changed files latency increased by ≤ +6 ms (well under the +10 ms gate).
+- **Re-anchoring accuracy (Gate R1):** 20/20 Rust, 20/20 TypeScript, and 20/20 Java targets returned identical caller container sets between re-anchored live queries on edited files and queries after re-indexing; 5/5 targets with deleted declarations correctly diagnosed as `stale_target`.
+- **Pre-computed freshness rule (Gate P1):** Unchanged targets and targets whose changes did not mention their name served `lsp-indexed` in 2–3 ms; targets with newly added callers in other files asked live and included the new callers (10/10); server failure fell back to `lsp-indexed` with `outdated: true`.
+- **Java edit synchronization (Gate J1):** With `SyncMode::Watched`, 16/16 Maven first sessions complete on the first attempt (compared to 0/8 with 0.5.0's `off` mode, which served stale background index results). The Phase 4 E2E retry loop on V21b was completely removed.
+
 ## Limitations
 
 - **Hybrid search is opt-in:** by default `search_hybrid_context` ranks by cosine similarity (as in 0.4.x). `KNOT_LITE_SEARCH=hybrid` turns on knot's candidate pool built in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, ordered by knot's own re-rank (`rerank`, called from the knot crate) and fused with the keyword order. On the Phase 5 query set the hybrid ranking gained 6.6 points of hit@5 over cosine on the held-out queries (83.3 % vs 76.7 %) — short of the 10-point bar this release required to make it the default — and lost one `knot-site` query; it is stronger on identifier queries and weaker on documentation/config questions, where knot's re-rank prefers definitions. The call-graph signal uses the heuristic `CALLS` edges only. Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`.
-- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting or the target's file changed since the index, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). A changed file falls back until `knot-lite index` runs again — except for a target that was pre-computed: it keeps its pre-computed answer (the note says when it was computed) until the next index. Unsaved edits are not sent to servers.
-- **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed or unindexed file, live counts attribute callers through the containers of the last index, so they can be approximate until `knot-lite index` runs.
-- **Java right after an edit:** jdtls updates its index in the background, so the first live answer after a Java file was edited (and `knot-lite index` re-run) can still describe the file as it was — measured on a one-module Maven project, the call hierarchy missed the new caller in 6 of 8 first sessions and the merged answer in 3 of 8; the next session was complete every time (8 of 8). Ask again, or use the heuristic edges (`--no-lsp`), which are rebuilt by the index.
+- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting, disabled or hits budget/deadline limits, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). If a target's declaration was deleted from a changed file, it is diagnosed as `stale_target`. Edits in existing files are automatically re-anchored live and synchronized to the server; unsaved in-editor buffers are not seen until saved to disk.
+- **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed file, live counts are attributed through fresh overlay containers.
+- **Java right after an edit (resolved in 0.6.0):** jdtls is now synchronized before each query via `workspace/didChangeWatchedFiles` (`KNOT_LITE_LSP_SYNC=watched`), resolving the Phase 4 background indexing lag (16/16 first sessions complete on first attempt).
+- **Files created after the index:** newly created files not yet present in the index inventory are not walked during queries; run `knot-lite index` to index new files.
+- **References that never spell the target's name:** the freshness rule checks whether changed files contain the target's identifier name. References that never spell the name (such as anonymous lambdas implementing a single-method functional interface) may not trigger live re-querying until re-indexed.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
 - **Test code in the re-rank:** knot marks entities inside Rust `#[cfg(test)]` modules as test context; for Java,
   TypeScript and JavaScript the hybrid re-rank recognises tests by their path only.
@@ -248,6 +272,7 @@ modified and the `.env` file is never written.
 | `KNOT_LITE_SEARCH` | `vector` (default, the 0.4.x cosine top-k) / `hybrid` (opt-in hybrid ranking): ranking of `search_hybrid_context`; `status` shows the mode in force |
 | `KNOT_LITE_LSP` | `on` (default) / `off`: master switch for starting language servers (pre-computed data is still read when `off`) |
 | `KNOT_LITE_LSP_BUILD_EXEC` | `on` (default) / `off`: no rust-analyzer build scripts or proc-macros, no jdtls Gradle import |
+| `KNOT_LITE_LSP_SYNC` | `watched` (default) / `open` / `off` / `open+watched`: edit synchronization mode for language servers (jdtls) |
 | `KNOT_LITE_LSP_CACHE_DIR` | root of the per-repository scratch directories (default `$HOME/.cache/knot-lite/lsp`) |
 | `KNOT_LITE_LSP_READY_WAIT_SECS` | how long a query waits for a starting server (CLI: the server's ready timeout; MCP: 20) |
 | `KNOT_LITE_LSP_IDLE_SECS` | MCP: stop a server unused for this long (default 900; `0` = never) |

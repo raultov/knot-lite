@@ -70,14 +70,14 @@ src/
 ├── config.rs         Config, OutputFormat, CommonArgs, EmbedSettings, pure resolver
 ├── error.rs          IndexUnavailable, QueryUnavailable (typed diagnostics, exit code 2)
 ├── utils.rs          logging (stderr only)
-├── measure/          #[cfg(test)] #[ignore] measurement gates: phase2 (M1–M8), lsp (L1–L12), hybrid (H1–H3, M4r, M5r), explore (X1, X2), precompute (L13, L7s)
+├── measure/          #[cfg(test)] #[ignore] measurement gates: phase2 (M1–M8), lsp (L1–L12), hybrid (H1–H3, M4r, M5r), explore (X1, X2), precompute (L13, L7s), edits (E1, R1, P1)
 ├── models/           cli_args (clap), params (run_* contracts), repo_scope
-├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load, search_aux (lazy BM25 + call graph)
+├── index/            layout, manifest, select, inventory, record_io, encode, shard, edges, lsp_records, chunk, build, reuse, load, search_aux (lazy BM25 + call graph), reparse (fresh file records)
 ├── lexicon/          tokenize (kl-lex-1), store (lexicon/<rel>.jsonl), bm25
 ├── embed/            EmbedBatch trait, EmbedSettings, FakeEmbedder, KnotEmbedder
 ├── graph/            containers (ContainerTable), heuristic (resolve_edges), fanin (caller_fanin)
-├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters (prefix / glob), render, search + hybrid (pool, coverage, fusion), callers + sources (indexed / live / heuristic per target), explore + explore_refs + outline, files
-├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker; one lock per language), owner (ownership mark + sweeps), process (the only spawn), session, spec, target, ops, outline (documentSymbol), normalize, request, precompute (heuristic / lsp-refs selection), probe, launch, readiness, preopen, position, uri, settings (+ fake, tests only)
+├── query/            session (QueryServices, IndexCache, EmbedderCache, LSP pool), filters (prefix / glob), render, search + hybrid (pool, coverage, fusion), callers + sources (indexed / live / heuristic per target), explore + explore_refs + outline, files, edits (EditedFiles changed set)
+├── lsp/              pool/ (own thread + runtime: mod, factory, slot, start, worker; one lock per language), owner (ownership mark + sweeps), process (the only spawn), session, spec, target, ops, outline (documentSymbol), normalize, request, precompute (heuristic / lsp-refs selection), probe, launch, readiness, preopen, position, uri, settings, sync (edit sync + ledger) (+ fake, tests only)
 ├── capability/       language labels, which(), lsp_registry, scan, tier model
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)

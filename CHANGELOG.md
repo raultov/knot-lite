@@ -5,13 +5,15 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - unreleased
 
-### Planned (Phase 6)
-- **Re-anchor stale targets:** `find_callers` and `explore_file` re-parse a changed file and ask the language server at the fresh position instead of falling back to `stale_target`.
-- **Fresh caller attribution:** server locations in changed files are grouped by the current containers of the re-parsed file (overlay); unknown containers are reported with `indexed: false`.
-- **Freshness rule for pre-computed answers:** `lsp-indexed` is served only when no edit can have changed it; otherwise the target is asked live and the pre-computed answer becomes a marked fallback (`outdated: true`).
-- **Edit sync for jdtls:** the server is told about changed files before each request (modes selected by measurement); the Phase 4 V21b retry loop is removed.
+### Added
+- **Re-anchor stale targets:** `find_callers` and `explore_file` re-parse changed files using knot's parser, re-anchor shifted targets to their fresh line and column (`lsp.reanchored = true`), and continue live language-server queries without waiting for `knot-lite index`.
+- **Overlay caller attribution:** live language-server reference locations in changed files are grouped by fresh container tables; newly added containers not present in the index are emitted with `indexed: false`.
+- **Pre-computed freshness rule (P6-D8):** `lsp-indexed` answers are served only when no edit can have affected them (target file unchanged, no pre-computed caller in a changed file, and no changed file mentions the target's name).
+- **Outdated indexed fallback (P6-D9):** when an outdated target cannot be answered live by the server, it falls back to the pre-computed answer marked with `lsp.outdated = true` and an explanatory diagnostic note.
+- **Language server edit synchronization (`sync`):** jdtls receives `workspace/didChangeWatchedFiles` notifications for modified and deleted project files before requests (`SyncMode::Watched`, frozen as default based on gate J1); `KNOT_LITE_LSP_SYNC` allows configuring `off`, `open`, `watched`, or `open+watched`.
+- **E2E tests for edits:** rows covering stale declaration deletion (`*44`), line shifting (`*45`), unrelated edits with pre-computed reuse (`*46`), new caller detection (`*47`), server failure fallback to outdated (`*48`), and live MCP edit-awareness (`*49`).
 
 ## [0.5.0] - 2026-10-10
 
