@@ -855,11 +855,13 @@ pub(super) fn timed_callers(
     query: &str,
     pool: Option<&crate::lsp::pool::LspPool>,
 ) -> (crate::query::callers::CallersResponse, u64) {
+    let repo = root.file_name().and_then(|f| f.to_str()).unwrap_or("repo");
     let any = knot::cli_tools::kinds::KindFilter::parse(Some("all"));
+    let edits = crate::query::edits::EditedFiles::new(index, root);
     let started = std::time::Instant::now();
     let response = callers_response(&CallersContext {
         index,
-        repo: "spring-ai",
+        repo,
         query,
         max_targets: 500,
         filter: &any,
@@ -868,7 +870,7 @@ pub(super) fn timed_callers(
             repo_root: root,
             pool,
         },
-        edits: None,
+        edits: Some(&edits),
     });
     (
         response,
