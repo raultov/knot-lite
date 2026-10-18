@@ -249,9 +249,16 @@ fn j1_sync_gate() {
 
     let off_stale = (s1_off.total - s1_off.completed) + (s2_off.total - s2_off.completed);
     let (winner, note) = if off_stale > 0 {
-        ("watched".to_owned(), format!("off had {off_stale} stale answers; watched completes all"))
+        (
+            "watched".to_owned(),
+            format!("off had {off_stale} stale answers; watched completes all"),
+        )
     } else {
-        ("watched".to_owned(), "off did not fail in isolated fixture runs; watched retained per P6-D11 decision D2".to_owned())
+        (
+            "watched".to_owned(),
+            "off did not fail in isolated fixture runs; watched retained per P6-D11 decision D2"
+                .to_owned(),
+        )
     };
 
     println!("J1 Winner: {winner} ({note})");
