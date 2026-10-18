@@ -133,3 +133,4 @@ mod hybrid;
 mod lsp;
 mod phase2;
 mod precompute;
+mod sync;

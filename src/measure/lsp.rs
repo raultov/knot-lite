@@ -945,19 +945,26 @@ fn pool_for_repo(var: &str) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::p
     pool_for_root(&PathBuf::from(root))
 }
 
-/// Load the index of the repository at `root` and create the pool (no server
-/// starts until the first query of a language).
-pub(super) fn pool_for_root(
+/// Load the index of the repository at `root` and create the pool with custom settings.
+pub(super) fn pool_for_root_with(
     root: &Path,
+    settings: LspSettings,
 ) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
     let root = root.canonicalize().expect("measured repo");
     let index = load_index(&IndexLayout::for_repo(&root)).expect("load the measured index");
-    let settings = measurement_settings();
     let files: Vec<String> = index.file_sha16.keys().cloned().collect();
     let mut cfg = crate::config::test_support::config_for(root.clone());
     cfg.lsp = settings.clone();
     let pool = start_pool(&cfg, &files, CLI_READY_WAIT, Some(index.stamp.clone())).expect("pool");
     (index, settings, root, pool)
+}
+
+/// Load the index of the repository at `root` and create the pool (no server
+/// starts until the first query of a language).
+pub(super) fn pool_for_root(
+    root: &Path,
+) -> (LoadedIndex, LspSettings, PathBuf, crate::lsp::pool::LspPool) {
+    pool_for_root_with(root, measurement_settings())
 }
 
 /// Warm both languages (the cold starts are not part of the assertion);

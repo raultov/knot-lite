@@ -19,7 +19,7 @@ use crate::index::load::load_index;
 use crate::query::edits::EditedFiles;
 
 /// Copy directory recursively, skipping target, node_modules, and .git.
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+pub(super) fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
