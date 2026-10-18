@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.1] - unreleased
 
 ### Fixed
-- **Phase 6 measurements:** real benchmark measurements for gates E1 (changed-set detection), R1 (re-anchoring accuracy), P1 (pre-computed freshness rule), and J1 (Java edit synchronization) executed on work copies with real language servers.
+- **Phase 6 real measurements:** verified all benchmark gates with real language servers on persistent sandbox work copies:
+  - Gate E1: changed-set cost p95 2 ms (knot), 28 ms (spring-ai, +0 ms overhead with 20 changes).
+  - Gate R1: re-anchoring accuracy 20/20 identical (knot), 18/18 identical (knot-site), 20/20 identical (spring-ai); 5/5 deletion detections per repo.
+  - Gate P1: freshness rule passed 10/10 targets across all 4 conditions (indexed, unrelated edit, added caller live query, outdated fallback on server failure).
+  - Gate J1: Java edit sync confirmed with real stale-answer reproduction in `off` mode (4 stale failures across S1 and S2); `watched` mode confirmed 16/16 complete answers.
+  - Gate P6-D12: long-lived MCP sessions in Rust and TypeScript verified 8/8 without requiring client file sync.
 
 ## [0.6.0] - 2026-10-18
 
