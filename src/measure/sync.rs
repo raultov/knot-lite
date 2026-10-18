@@ -655,18 +655,47 @@ fn j1_verdict() {
 }
 
 // ---------------------------------------------------------------------------
-#[derive(Debug, Serialize, Clone)]
+// P6-D12: Rust and TypeScript edits in a long session
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct RustTsEditResult {
     lang: String,
+    /// `fixture` (the E2E fixture) or `work_copy` (the `knot` / `knot-site` work copies).
+    subject: String,
     iterations_completed: usize,
     iterations_total: usize,
     passed: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RustTsReport {
-    gate: &'static str,
+    gate: String,
     results: Vec<RustTsEditResult>,
+}
+
+/// One P6-D12 case: the repository, the query and the new caller it adds.
+#[derive(Debug, Clone)]
+struct D12Case {
+    /// Language label (`rust`, `typescript`).
+    lang: &'static str,
+    /// `fixture` (the E2E fixture) or `work_copy` (P61.14).
+    subject: &'static str,
+    /// Directory name under `KNOT_LITE_MEASURE_WORK`.
+    work_name: &'static str,
+    /// Fixture directory, for `subject == "fixture"`.
+    fixture: Option<&'static str>,
+    /// Sandbox repository, for `subject == "work_copy"`.
+    repo: &'static str,
+    query: String,
+    /// Repo-relative file the new caller is appended to.
+    caller_file: String,
+    /// New caller name, with `{i}` for the iteration.
+    caller_name: String,
+    /// New caller text, with `{i}` for the iteration.
+    caller_text: String,
+    /// Line inserted at the top of the caller file before the first edit.
+    import_line: Option<String>,
 }
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -675,126 +704,302 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn run_rust_long_session(iterations: usize) -> RustTsEditResult {
-    let base_dir = work_copy_path("rust_long_session");
-    let src = fixture_path("rust");
-    let _ = std::fs::remove_dir_all(&base_dir);
-    copy_dir_all(&src, &base_dir).expect("copy rust fixture");
-    run_warm_index(&base_dir);
+/// The repository of one P6-D12 case: a fresh fixture or an existing work copy.
+fn d12_setup(case: &D12Case) -> PathBuf {
+    let root = work_copy_path(case.work_name);
+    match case.subject {
+        "fixture" => {
+            let src = fixture_path(case.fixture.expect("a fixture name"));
+            let _ = std::fs::remove_dir_all(&root);
+            copy_dir_all(&src, &root).expect("copy fixture");
+            if case.lang == "typescript" {
+                let node_modules_src = sandbox_path("knot-site").join("node_modules");
+                #[cfg(unix)]
+                if node_modules_src.exists() {
+                    let _ =
+                        std::os::unix::fs::symlink(&node_modules_src, root.join("node_modules"));
+                }
+            }
+            run_warm_index(&root);
+        }
+        _ => {
+            ensure_work_copy(case.repo);
+        }
+    }
+    root
+}
 
+/// Run one P6-D12 case: `iterations` edit + query rounds in one long session.
+fn run_d12_case(case: &D12Case, iterations: usize) -> RustTsEditResult {
+    let root = d12_setup(case);
     let mut settings = measurement_settings();
     settings.sync = SyncMode::Off;
-    let (index, settings, _r, pool) = pool_for_root_with(&base_dir, settings);
+    let (index, settings, _root, pool) = pool_for_root_with(&root, settings);
+    let _ = timed_callers(&index, &settings, &root, &case.query, Some(&pool));
 
-    let _ = timed_callers(&index, &settings, &base_dir, "total_area", Some(&pool));
-
-    let shapes = base_dir.join("src/shapes.rs");
+    let abs = root.join(&case.caller_file);
     let mut completed = 0;
     for i in 1..=iterations {
-        let mut content = std::fs::read(&shapes).expect("read");
-        let addition =
-            format!("\npub fn caller_{i}() -> f64 {{ crate::geometry::total_area(&[]) }}\n");
-        content.extend_from_slice(addition.as_bytes());
-        std::fs::write(&shapes, content).expect("write");
+        let mut content = std::fs::read(&abs).expect("read caller file");
+        if i == 1
+            && let Some(import) = &case.import_line
+            && !String::from_utf8_lossy(&content).contains(import.trim())
+        {
+            let mut with_import = import.as_bytes().to_vec();
+            with_import.push(b'\n');
+            with_import.extend_from_slice(&content);
+            content = with_import;
+        }
+        let caller = case.caller_name.replace("{i}", &i.to_string());
+        content.extend_from_slice(case.caller_text.replace("{i}", &i.to_string()).as_bytes());
+        std::fs::write(&abs, &content).expect("write caller file");
 
-        let (resp, _) = timed_callers(&index, &settings, &base_dir, "total_area", Some(&pool));
-        let caller_name = format!("caller_{i}");
-        let has = resp
-            .targets
-            .first()
-            .map(|t| {
-                t.callers
-                    .0
-                    .iter()
-                    .flat_map(|(_, rows)| rows)
-                    .any(|r| r.name == caller_name)
-            })
-            .unwrap_or(false);
+        let edit_detected = EditedFiles::new(&index, &root).is_changed(&case.caller_file);
+        assert!(
+            edit_detected,
+            "{} iter {i}: the edit must be visible to changed-set detection",
+            case.lang
+        );
+
+        let (resp, _) = timed_callers(&index, &settings, &root, &case.query, Some(&pool));
+        let has = callers_contain(&resp, &caller);
         if has {
             completed += 1;
         }
         println!(
-            "  Rust iter {i}/{iterations}: {}",
-            if has { "FOUND" } else { "MISSED" }
+            "  {} {} iter {i}/{iterations}: {}",
+            case.lang,
+            case.subject,
+            outcome(has)
         );
     }
     drop(pool);
     RustTsEditResult {
-        lang: "rust".to_owned(),
+        lang: case.lang.to_owned(),
+        subject: case.subject.to_owned(),
         iterations_completed: completed,
         iterations_total: iterations,
         passed: completed == iterations,
     }
 }
 
-fn run_ts_long_session(iterations: usize) -> RustTsEditResult {
-    let base_dir = work_copy_path("ts_long_session");
-    let src = fixture_path("typescript");
-    let _ = std::fs::remove_dir_all(&base_dir);
-    copy_dir_all(&src, &base_dir).expect("copy ts fixture");
-
-    let node_modules_src = super::sandbox_path("knot-site").join("node_modules");
-    #[cfg(unix)]
-    if node_modules_src.exists() {
-        let _ = std::os::unix::fs::symlink(&node_modules_src, base_dir.join("node_modules"));
+/// `crate::`-style path of a Rust FQN of the current crate.
+fn crate_path(fqn: &str, name: &str) -> String {
+    let rest = fqn
+        .strip_suffix(&format!("::{name}"))
+        .or_else(|| fqn.strip_suffix(&format!(".{name}")))
+        .unwrap_or(fqn);
+    match rest.split_once("::") {
+        Some((_, tail)) if !tail.is_empty() => format!("crate::{tail}::{name}"),
+        _ => format!("crate::{name}"),
     }
+}
 
-    run_warm_index(&base_dir);
+/// Choose the `knot` work-copy case: a public function and another module of
+/// the same crate that references it.
+fn select_d12_rust(index: &LoadedIndex, root: &Path) -> D12Case {
+    let target = index
+        .records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            record.file.starts_with("src/")
+                && !record.file.starts_with("src/bin/")
+                && record.line.kind == "rust_function"
+                && record.line.col.is_some()
+                && !record.line.tc
+        })
+        .filter(|(pos, record)| {
+            std::fs::read_to_string(root.join(&record.file)).is_ok_and(|text| {
+                text.lines().any(|line| {
+                    line.trim_start()
+                        .starts_with(&format!("pub fn {}", record.line.name))
+                })
+            }) && !heuristic_answer(index, *pos).containers.is_empty()
+        })
+        .min_by_key(|(_, record)| record.line.id.clone())
+        .map(|(_, record)| record)
+        .expect("a public function of the knot work copy");
 
-    let mut settings = measurement_settings();
-    settings.sync = SyncMode::Off;
-    let (index, settings, _r, pool) = pool_for_root_with(&base_dir, settings);
+    let mut callers: Vec<String> = index
+        .file_sha16
+        .keys()
+        .filter(|rel| {
+            rel.starts_with("src/")
+                && !rel.starts_with("src/bin/")
+                && rel.ends_with(".rs")
+                && **rel != target.file
+        })
+        .cloned()
+        .collect();
+    callers.sort();
+    let caller_file = callers
+        .first()
+        .expect("a knot module for the new caller")
+        .clone();
+    println!(
+        "  P6-D12 rust work copy: {} in {} <- {}",
+        target.line.fqn, target.file, caller_file
+    );
 
-    let _ = timed_callers(&index, &settings, &base_dir, "formatName", Some(&pool));
-
-    let format_ts = base_dir.join("src/util/format.ts");
-    let mut completed = 0;
-    for i in 1..=iterations {
-        let mut content = std::fs::read(&format_ts).expect("read");
-        let addition =
-            format!("\nexport function caller{i}(u: User): string {{ return formatName(u); }}\n");
-        content.extend_from_slice(addition.as_bytes());
-        std::fs::write(&format_ts, content).expect("write");
-
-        let (resp, _) = timed_callers(&index, &settings, &base_dir, "formatName", Some(&pool));
-        let caller_name = format!("caller{i}");
-        let has = resp
-            .targets
-            .first()
-            .map(|t| {
-                t.callers
-                    .0
-                    .iter()
-                    .flat_map(|(_, rows)| rows)
-                    .any(|r| r.name == caller_name)
-            })
-            .unwrap_or(false);
-        if has {
-            completed += 1;
-        }
-        println!(
-            "  TS iter {i}/{iterations}: {}",
-            if has { "FOUND" } else { "MISSED" }
-        );
+    D12Case {
+        lang: "rust",
+        subject: "work_copy",
+        work_name: "knot",
+        fixture: None,
+        repo: "knot",
+        query: target.line.fqn.clone(),
+        caller_file,
+        caller_name: "kl_d12_caller_{i}".to_owned(),
+        caller_text: format!(
+            "\npub fn kl_d12_caller_{{i}}() {{\n    let _ = {};\n}}\n",
+            crate_path(&target.line.fqn, &target.line.name)
+        ),
+        import_line: None,
     }
-    drop(pool);
-    RustTsEditResult {
-        lang: "typescript".to_owned(),
-        iterations_completed: completed,
-        iterations_total: iterations,
-        passed: completed == iterations,
+}
+
+/// The parent directory of a repo-relative path.
+fn dir_of(rel: &str) -> &str {
+    rel.rsplit_once('/').map_or("", |(parent, _)| parent)
+}
+
+/// Choose the `knot-site` work-copy case: an exported function of a directory
+/// that has another module which imports it.
+fn select_d12_ts(index: &LoadedIndex, root: &Path) -> D12Case {
+    let mut per_dir: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for rel in index.file_sha16.keys().filter(|rel| rel.ends_with(".ts")) {
+        *per_dir.entry(dir_of(rel).to_owned()).or_default() += 1;
     }
+    let target = index
+        .records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            record.file.starts_with("src/")
+                && record.line.kind == "function"
+                && record.line.col.is_some()
+                && !record.line.tc
+                && per_dir.get(dir_of(&record.file)).is_some_and(|n| *n >= 2)
+        })
+        .filter(|(pos, record)| {
+            std::fs::read_to_string(root.join(&record.file)).is_ok_and(|text| {
+                text.lines().any(|line| {
+                    line.trim_start()
+                        .starts_with(&format!("export function {}", record.line.name))
+                })
+            }) && !heuristic_answer(index, *pos).containers.is_empty()
+        })
+        .min_by_key(|(_, record)| record.line.id.clone())
+        .map(|(_, record)| record)
+        .expect("an exported function of the knot-site work copy");
+
+    let dir = dir_of(&target.file).to_owned();
+    let mut callers: Vec<String> = index
+        .file_sha16
+        .keys()
+        .filter(|rel| dir_of(rel) == dir && rel.ends_with(".ts") && **rel != target.file)
+        .cloned()
+        .collect();
+    callers.sort();
+    let caller_file = callers
+        .first()
+        .expect("a knot-site module of the same directory")
+        .clone();
+    let stem = target
+        .file
+        .rsplit_once('/')
+        .and_then(|(_, file)| file.strip_suffix(".ts"))
+        .unwrap_or("");
+    println!(
+        "  P6-D12 typescript work copy: {} in {} <- {}",
+        target.line.fqn, target.file, caller_file
+    );
+
+    D12Case {
+        lang: "typescript",
+        subject: "work_copy",
+        work_name: "knot-site",
+        fixture: None,
+        repo: "knot-site",
+        query: target.line.fqn.clone(),
+        caller_file,
+        caller_name: "klD12Caller{i}".to_owned(),
+        caller_text: "\nexport function klD12Caller{i}(): unknown {\n    return {name};\n}\n"
+            .replace("{name}", &target.line.name),
+        import_line: Some(format!(
+            "import {{ {} }} from './{stem}';",
+            target.line.name
+        )),
+    }
+}
+
+/// The four P6-D12 cases. The work-copy cases put the new caller in another
+/// file: an edit in the target's own file is synced by the `didOpen` reopen on
+/// an mtime change, which would hide a missed file watch.
+fn d12_cases() -> Vec<D12Case> {
+    vec![
+        D12Case {
+            lang: "rust",
+            subject: "fixture",
+            work_name: "rust_long_session",
+            fixture: Some("rust"),
+            repo: "knot",
+            query: "total_area".to_owned(),
+            caller_file: "src/shapes.rs".to_owned(),
+            caller_name: "caller_{i}".to_owned(),
+            caller_text: "\npub fn caller_{i}() -> f64 { crate::geometry::total_area(&[]) }\n"
+                .to_owned(),
+            import_line: None,
+        },
+        D12Case {
+            lang: "typescript",
+            subject: "fixture",
+            work_name: "ts_long_session",
+            fixture: Some("typescript"),
+            repo: "knot-site",
+            query: "formatName".to_owned(),
+            caller_file: "src/util/format.ts".to_owned(),
+            caller_name: "caller{i}".to_owned(),
+            caller_text: "\nexport function caller{i}(u: User): string { return formatName(u); }\n"
+                .to_owned(),
+            import_line: None,
+        },
+        {
+            let root = ensure_work_copy("knot");
+            let index = load_index(&IndexLayout::for_repo(&root)).expect("knot index");
+            select_d12_rust(&index, &root)
+        },
+        {
+            let root = ensure_work_copy("knot-site");
+            let index = load_index(&IndexLayout::for_repo(&root)).expect("knot-site index");
+            select_d12_ts(&index, &root)
+        },
+    ]
 }
 
 #[test]
 #[ignore = "P6-D12: Rust and TS edit sessions in long-lived MCP session"]
 fn rust_ts_edits_gate() {
     println!("=== P6-D12 Gate: Rust and TS in long session (sync=off) ===");
-    let rust_res = run_rust_long_session(8);
-    let ts_res = run_ts_long_session(8);
-    let report = RustTsReport {
-        gate: "P6-D12",
-        results: vec![rust_res, ts_res],
-    };
-    write_gate("rust_ts_edits", &report);
+    let results = d12_cases()
+        .iter()
+        .map(|case| {
+            println!("--- P6-D12 {} {} ---", case.lang, case.subject);
+            if case.subject == "work_copy" {
+                println!(
+                    "  query {}, new caller goes to {}",
+                    case.query, case.caller_file
+                );
+            }
+            run_d12_case(case, 8)
+        })
+        .collect();
+    write_gate(
+        "rust_ts_edits",
+        &RustTsReport {
+            gate: "P6-D12".to_owned(),
+            results,
+        },
+    );
 }
