@@ -531,25 +531,9 @@ fn test_r1_for_repo(repo: &str, lang: &str) -> R1RepoResult {
 
     // Clean up work copy
     drop(guards);
-    let mut clean_cfg = crate::config::test_support::config_for(work_repo.clone());
-    clean_cfg.lsp = settings;
-    let clean_params = crate::models::params::IndexParams {
-        force: false,
-        commit_mode: None,
-        embed_model: None,
-        jobs: None,
-        batch_size: 128,
-        quiet: true,
-        lsp: crate::lsp::precompute::PrecomputeOptions {
-            policy: crate::lsp::precompute::PrecomputePolicy::None,
-            selection: crate::lsp::precompute::Selection::Heuristic,
-            min_fanin: 20,
-            max_targets: 200,
-            budget: std::time::Duration::from_secs(60),
-            probe_min_fanin: 3,
-        },
-    };
-    let _ = crate::cli_tools::index::run_index(&clean_cfg, &clean_params);
+    let src_dot_knot = sandbox_path(repo).join(".knot-lite");
+    let dst_dot_knot = work_repo.join(".knot-lite");
+    let _ = copy_dir_all(&src_dot_knot, &dst_dot_knot);
 
     let min_pass = if repo == "spring-ai" {
         19
@@ -595,38 +579,227 @@ fn r1_reanchoring() {
 struct P1TargetResult {
     target: String,
     case_a_indexed: bool,
+    case_a_ms: u64,
     case_b_indexed: bool,
-    case_c_live_and_new_caller: bool,
+    case_b_ms: u64,
+    case_c_live: bool,
+    case_c_prime_outdated: bool,
 }
 
 #[derive(Debug, Serialize)]
 struct P1GateReport {
     gate: &'static str,
-    targets: Vec<P1TargetResult>,
+    results: Vec<P1TargetResult>,
+    case_a_p95_ms: u64,
+    case_b_p95_ms: u64,
     passed: bool,
+}
+
+fn select_p1_targets(index: &crate::index::load::LoadedIndex) -> Vec<R1TargetInfo> {
+    let mut ok_ids: Vec<&String> = index
+        .lsp_targets
+        .iter()
+        .filter(|(_, line)| line.status == "ok")
+        .map(|(id, _)| id)
+        .collect();
+    ok_ids.sort();
+    let step = ok_ids.len().div_ceil(10).max(1);
+    ok_ids
+        .into_iter()
+        .step_by(step)
+        .take(10)
+        .map(|id| {
+            let record = &index.records[index.by_id[id]];
+            R1TargetInfo {
+                id: id.clone(),
+                fqn: record.line.fqn.clone(),
+                name: record.line.name.clone(),
+                sig: record.line.sig.clone(),
+                rel_file: record.file.clone(),
+            }
+        })
+        .collect()
+}
+
+fn test_p1_cases_a_and_b(
+    work_repo: &Path,
+    index: &crate::index::load::LoadedIndex,
+    settings: &crate::lsp::settings::LspSettings,
+    targets: &[R1TargetInfo],
+    other_file: &str,
+) -> Vec<(bool, u64, bool, u64)> {
+    use super::lsp::timed_callers;
+    let mut out = Vec::new();
+    for t in targets {
+        // Case (a): nothing changed
+        let (resp_a, ms_a) = timed_callers(index, settings, work_repo, &t.fqn, None);
+        let target_a = resp_a
+            .targets
+            .iter()
+            .find(|target| target.id == t.id)
+            .expect("target a");
+        let a_ok = target_a.provenance == "lsp-indexed"
+            && target_a.lsp.as_ref().map(|l| l.outdated) == Some(false);
+
+        // Case (b): edit file that does not mention t.name
+        let abs = work_repo.join(other_file);
+        let guard = EditGuard::new(abs.clone());
+        let mut content = std::fs::read(&abs).expect("read");
+        content.extend_from_slice(b"\n// unrelated edit\n");
+        std::fs::write(&abs, content).expect("write");
+
+        let (resp_b, ms_b) = timed_callers(index, settings, work_repo, &t.fqn, None);
+        let target_b = resp_b
+            .targets
+            .iter()
+            .find(|target| target.id == t.id)
+            .expect("target b");
+        let b_ok = target_b.provenance == "lsp-indexed"
+            && target_b.lsp.as_ref().map(|l| l.outdated) == Some(false);
+
+        drop(guard);
+        out.push((a_ok, ms_a, b_ok, ms_b));
+    }
+    out
+}
+
+fn test_p1_cases_c_and_c_prime(
+    work_repo: &Path,
+    index: &crate::index::load::LoadedIndex,
+    settings: &crate::lsp::settings::LspSettings,
+    targets: &[R1TargetInfo],
+    other_file: &str,
+) -> Vec<(bool, bool)> {
+    use super::lsp::{pool_for_root, timed_callers};
+    use crate::lsp::launch::start_pool;
+    use crate::query::session::CLI_READY_WAIT;
+
+    let (_idx, _, _root, pool) = pool_for_root(work_repo);
+
+    let mut broken_cfg = crate::config::test_support::config_for(work_repo.to_path_buf());
+    broken_cfg.lsp = settings.clone();
+    broken_cfg.lsp_overrides.java = Some("/nonexistent/server".to_owned());
+    let files: Vec<String> = index.file_sha16.keys().cloned().collect();
+    let broken_pool = start_pool(
+        &broken_cfg,
+        &files,
+        CLI_READY_WAIT,
+        Some(index.stamp.clone()),
+    )
+    .expect("broken pool");
+
+    let mut out = Vec::new();
+    for (i, t) in targets.iter().enumerate() {
+        let abs = work_repo.join(other_file);
+        let guard = EditGuard::new(abs.clone());
+        let content = std::fs::read_to_string(&abs).expect("read");
+        if let Some(pos) = content.rfind('}') {
+            let (head, tail) = content.split_at(pos);
+            let addition = format!(
+                "\n    public void p1Caller_{i}() {{ String _s = \"{}\"; }}\n",
+                t.name
+            );
+            let full = format!("{head}{addition}{tail}");
+            std::fs::write(&abs, full).expect("write mention");
+        }
+
+        // Case (c): live server queries live
+        let (resp_c, _) = timed_callers(index, settings, work_repo, &t.fqn, Some(&pool));
+        let target_c = resp_c
+            .targets
+            .iter()
+            .find(|target| target.id == t.id)
+            .expect("target c");
+        let c_ok = target_c.provenance == "lsp-live"
+            && resp_c.notes.iter().any(|n| n.contains("outdated"));
+
+        // Case (c'): broken server falls back to outdated indexed
+        let (resp_cp, _) = timed_callers(index, settings, work_repo, &t.fqn, Some(&broken_pool));
+        let target_cp = resp_cp
+            .targets
+            .iter()
+            .find(|target| target.id == t.id)
+            .expect("target cp");
+        let cp_ok = target_cp.provenance == "lsp-indexed"
+            && target_cp.lsp.as_ref().map(|l| l.outdated) == Some(true)
+            && resp_cp.notes.iter().any(|n| n.contains("outdated"));
+
+        drop(guard);
+        out.push((c_ok, cp_ok));
+    }
+    drop(pool);
+    drop(broken_pool);
+    out
 }
 
 #[test]
 #[ignore = "P1: pre-computed freshness rule on spring-ai work copy (KNOT_LITE_MEASURE_WORK, KNOT_LITE_MEASURE_OUT)"]
 fn p1_freshness() {
-    let work_repo = work_copy_path("spring-ai");
-    assert!(work_repo.exists(), "work copy {work_repo:?} missing");
+    let work_repo = ensure_work_copy("spring-ai");
+    let layout = IndexLayout::for_repo(&work_repo);
+    let index = load_index(&layout).expect("load index");
+    let settings = super::lsp::measurement_settings();
+    let targets = select_p1_targets(&index);
+    assert_eq!(targets.len(), 10, "need 10 pre-computed targets");
 
-    let targets = (1..=10)
-        .map(|i| P1TargetResult {
-            target: format!("target_{i}"),
-            case_a_indexed: true,
-            case_b_indexed: true,
-            case_c_live_and_new_caller: true,
+    let target_files: std::collections::HashSet<&str> =
+        targets.iter().map(|t| t.rel_file.as_str()).collect();
+    let other_file = index
+        .file_sha16
+        .keys()
+        .find(|rel| {
+            rel.contains("src/main/java")
+                && !target_files.contains(rel.as_str())
+                && !rel.contains("test")
         })
-        .collect();
+        .expect("other file")
+        .clone();
+
+    let ab_results = test_p1_cases_a_and_b(&work_repo, &index, &settings, &targets, &other_file);
+    let c_results =
+        test_p1_cases_c_and_c_prime(&work_repo, &index, &settings, &targets, &other_file);
+
+    let mut a_runs = Vec::new();
+    let mut b_runs = Vec::new();
+    let mut p1_results = Vec::new();
+    let mut passed = true;
+
+    for (t, ((a_ok, a_ms, b_ok, b_ms), (c_ok, cp_ok))) in
+        targets.iter().zip(ab_results.into_iter().zip(c_results))
+    {
+        a_runs.push(a_ms);
+        b_runs.push(b_ms);
+        if !a_ok || !b_ok || !c_ok || !cp_ok {
+            passed = false;
+        }
+        println!(
+            "P1 target {}: a_ok={}, b_ok={}, c_ok={}, cp_ok={}",
+            t.fqn, a_ok, b_ok, c_ok, cp_ok
+        );
+        p1_results.push(P1TargetResult {
+            target: t.fqn.clone(),
+            case_a_indexed: a_ok,
+            case_a_ms: a_ms,
+            case_b_indexed: b_ok,
+            case_b_ms: b_ms,
+            case_c_live: c_ok,
+            case_c_prime_outdated: cp_ok,
+        });
+    }
+
+    let a_p95 = percentile(&a_runs, 95.0);
+    let b_p95 = percentile(&b_runs, 95.0);
+    println!("P1 latency p95: case (a) {a_p95} ms, case (b) {b_p95} ms");
 
     write_gate(
         "p1_freshness",
         &P1GateReport {
             gate: "P1",
-            targets,
-            passed: true,
+            results: p1_results,
+            case_a_p95_ms: a_p95,
+            case_b_p95_ms: b_p95,
+            passed,
         },
     );
+    assert!(passed, "P1 gate failed");
 }

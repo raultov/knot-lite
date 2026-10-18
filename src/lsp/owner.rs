@@ -156,7 +156,7 @@ pub fn sweep_orphans() -> usize {
             .process(Pid::from_u32(token.owner_pid))
             .is_some_and(|p| p.start_time() == token.owner_start)
     };
-    let members = matching_with(&system, |carried| carried.as_ref().is_some_and(&dead_owner));
+    let members = matching_with(&system, |carried| carried.as_ref().is_some_and(dead_owner));
     drop(system);
     terminate(&members, SWEEP_GRACE)
 }

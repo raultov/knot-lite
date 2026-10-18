@@ -231,11 +231,21 @@ impl FakeCounters {
 
 /// Decrement `counter` unless it is zero; whether it was decremented.
 fn take_one(counter: &AtomicUsize) -> bool {
-    counter
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
-            left.checked_sub(1)
-        })
-        .is_ok()
+    let mut current = counter.load(Ordering::SeqCst);
+    loop {
+        if current == 0 {
+            return false;
+        }
+        match counter.compare_exchange_weak(
+            current,
+            current - 1,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => return true,
+            Err(actual) => current = actual,
+        }
+    }
 }
 
 /// The test's grip on the fake server.
