@@ -130,13 +130,21 @@ pub fn triple_circle(size: f64) -> f64 {
 RS
 if lsp_or_skip R20 "stale target" rust; then
   rc="$(cli R20 -- callers total_area -o json)"; assert_rc R20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq R20 "the edited file's target is reanchored live" "$(J R20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  assert_jq R20 "the edited file's target is reanchored live with new caller having indexed false" "$(J R20)" \
+    '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true and ([.targets[0].callers.CALLS[] | select(.name == "triple_circle") | .indexed] == [false])'
   text_in R20 "a note says target was re-anchored" "$(J R20)" 're-anchored'
   cp "$R/src/geometry.rs" "$R/src/geometry.rs.bak"
   grep -v 'pub fn total_area' "$R/src/geometry.rs.bak" > "$R/src/geometry.rs"
   rc="$(cli R44 -- callers total_area -o json)"; assert_rc R44 "callers with deleted declaration exits 0" 0 "$rc"
   assert_jq R44 "target declaration gone is stale_target" "$(J R44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   mv "$R/src/geometry.rs.bak" "$R/src/geometry.rs"
+  cp "$R/src/geometry.rs" "$R/src/geometry.rs.bak"
+  printf '// shifted\n// shifted\n' | cat - "$R/src/geometry.rs.bak" > "$R/src/geometry.rs"
+  rc="$(cli R45 -- callers total_area -o json)"; assert_rc R45 "callers with shifted lines exits 0" 0 "$rc"
+  assert_jq R45 "reanchored live with callers matching" "$(J R45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  mv "$R/src/geometry.rs.bak" "$R/src/geometry.rs"
+  rc="$(cli R50 -- explore src/geometry.rs -o json)"; assert_rc R50 "explore with overlay exits 0" 0 "$rc"
+  assert_jq R50 "explore counts through overlay" "$(J R50)" '.groups != null'
   rc="$(cli R41 -- explore src/geometry.rs -o json)"; assert_rc R41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq R41 "outline from the server; triple_circle listed, not indexed" "$(J R41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "triple_circle") | .indexed] == [false])'
@@ -168,6 +176,14 @@ if lsp_or_skip R17 "pre-computed callers" rust; then
   assert_jq R19 "the pre-computation is reused" "$(J R19)" '.lsp.languages.rust.status == "reused"'
   logs_after="$(find "$KNOT_LITE_LSP_CACHE_DIR" -name 'rust_*.stderr.log' 2>/dev/null | wc -l | tr -d ' ')"
   if [ "$logs_before" = "$logs_after" ]; then pass R19 "no language server was started ($logs_after logs)"; else fail R19 "a server was started" "logs before $logs_before, after $logs_after"; fi
+  cp "$R/src/shapes.rs" "$R/src/shapes.rs.bak"
+  printf 'pub fn unrelated_math() -> f64 { 42.0 }\n' >> "$R/src/shapes.rs"
+  rc="$(cli R46 -- callers total_area -o json)"; assert_rc R46 "callers with unrelated edit exits 0" 0 "$rc"
+  assert_jq R46 "precomputed answer served when unrelated file edited" "$(J R46)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == false'
+  printf 'pub fn caller_in_shapes() -> f64 { crate::geometry::total_area(&[]) }\n' >> "$R/src/shapes.rs"
+  rc="$(cli R47 -- callers total_area -o json)"; assert_rc R47 "callers with new caller exits 0" 0 "$rc"
+  assert_jq R47 "answered live when new caller added" "$(J R47)" '.targets[0].provenance == "lsp-live"'
+  mv "$R/src/shapes.rs.bak" "$R/src/shapes.rs"
 fi
 
 # ---- R23-R33 MCP ------------------------------------------------------------------------------------

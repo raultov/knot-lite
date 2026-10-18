@@ -36,6 +36,7 @@ pub fn start_pool(
         idle: cfg.lsp.idle,
         sync: cfg.lsp.sync,
         cache_dir: cfg.lsp.cache_root.clone(),
+        inventory_files: std::sync::Arc::new(files.to_vec()),
         ..PoolSettings::default()
     };
     match LspPool::new(std::sync::Arc::new(factory), settings, stamp) {

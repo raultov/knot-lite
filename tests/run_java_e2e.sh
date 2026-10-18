@@ -129,13 +129,21 @@ sed '$d' "$order" > "$order.tmp"
 rm -f "$order.tmp"
 if lsp_or_skip V20 "stale target" java; then
   rc="$(cli V20 -- callers Order.getItems -o json)"; assert_rc V20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq V20 "the edited file's target is reanchored live" "$(J V20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  assert_jq V20 "the edited file's target is reanchored live with new caller having indexed false" "$(J V20)" \
+    '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true and ([.targets[0].callers.CALLS[] | select(.name == "size") | .indexed] == [false])'
   text_in V20 "a note says target was re-anchored" "$(J V20)" 're-anchored'
   cp "$order" "$order.bak"
   grep -v 'public List<Item> getItems()' "$order.bak" > "$order"
   rc="$(cli V44 -- callers Order.getItems -o json)"; assert_rc V44 "callers with deleted declaration exits 0" 0 "$rc"
   assert_jq V44 "target declaration gone is stale_target" "$(J V44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   mv "$order.bak" "$order"
+  cp "$order" "$order.bak"
+  printf '// shifted\n// shifted\n' | cat - "$order.bak" > "$order"
+  rc="$(cli V45 -- callers Order.getItems -o json)"; assert_rc V45 "callers with shifted lines exits 0" 0 "$rc"
+  assert_jq V45 "reanchored live with callers matching" "$(J V45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  mv "$order.bak" "$order"
+  rc="$(cli V50 -- explore "$P/model/Order.java" -o json)"; assert_rc V50 "explore with overlay exits 0" 0 "$rc"
+  assert_jq V50 "explore counts through overlay" "$(J V50)" '.groups != null'
   rc="$(cli V41 -- explore "$P/model/Order.java" -o json)"; assert_rc V41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq V41 "outline from the server; size listed, not indexed" "$(J V41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "size") | .indexed] == [false])'
@@ -145,21 +153,9 @@ if lsp_or_skip V20 "stale target" java; then
     '.resolution == "not_indexed" and .outline.reason == "not_indexed" and ([.groups[].entities[].name] | index("Extra") != null)'
   rm -f "$V/$P/model/Extra.java"
   rc="$(cli V21a -- index -o json)"; assert_rc V21a "re-index exits 0" 0 "$rc"
-  # jdtls updates its index in the background, so the first live answer after an edit can still describe the
-  # file as it was (measured: the call hierarchy missed the new caller in 6 of 8 sessions and the merged answer
-  # in 3 of 8; the next session was complete every time). Up to three attempts, each a fresh
-  # server; the row states how many it took (README Limitations).
-  attempt=0
-  while :; do
-    attempt=$((attempt + 1))
-    rc="$(cli V21b -- callers Order.getItems -o json)"
-    jq -e -n --argjson e "$EXACT_GETITEMS_AFTER_EDIT" --argjson a "$(function_set "$(J V21b)")" '($e | sort) == ($a | sort)' >/dev/null 2>&1 && break
-    [ "$attempt" -ge 3 ] && break
-  done
-  assert_rc V21b "callers after the re-index exits 0" 0 "$rc"
-  assert_jq V21b "answered live again" "$(J V21b)" '.targets[0].provenance == "lsp-live"'
-  assert_set_eq V21b "the new caller is found (attempt $attempt of 3)" "$EXACT_GETITEMS_AFTER_EDIT" "$(function_set "$(J V21b)")"
-  if [ "$attempt" -gt 1 ]; then pass V21b "note: the first live answer after the edit was stale, attempt $attempt was complete"; fi
+  rc="$(cli V21b -- callers Order.getItems -o json)"; assert_rc V21b "callers after the re-index exits 0" 0 "$rc"
+  assert_jq V21b "answered live again on first attempt" "$(J V21b)" '.targets[0].provenance == "lsp-live"'
+  assert_set_eq V21b "the new caller is found on first attempt" "$EXACT_GETITEMS_AFTER_EDIT" "$(function_set "$(J V21b)")"
   rc="$(cli V22 -- status --probe-lsp -o json)"; assert_rc V22 "status --probe-lsp exits 0" 0 "$rc"
   assert_jq V22 "jdtls probes ok" "$(J V22)" '.lsp_probe.java.ok == true and .lsp_probe.java.ready_ms > 0'
 else
@@ -186,6 +182,16 @@ if lsp_or_skip V17 "pre-computed callers" java; then
     '.lsp.selection == "lsp-refs" and .lsp.languages.java.status == "computed" and .lsp.languages.java.probed >= 1'
   rc="$(cli V43c -- index --lsp-precompute all --lsp-min-fanin 2 -o json)"; assert_rc V43c "back to the default selection exits 0" 0 "$rc"
   assert_jq V43c "heuristic again" "$(J V43c)" '.lsp.selection == "heuristic" and .lsp.languages.java.status == "computed"'
+  cp "$V/$P/model/Item.java" "$V/$P/model/Item.java.bak"
+  printf '\n// unrelated\n' >> "$V/$P/model/Item.java"
+  rc="$(cli V46 -- callers Order.getItems -o json)"; assert_rc V46 "callers with unrelated edit exits 0" 0 "$rc"
+  assert_jq V46 "precomputed answer served when unrelated file edited" "$(J V46)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == false'
+  printf '\n    public void callItems(Order o) { o.getItems(); }\n' >> "$V/$P/model/Item.java"
+  rc="$(cli V47 -- callers Order.getItems -o json)"; assert_rc V47 "callers with new caller exits 0" 0 "$rc"
+  assert_jq V47 "answered live when new caller added" "$(J V47)" '.targets[0].provenance == "lsp-live"'
+  rc="$(cli V48 KNOT_LITE_LSP_JAVA=/nonexistent/server -- callers Order.getItems -o json)"; assert_rc V48 "callers with broken server exits 0" 0 "$rc"
+  assert_jq V48 "served outdated indexed on server failure" "$(J V48)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == true'
+  mv "$V/$P/model/Item.java.bak" "$V/$P/model/Item.java"
 fi
 
 # ---- V23-V33 MCP ------------------------------------------------------------------------------------
@@ -242,6 +248,20 @@ if lsp_or_skip V29 "MCP live callers" java; then
     mcp_call 30 status '{}'; mcp_wait 30 30 || true
     assert_jq V32 "status shows a ready jdtls with pid and memory" "$(mcp_structured 30)" \
       '[.languages[] | select(.language == "java") | .lsp_runtime] | .[0] | .state == "ready" and .pid > 0 and .rss_mib > 0'
+
+    # ---- V49 MCP edit-awareness --------------------------------------------------------------------
+    chk="$V/$P/api/CheckoutController.java"
+    cp "$chk" "$chk.bak"
+    sed '$d' "$chk" > "$chk.tmp"
+    { cat "$chk.tmp"; printf '\n    public void mcpAdded(Order o) { o.addItem(null); }\n}\n'; } > "$chk"
+    rm -f "$chk.tmp"
+    mcp_call 35 find_callers '{"entity_name":"Order.addItem"}'
+    if mcp_wait 35 60; then
+      sc_v49="$(mcp_structured 35)"
+      assert_jq V49 "second answer in MCP session includes the new caller" "$sc_v49" \
+        '.targets[0].provenance == "lsp-live" and ([.targets[0].callers.CALLS[] | select(.name == "mcpAdded")] | length == 1)'
+    else fail V49 "no answer to second find_callers in MCP session"; fi
+    mv "$chk.bak" "$chk"
   else fail V29 "find_callers never became lsp-live in ${LSP_TIMEOUT} s" "last: ${E2E_LAST_SC:-none}"; fi
 fi
 mcp_call 40 find_callers '{"entity_name":"x","repo_name":"other"}'; mcp_call 41 nope '{}'

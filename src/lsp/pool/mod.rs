@@ -135,6 +135,8 @@ pub struct PoolSettings {
     pub sync: crate::lsp::sync::SyncMode,
     /// Root scratch directory for ledgers and server state.
     pub cache_dir: PathBuf,
+    /// Relative paths of files in the index (for edit sync universe).
+    pub inventory_files: Arc<Vec<String>>,
 }
 
 impl Default for PoolSettings {
@@ -145,6 +147,7 @@ impl Default for PoolSettings {
             reply_slack: Duration::from_secs(5),
             sync: crate::lsp::sync::SyncMode::Off,
             cache_dir: std::env::temp_dir().join("knot-lite-lsp"),
+            inventory_files: Arc::new(Vec::new()),
         }
     }
 }

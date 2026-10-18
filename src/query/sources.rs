@@ -401,9 +401,10 @@ impl Fallback {
 
 /// Extra information about a live request.
 #[derive(Debug, Clone)]
-struct TargetLiveInfo {
+struct TargetLiveInfo<'a> {
     own: ContainerKey,
     reanchored: bool,
+    precomputed: Option<&'a LspTargetLine>,
 }
 
 /// The source chosen for one target.
@@ -411,7 +412,7 @@ enum Plan<'a> {
     Indexed(&'a LspTargetLine),
     /// Pre-computed answer served as the P6-D9 fallback (outdated).
     IndexedOutdated(&'a LspTargetLine),
-    Live(&'a LspPool, LiveRequest, TargetLiveInfo),
+    Live(&'a LspPool, LiveRequest, TargetLiveInfo<'a>),
     /// `None`: no language server is relevant (not an LSP language).
     Heuristic(Option<Fallback>),
 }
@@ -428,10 +429,10 @@ pub type Diagnostics = Vec<(&'static str, String)>;
 
 /// Arguments of [`Describer::ask`] (kept together to stay under the
 /// `too_many_arguments` threshold).
-struct AskArgs {
+struct AskArgs<'a> {
     position: usize,
     heuristic: Answer,
-    live_info: TargetLiveInfo,
+    live_info: TargetLiveInfo<'a>,
 }
 
 /// Arguments of [`Describer::reanchor`].
@@ -441,6 +442,7 @@ struct ReanchorArgs<'r, 'a> {
     lang: LspLang,
     hint: usize,
     pool: &'a LspPool,
+    precomputed: Option<&'a LspTargetLine>,
 }
 
 /// Describes the targets of one `find_callers` call, sharing its live budget,
@@ -621,6 +623,7 @@ impl<'c, 'a> Describer<'c, 'a> {
                     lang,
                     hint,
                     pool,
+                    precomputed,
                 });
                 if matches!(reanchor_plan, Plan::Heuristic(_)) && precomputed.is_some() {
                     return fallback_plan(self);
@@ -660,6 +663,7 @@ impl<'c, 'a> Describer<'c, 'a> {
             TargetLiveInfo {
                 own,
                 reanchored: false,
+                precomputed,
             },
         )
     }
@@ -672,6 +676,7 @@ impl<'c, 'a> Describer<'c, 'a> {
             lang,
             hint,
             pool,
+            precomputed,
         } = args;
         let parse_cfg = ParseConfig {
             repo_root: self.ctx.lsp.repo_root.to_path_buf(),
@@ -734,6 +739,7 @@ impl<'c, 'a> Describer<'c, 'a> {
                     TargetLiveInfo {
                         own,
                         reanchored: true,
+                        precomputed,
                     },
                 )
             }
@@ -769,7 +775,7 @@ impl<'c, 'a> Describer<'c, 'a> {
     }
 
     /// Ask the language server; an answer that is not `ok` falls back to the heuristic one.
-    fn ask(&mut self, pool: &LspPool, request: LiveRequest, args: AskArgs) -> Described {
+    fn ask(&mut self, pool: &LspPool, request: LiveRequest, args: AskArgs<'a>) -> Described {
         let AskArgs {
             position,
             heuristic,
@@ -780,6 +786,22 @@ impl<'c, 'a> Describer<'c, 'a> {
             if let Some(detail) = &outcome.detail {
                 self.diagnostics
                     .push((outcome.status.as_str(), detail.clone()));
+            }
+            if let Some(line) = target_info.precomputed {
+                let answer = indexed_answer(self.ctx.index, position);
+                let extra = heuristic.containers.difference(&answer.containers).count();
+                self.diagnostics.push((
+                    "precomputed_outdated_fallback",
+                    format!(
+                        "pre-computed answer of {} is outdated; callers added there are missing (run knot-lite index)",
+                        self.ctx.index.records[position].line.name
+                    ),
+                ));
+                return Described {
+                    answer,
+                    provenance: PROVENANCE_INDEXED,
+                    lsp: Some(indexed_info(line, extra, true)),
+                };
             }
             return Described {
                 answer: heuristic,

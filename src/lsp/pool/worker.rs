@@ -161,7 +161,20 @@ async fn run_target_on_slot(
             let ledger_path =
                 crate::lsp::sync::ledger_path(&ctx.settings.cache_dir, &repo_key, req.lang);
             let mut ledger = crate::lsp::sync::Ledger::load(&ledger_path, "");
-            let universe = vec![(req.rel_file.clone(), req.abs_file.clone())];
+            let mut universe: Vec<(String, PathBuf)> = ctx
+                .settings
+                .inventory_files
+                .iter()
+                .filter(|rel| {
+                    crate::capability::lsp_lang_for_label(crate::capability::label_for(Path::new(
+                        rel,
+                    ))) == Some(req.lang)
+                })
+                .map(|rel| (rel.clone(), repo_root.join(rel)))
+                .collect();
+            if universe.is_empty() {
+                universe.push((req.rel_file.clone(), req.abs_file.clone()));
+            }
             let _ = crate::lsp::sync::sync_before(
                 &mut started.session,
                 &mut ledger,

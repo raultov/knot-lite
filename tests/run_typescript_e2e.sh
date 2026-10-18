@@ -129,13 +129,21 @@ export function initials(user: User): string {
 TS
 if lsp_or_skip T20 "stale target" ts; then
   rc="$(cli T20 -- callers formatName -o json)"; assert_rc T20 "callers after an edit exits 0" 0 "$rc"
-  assert_jq T20 "the edited file's target is reanchored live" "$(J T20)" '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true'
+  assert_jq T20 "the edited file's target is reanchored live with new caller having indexed false" "$(J T20)" \
+    '.targets[0].lsp.status == "ok" and .targets[0].provenance == "lsp-live" and .targets[0].lsp.reanchored == true and ([.targets[0].callers.CALLS[] | select(.name == "initials") | .indexed] == [false])'
   text_in T20 "a note says target was re-anchored" "$(J T20)" 're-anchored'
   cp "$T/src/util/format.ts" "$T/src/util/format.ts.bak"
   grep -v 'export function formatName' "$T/src/util/format.ts.bak" > "$T/src/util/format.ts"
   rc="$(cli T44 -- callers formatName -o json)"; assert_rc T44 "callers with deleted declaration exits 0" 0 "$rc"
   assert_jq T44 "target declaration gone is stale_target" "$(J T44)" '.targets[0].lsp.status == "stale_target" and .targets[0].provenance == "heuristic"'
   mv "$T/src/util/format.ts.bak" "$T/src/util/format.ts"
+  cp "$T/src/util/format.ts" "$T/src/util/format.ts.bak"
+  printf '// shifted\n// shifted\n' | cat - "$T/src/util/format.ts.bak" > "$T/src/util/format.ts"
+  rc="$(cli T45 -- callers formatName -o json)"; assert_rc T45 "callers with shifted lines exits 0" 0 "$rc"
+  assert_jq T45 "reanchored live with callers matching" "$(J T45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  mv "$T/src/util/format.ts.bak" "$T/src/util/format.ts"
+  rc="$(cli T50 -- explore src/util/format.ts -o json)"; assert_rc T50 "explore with overlay exits 0" 0 "$rc"
+  assert_jq T50 "explore counts through overlay" "$(J T50)" '.groups != null'
   rc="$(cli T41 -- explore src/util/format.ts -o json)"; assert_rc T41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq T41 "outline from the server; initials listed, not indexed" "$(J T41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "initials") | .indexed] == [false])'
