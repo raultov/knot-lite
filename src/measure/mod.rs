@@ -58,6 +58,10 @@ fn sandbox_path(repo: &str) -> PathBuf {
     required_env_dir("KNOT_LITE_SANDBOX").join(repo)
 }
 
+fn work_copy_path(repo: &str) -> PathBuf {
+    required_env_dir("KNOT_LITE_MEASURE_WORK").join(repo)
+}
+
 fn fastembed_cache_dir() -> PathBuf {
     let lookup = |key: &str| std::env::var(key).ok();
     resolve_embed_settings(&lookup, &std::env::temp_dir()).cache_dir
@@ -123,6 +127,7 @@ fn write_gate(name: &str, value: &impl Serialize) {
     std::fs::write(measure_out_dir().join(format!("{name}.json")), text).expect("write gate");
 }
 
+mod edits;
 mod explore;
 mod hybrid;
 mod lsp;
