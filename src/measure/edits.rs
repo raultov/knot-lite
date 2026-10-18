@@ -226,7 +226,11 @@ struct R1RepoResult {
     targets_identical: usize,
     deleted_tested: usize,
     deleted_stale: usize,
+    /// Targets whose edit also renamed an unrelated local of the same file.
+    renamed_count: usize,
     passed: bool,
+    /// Why the row is partial (not enough candidates), when it is.
+    note: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -240,8 +244,14 @@ struct R1TargetInfo {
     id: String,
     fqn: String,
     name: String,
+    /// Entity kind (`function`, `method`, …), as recorded by the index.
+    kind: String,
     sig: Option<String>,
     rel_file: String,
+    /// 1-based first line of the declaration.
+    l0: usize,
+    /// 1-based last line of the declaration.
+    l1: usize,
 }
 
 fn select_r1_candidates(
@@ -271,7 +281,11 @@ fn select_r1_candidates(
         {
             continue;
         }
-        if lang == "ts" && (!record.file.starts_with("src/") || record.line.kind != "function") {
+        if lang == "ts" && !record.file.starts_with("src/") {
+            continue;
+        }
+        // TypeScript: functions and methods of classes under src/ (P61.13).
+        if lang == "ts" && !matches!(record.line.kind.as_str(), "function" | "method") {
             continue;
         }
         if lang == "java" {
@@ -312,17 +326,261 @@ fn select_r1_candidates(
             id: record.line.id.clone(),
             fqn: record.line.fqn.clone(),
             name: record.line.name.clone(),
+            kind: record.line.kind.clone(),
             sig: record.line.sig.clone(),
             rel_file: record.file.clone(),
+            l0: record.line.l0,
+            l1: record.line.l1,
         });
     }
     list.sort_by(|a, b| a.id.cmp(&b.id));
     list
 }
 
-fn apply_r1_edit(path: &Path, lang: &str, name: &str, idx: usize) {
-    let content = std::fs::read_to_string(path).expect("read file for edit");
-    let shift = "// r1 shift 1\n// r1 shift 2\n// r1 shift 3\n// r1 shift 4\n// r1 shift 5\n// r1 shift 6\n// r1 shift 7\n// r1 shift 8\n// r1 shift 9\n// r1 shift 10\n";
+/// The ten comment lines that shift every declaration of an edited file.
+const SHIFT_LINES: &str = "// r1 shift 1\n// r1 shift 2\n// r1 shift 3\n// r1 shift 4\n// r1 shift 5\n// r1 shift 6\n// r1 shift 7\n// r1 shift 8\n// r1 shift 9\n// r1 shift 10\n";
+
+/// A local binding to rename: its identifier, the new name and the 0-based
+/// span of the block that scopes it.
+struct LocalRename {
+    ident: String,
+    new_ident: String,
+    start: usize,
+    end: usize,
+}
+
+/// Strip line comments and string/char literal contents, keeping the code.
+fn code_only(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    let mut quote: Option<char> = None;
+    while let Some(c) = chars.next() {
+        match quote {
+            Some(q) => {
+                if c == '\\' {
+                    let _ = chars.next();
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => {
+                if c == '/' && chars.peek() == Some(&'/') {
+                    break;
+                } else if c == '"' || c == '\'' || c == '`' {
+                    quote = Some(c);
+                } else {
+                    out.push(c);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Brace depth at the start of every line.
+fn brace_depths(lines: &[&str]) -> Vec<usize> {
+    let mut depths = Vec::with_capacity(lines.len());
+    let mut depth = 0usize;
+    for line in lines {
+        depths.push(depth);
+        for c in code_only(line).chars() {
+            match c {
+                '{' => depth += 1,
+                '}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+    }
+    depths
+}
+
+/// Byte spans of the whole-word occurrences of `ident` in `text`.
+fn word_spans(text: &str, ident: &str) -> Vec<(usize, usize)> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut spans = Vec::new();
+    let mut from = 0;
+    while let Some(pos) = text[from..].find(ident) {
+        let at = from + pos;
+        let before_ok = at == 0 || !is_word(text[..at].chars().next_back().expect("char before"));
+        let after = at + ident.len();
+        let after_ok =
+            after >= text.len() || !is_word(text[after..].chars().next().expect("char after"));
+        if before_ok && after_ok {
+            spans.push((at, after));
+        }
+        from = at + ident.len().max(1);
+    }
+    spans
+}
+
+/// How often `ident` occurs as a whole word in these lines.
+fn word_count(lines: &[&str], ident: &str) -> usize {
+    lines.iter().map(|line| word_spans(line, ident).len()).sum()
+}
+
+/// The line with every whole-word occurrence of `ident` replaced by `new`.
+fn replace_word(line: &str, ident: &str, new: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut from = 0;
+    for (start, end) in word_spans(line, ident) {
+        out.push_str(&line[from..start]);
+        out.push_str(new);
+        from = end;
+    }
+    out.push_str(&line[from..]);
+    out
+}
+
+/// The 0-based span of the innermost block enclosing line `idx`, which is the
+/// scope of a binding declared there.
+fn enclosing_block(lines: &[&str], depths: &[usize], idx: usize) -> Option<(usize, usize)> {
+    let depth = depths.get(idx).copied()?;
+    if depth == 0 {
+        return None;
+    }
+    let start = (0..idx).rev().find(|&i| depths[i] < depth)?;
+    let end = (idx + 1..lines.len()).find(|&i| depths[i] < depth)? - 1;
+    Some((start, end))
+}
+
+/// The identifier a declaration on `line` binds, when it declares one.
+fn binding_ident(line: &str, lang: &str) -> Option<String> {
+    let code = code_only(line);
+    let head = code.trim_start();
+    let clean = |raw: &str| -> Option<String> {
+        if raw.is_empty()
+            || !raw
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+            || !raw.chars().all(|c| c.is_alphanumeric() || c == '_')
+        {
+            return None;
+        }
+        Some(raw.to_owned())
+    };
+    match lang {
+        "rust" => {
+            let rest = head.strip_prefix("let ")?;
+            let rest = rest.strip_prefix("mut ").unwrap_or(rest);
+            clean(rest.split([' ', ':', ';', '=']).next()?)
+        }
+        "ts" => {
+            let rest = head
+                .strip_prefix("const ")
+                .or_else(|| head.strip_prefix("let "))?;
+            clean(rest.split([' ', ':', ';', '=']).next()?)
+        }
+        "java" => {
+            // `<modifiers> <Type...> <ident>` before the `=` or `;`.
+            let left = head.split(['=', ';']).next().unwrap_or("").trim_end();
+            if left.contains('(') || left.contains('.') {
+                return None;
+            }
+            let mut words = left.split_whitespace().peekable();
+            while words.peek().is_some_and(|w| {
+                matches!(
+                    *w,
+                    "public"
+                        | "private"
+                        | "protected"
+                        | "static"
+                        | "final"
+                        | "var"
+                        | "transient"
+                        | "volatile"
+                )
+            }) {
+                words.next();
+            }
+            if words.clone().count() < 2 {
+                return None;
+            }
+            clean(left.split_whitespace().last()?)
+        }
+        _ => None,
+    }
+}
+
+/// Find a local binding outside the target's declaration whose whole-word
+/// occurrences are confined to the block that scopes it.
+fn find_unrelated_local(
+    text: &str,
+    lang: &str,
+    target_name: &str,
+    target_l0: usize,
+    target_l1: usize,
+) -> Option<LocalRename> {
+    let lines: Vec<&str> = text.lines().collect();
+    let depths = brace_depths(&lines);
+    for (idx, line) in lines.iter().enumerate() {
+        let n = idx + 1;
+        if (target_l0..=target_l1).contains(&n) {
+            continue;
+        }
+        let Some(ident) = binding_ident(line, lang) else {
+            continue;
+        };
+        if ident == target_name {
+            continue;
+        }
+        let Some((start, end)) = enclosing_block(&lines, &depths, idx) else {
+            continue;
+        };
+        if (start + 1..=end + 1).any(|m| (target_l0..=target_l1).contains(&m)) {
+            continue;
+        }
+        if word_count(&lines[start..=end], &ident) < 2 {
+            continue;
+        }
+        let outside = word_count(&lines[..start], &ident) + word_count(&lines[end + 1..], &ident);
+        if outside > 0 {
+            continue;
+        }
+        return Some(LocalRename {
+            new_ident: format!("{ident}_r1"),
+            ident,
+            start,
+            end,
+        });
+    }
+    None
+}
+
+/// The text with `rename` applied inside its span only.
+fn rename_in_span(text: &str, rename: &LocalRename) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (idx, line) in text.split_inclusive('\n').enumerate() {
+        if (rename.start..=rename.end).contains(&idx) {
+            out.push_str(&replace_word(line, &rename.ident, &rename.new_ident));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The new caller the R1 edit adds (P61.13: a TypeScript method is called
+/// through a parameter of its declaring class).
+fn r1_caller(lang: &str, target: &R1TargetInfo, idx: usize) -> String {
+    let name = &target.name;
+    if lang == "rust" {
+        return format!("\npub fn r1_caller_{idx}() {{\n    let _ = {name};\n}}\n");
+    }
+    if lang == "ts" && target.kind == "method" {
+        let class = target
+            .fqn
+            .strip_suffix(&format!(".{name}"))
+            .unwrap_or(&target.fqn);
+        return format!(
+            "\nexport function r1Caller{idx}(o: {class}) {{\n    return o.{name}();\n}}\n"
+        );
+    }
+    format!("\nexport function r1Caller{idx}() {{\n    return ({name} as unknown);\n}}\n")
+}
+
+/// Insert the new caller into the file body (before the final `}` in Java).
+fn insert_r1_caller(content: &str, lang: &str, target: &R1TargetInfo, idx: usize) -> String {
     if lang == "java"
         && let Some(pos) = content.rfind('}')
     {
@@ -333,19 +591,27 @@ fn apply_r1_edit(path: &Path, lang: &str, name: &str, idx: usize) {
         } else {
             format!("\n    public void r1Caller{idx}() {{\n")
         };
-        let call =
-            format!("{method_hdr}        try {{ {name}(); }} catch (Throwable _t) {{}}\n    }}\n");
-        let full = format!("{shift}{head}{call}{tail}");
-        std::fs::write(path, full).expect("write edited java");
-        return;
+        let call = format!(
+            "{method_hdr}        try {{ {}(); }} catch (Throwable _t) {{}}\n    }}\n",
+            target.name
+        );
+        return format!("{head}{call}{tail}");
     }
-    let new_caller = if lang == "rust" {
-        format!("\npub fn r1_caller_{idx}() {{\n    let _ = {name};\n}}\n")
-    } else {
-        format!("\nexport function r1Caller{idx}() {{\n    return ({name} as unknown);\n}}\n")
-    };
-    let full = format!("{shift}{content}{new_caller}");
-    std::fs::write(path, full).expect("write edited file");
+    format!("{content}{}", r1_caller(lang, target, idx))
+}
+
+/// Apply the R1 edit to the target's own file: shift its lines, rename one
+/// local that is unrelated to the target, and add a new caller. Returns
+/// whether an unrelated local was renamed (P61.13).
+fn apply_r1_edit(path: &Path, lang: &str, target: &R1TargetInfo, idx: usize) -> bool {
+    let original = std::fs::read_to_string(path).expect("read file for edit");
+    let rename = find_unrelated_local(&original, lang, &target.name, target.l0, target.l1);
+    let content = rename
+        .as_ref()
+        .map_or_else(|| original.clone(), |r| rename_in_span(&original, r));
+    let body = insert_r1_caller(&content, lang, target, idx);
+    std::fs::write(path, format!("{SHIFT_LINES}{body}")).expect("write edited file");
+    rename.is_some()
 }
 
 fn target_container_labels(
@@ -458,41 +724,60 @@ fn test_r1_reference_reindex(
     identical_count
 }
 
-fn test_r1_for_repo(repo: &str, lang: &str) -> R1RepoResult {
-    use super::lsp::{pool_for_root, timed_callers};
-    let work_repo = ensure_work_copy(repo);
-    let layout = IndexLayout::for_repo(&work_repo);
-    let index = load_index(&layout).expect("load index");
-    let candidates = select_r1_candidates(&index, &work_repo, lang);
+/// How one repository's R1 run splits its candidates.
+struct R1Split {
+    edit_targets: Vec<R1TargetInfo>,
+    delete_targets: Vec<R1TargetInfo>,
+    /// Whether P6 §11's 20 edited + 5 deletion targets were all available.
+    enough: bool,
+    note: Option<String>,
+}
+
+/// Split the candidates into the 20 edited and 5 deletion targets of P6 §11.
+fn split_r1_targets(repo: &str, candidates: &[R1TargetInfo]) -> R1Split {
+    let enough = candidates.len() >= 25;
+    let (edit_count, delete_count) = if enough {
+        (20, 5)
+    } else {
+        let deletes = 5.min(candidates.len() / 2);
+        (candidates.len() - deletes, deletes)
+    };
     assert!(
-        candidates.len() >= 20,
-        "need >= 20 candidates on {repo}, found {}",
+        delete_count > 0 && edit_count > 0,
+        "need edit and deletion targets on {repo}, found {} candidates",
         candidates.len()
     );
-
-    let num_edits = candidates.len().saturating_sub(5).min(20);
-    let edit_targets: Vec<R1TargetInfo> = candidates.iter().take(num_edits).cloned().collect();
-    let delete_targets: Vec<R1TargetInfo> =
-        candidates.iter().skip(num_edits).take(5).cloned().collect();
-    assert!(
-        !delete_targets.is_empty(),
-        "need deletion targets on {repo}"
-    );
-
-    // 1. Apply edits under EditGuard up front
-    let mut guards = Vec::new();
-    for (i, t) in edit_targets.iter().enumerate() {
-        let abs = work_repo.join(&t.rel_file);
-        let guard = EditGuard::new(abs.clone());
-        apply_r1_edit(&abs, lang, &t.name, i);
-        guards.push(guard);
+    let note = (!enough).then(|| {
+        format!(
+            "R1 {repo}: not measured at 20, only {} candidates",
+            candidates.len()
+        )
+    });
+    R1Split {
+        edit_targets: candidates.iter().take(edit_count).cloned().collect(),
+        delete_targets: candidates
+            .iter()
+            .skip(edit_count)
+            .take(delete_count)
+            .cloned()
+            .collect(),
+        enough,
+        note,
     }
+}
 
-    // 2. Query live with real language server
-    let (_idx, settings, _root, pool) = pool_for_root(&work_repo);
-    let mut live_labels_list = Vec::new();
-    for t in &edit_targets {
-        let (resp, _) = timed_callers(&index, &settings, &work_repo, &t.fqn, Some(&pool));
+/// Query every edited target live and collect its caller containers.
+fn r1_live_labels(
+    work_repo: &Path,
+    index: &crate::index::load::LoadedIndex,
+    settings: &crate::lsp::settings::LspSettings,
+    pool: &crate::lsp::pool::LspPool,
+    edit_targets: &[R1TargetInfo],
+) -> Vec<std::collections::BTreeSet<String>> {
+    use super::lsp::timed_callers;
+    let mut labels_list = Vec::with_capacity(edit_targets.len());
+    for t in edit_targets {
+        let (resp, _) = timed_callers(index, settings, work_repo, &t.fqn, Some(pool));
         let target = resp
             .targets
             .iter()
@@ -518,16 +803,45 @@ fn test_r1_for_repo(repo: &str, lang: &str) -> R1RepoResult {
             "new caller missing in live labels for {}",
             t.fqn
         );
-        live_labels_list.push(labels);
+        labels_list.push(labels);
+    }
+    labels_list
+}
+
+fn test_r1_for_repo(repo: &str, lang: &str) -> R1RepoResult {
+    use super::lsp::pool_for_root;
+    let work_repo = ensure_work_copy(repo);
+    let layout = IndexLayout::for_repo(&work_repo);
+    let index = load_index(&layout).expect("load index");
+    let candidates = select_r1_candidates(&index, &work_repo, lang);
+    // P6 §11 wants 20 edited targets and 5 deletion targets (P61.13).
+    let split = split_r1_targets(repo, &candidates);
+    let edit_targets = &split.edit_targets;
+    let delete_targets = &split.delete_targets;
+
+    // 1. Apply edits under EditGuard up front
+    let mut guards = Vec::new();
+    let mut renamed_count = 0;
+    for (i, t) in edit_targets.iter().enumerate() {
+        let abs = work_repo.join(&t.rel_file);
+        let guard = EditGuard::new(abs.clone());
+        if apply_r1_edit(&abs, lang, t, i) {
+            renamed_count += 1;
+        }
+        guards.push(guard);
     }
 
+    // 2. Query live with real language server
+    let (_idx, settings, _root, pool) = pool_for_root(&work_repo);
+    let live_labels_list = r1_live_labels(&work_repo, &index, &settings, &pool, edit_targets);
+
     // 3. Test deletions while the pool is running
-    let deleted_stale = test_r1_deletions(&work_repo, &index, &settings, &pool, &delete_targets);
+    let deleted_stale = test_r1_deletions(&work_repo, &index, &settings, &pool, delete_targets);
     drop(pool);
 
     // 4. Re-index work copy with warm run_index to get reference answer
     let identical_count =
-        test_r1_reference_reindex(&work_repo, &settings, &edit_targets, &live_labels_list);
+        test_r1_reference_reindex(&work_repo, &settings, edit_targets, &live_labels_list);
 
     // Clean up work copy
     drop(guards);
@@ -540,20 +854,27 @@ fn test_r1_for_repo(repo: &str, lang: &str) -> R1RepoResult {
     } else {
         edit_targets.len()
     };
-    let passed = identical_count >= min_pass && deleted_stale == delete_targets.len();
+    let passed =
+        split.enough && identical_count >= min_pass && deleted_stale == delete_targets.len();
     println!(
-        "R1 {repo}: {identical_count}/{} identical, {deleted_stale}/{} deleted stale -> {}",
+        "R1 {repo}: {identical_count}/{} identical, {deleted_stale}/{} deleted stale, {renamed_count}/{} unrelated locals renamed -> {}",
         edit_targets.len(),
         delete_targets.len(),
+        edit_targets.len(),
         if passed { "PASS" } else { "FAIL" }
     );
+    if let Some(text) = &split.note {
+        println!("  note: {text}");
+    }
     R1RepoResult {
         repo: repo.to_owned(),
         targets_tested: edit_targets.len(),
         targets_identical: identical_count,
         deleted_tested: delete_targets.len(),
         deleted_stale,
+        renamed_count,
         passed,
+        note: split.note,
     }
 }
 
@@ -614,8 +935,11 @@ fn select_p1_targets(index: &crate::index::load::LoadedIndex) -> Vec<R1TargetInf
                 id: id.clone(),
                 fqn: record.line.fqn.clone(),
                 name: record.line.name.clone(),
+                kind: record.line.kind.clone(),
                 sig: record.line.sig.clone(),
                 rel_file: record.file.clone(),
+                l0: record.line.l0,
+                l1: record.line.l1,
             }
         })
         .collect()
