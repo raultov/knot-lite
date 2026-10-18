@@ -127,14 +127,14 @@ pub fn resolve_lsp_settings(
         .or_else(|| user_cache_subdir(lookup, CACHE_LEAF))
         .unwrap_or_else(|| temp_dir.join(TEMP_CACHE_DIR));
     let sync = match (lookup)(ENV_SYNC).as_deref().map(str::trim) {
-        None | Some("") => crate::lsp::sync::SyncMode::Off,
+        None | Some("") => crate::lsp::sync::SyncMode::Watched,
         Some(val) => match crate::lsp::sync::SyncMode::parse(val) {
             Some(mode) => mode,
             None => {
                 reader.warnings.push(format!(
-                    "{ENV_SYNC}='{val}' is invalid; must be one of off|open|watched|open+watched (using default 'off')"
+                    "{ENV_SYNC}='{val}' is invalid; must be one of off|open|watched|open+watched (using default 'watched')"
                 ));
-                crate::lsp::sync::SyncMode::Off
+                crate::lsp::sync::SyncMode::Watched
             }
         },
     };
@@ -258,6 +258,7 @@ mod tests {
         assert_eq!(s.max_live_targets, 10);
         assert_eq!(s.deadline, Duration::from_secs(30));
         assert_eq!(s.cache_root, PathBuf::from("/tmp/knot-lite-lsp"));
+        assert_eq!(s.sync, crate::lsp::sync::SyncMode::Watched);
         assert!(s.warnings.is_empty());
     }
 

@@ -28,11 +28,11 @@ pub const SYNC_WAIT: Duration = Duration::from_secs(10);
 #[serde(rename_all = "lowercase")]
 pub enum SyncMode {
     /// No sync (0.5.0 behaviour).
-    #[default]
     Off,
     /// `didClose` + `didOpen` of each changed file.
     Open,
-    /// One `workspace/didChangeWatchedFiles` notification.
+    /// One `workspace/didChangeWatchedFiles` notification (default, selected by J1).
+    #[default]
     Watched,
     /// Both `open` and `watched`.
     OpenWatched,
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn off_mode_sends_nothing() {
         assert_eq!(SyncMode::parse("off"), Some(SyncMode::Off));
-        assert_eq!(SyncMode::default(), SyncMode::Off);
+        assert_eq!(SyncMode::default(), SyncMode::Watched);
     }
 
     #[tokio::test]

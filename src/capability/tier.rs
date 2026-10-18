@@ -187,6 +187,9 @@ pub struct TierRow {
     pub lsp_precompute: Option<String>,
     /// The live state of this language's server; `null` outside the MCP server.
     pub lsp_runtime: Option<SlotSnapshot>,
+    /// Edit-sync mode configured for this language server (P6-D10, §10).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lsp_sync: Option<&'static str>,
 }
 
 /// Repository identity in the report.
@@ -320,6 +323,7 @@ pub fn build_report_with(
                     .runtime
                     .and_then(|runtime| runtime.slots.get(lang.dir_name()))
                     .cloned();
+                row.lsp_sync = Some(cfg.lsp.sync.label());
             }
             row
         })
@@ -434,6 +438,7 @@ fn tier_row(label: &str, files: usize, lsp: Option<LspStatus>) -> TierRow {
         note,
         lsp_precompute: None,
         lsp_runtime: None,
+        lsp_sync: None,
     }
 }
 
