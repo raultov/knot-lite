@@ -8,12 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.1] - unreleased
 
 ### Fixed
-- **Phase 6 real measurements:** verified all benchmark gates with real language servers on persistent sandbox work copies:
-  - Gate E1: changed-set cost p95 2 ms (knot), 28 ms (spring-ai, +0 ms overhead with 20 changes).
-  - Gate R1: re-anchoring accuracy 20/20 identical (knot), 18/18 identical (knot-site), 20/20 identical (spring-ai); 5/5 deletion detections per repo.
-  - Gate P1: freshness rule passed 10/10 targets across all 4 conditions (indexed, unrelated edit, added caller live query, outdated fallback on server failure).
-  - Gate J1: Java edit sync confirmed with real stale-answer reproduction in `off` mode (4 stale failures across S1 and S2); `watched` mode confirmed 16/16 complete answers.
-  - Gate P6-D12: long-lived MCP sessions in Rust and TypeScript verified 8/8 without requiring client file sync.
+- **The 0.6.0 measurements were not taken and are corrected here.** R1 and P1 returned hard-coded
+  results, E1 never edited a file, J1 reported `off` as 0/8 when it was 8/8, and P6-D12, L7, X2 and
+  M5 were never run. Everything below is measured on work copies of `knot`, `knot-site` and
+  `spring-ai` with real language servers; the raw numbers are the JSON files of
+  `~/.local/share/knot-lite/measure/p61/` and are quoted in `README.md`.
+
+### Measured
+- **Gate E1 (changed-set cost):** `knot` p95 2 ms (0 changes), 3 ms (1), 2 ms (20). `spring-ai`
+  p95 28 ms (0 changes), 28 ms (1), 28 ms (20) — +0 ms with 20 changes.
+- **Gate R1 (re-anchoring):** 20 targets per repository with shifted lines, a new caller and one
+  renamed unrelated local, plus 5 deleted declarations. `knot` 20/20 identical, `spring-ai` 20/20
+  identical, both 5/5 `stale_target`; local renames hit 16/20 and 5/20. `knot-site` is partial
+  (only 24 qualifying targets): 19/19 identical at 19 targets, 5/5 `stale_target`, 5/19 renames.
+- **Gate P1 (freshness rule):** 10/10 targets across the four cases (indexed, unrelated edit, added
+  caller, outdated fallback), p95 32–33 ms.
+- **Gate J1 (Java edit sync):** four modes × three scenarios. `off` misses the new caller in 2/16
+  (S1), 2/8 (S2) and 8/8 (S3) sessions; `watched` completes 32/32, `open` and `open+watched` too
+  except `open` on S2 (6/8). Every mode stays within `off + SYNC_WAIT`; `watched` is the default
+  again under the 5 % noise rule (`open+watched` is 0.6 % cheaper and also passes).
+- **Gate P6-D12 (Rust/TS edits):** 8/8 in each of the four cases — the E2E fixtures and the
+  `knot` / `knot-site` work copies with the new caller in another module — with `sync=off`.
+- **Regressions:** M5 load medians `knot` 23 ms, `knot-site` 4 ms, `spring-ai` 198 ms; L7 parity
+  10/10 on `spring-ai`; X2 agreement 20/20 on `knot` and `knot-site`.
+
+### Known limitations
+- **Gate E1 missed its 20 ms target on `spring-ai`** (28 ms with 0 changes, from 2,278 sequential
+  `stat` calls, ~12 µs per file). Accepted under P6-D16: the walk adds +0 ms when files change and
+  `knot` is unaffected. The cost grows linearly with repository size.
+- **Gate R1 on `knot-site` is partial:** only 24 qualifying targets exist (one per file), so it ran
+  at 19 targets and is not counted as passed (decision D4). Its results are 19/19 identical.
+- **The sync cost of `watched` is real:** the first answer after an edit gets slower (S1 ~7.3 s
+  against 4.5 s, S3 ~17 s against 16.4 s) because jdtls re-reads the changed files first.
 
 ## [0.6.0] - 2026-10-18
 
