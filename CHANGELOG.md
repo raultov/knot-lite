@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - unreleased
+## [0.6.0] - 2026-10-18
 
 ### Added
 - **Re-anchor stale targets:** `find_callers` and `explore_file` re-parse changed files using knot's parser, re-anchor shifted targets to their fresh line and column (`lsp.reanchored = true`), and continue live language-server queries without waiting for `knot-lite index`.
