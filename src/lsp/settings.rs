@@ -29,7 +29,7 @@ pub const ENV_MAX_LIVE_TARGETS: &str = "KNOT_LITE_LSP_MAX_LIVE_TARGETS";
 pub const ENV_DEADLINE: &str = "KNOT_LITE_LSP_DEADLINE_SECS";
 /// Start the servers of the indexed languages when the MCP server starts: `on|off` (default `off`).
 pub const ENV_WARMUP: &str = "KNOT_LITE_LSP_WARMUP";
-/// Edit-sync mode for language servers: `off|open|watched|open+watched` (default `off`, P6-D10).
+/// Edit-sync mode for language servers: `off|open|watched|open+watched` (default `watched`, P6-D10, P6-D11).
 pub const ENV_SYNC: &str = "KNOT_LITE_LSP_SYNC";
 
 /// Default idle shutdown, in seconds.

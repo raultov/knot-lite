@@ -141,9 +141,10 @@ if lsp_or_skip V20 "stale target" java; then
   printf '// shifted\n// shifted\n' | cat - "$order.bak" > "$order"
   rc="$(cli V45 -- callers Order.getItems -o json)"; assert_rc V45 "callers with shifted lines exits 0" 0 "$rc"
   assert_jq V45 "reanchored live with callers matching" "$(J V45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  assert_set_eq V45 "caller set matches pre-shift answer" "$(function_set "$(J V20)")" "$(function_set "$(J V45)")"
   mv "$order.bak" "$order"
   rc="$(cli V50 -- explore "$P/model/Order.java" -o json)"; assert_rc V50 "explore with overlay exits 0" 0 "$rc"
-  assert_jq V50 "explore counts through overlay" "$(J V50)" '.groups != null'
+  assert_jq V50 "explore counts through overlay" "$(J V50)" '([.groups[].entities[] | select(.name == "size") | .indexed] == [false])'
   rc="$(cli V41 -- explore "$P/model/Order.java" -o json)"; assert_rc V41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq V41 "outline from the server; size listed, not indexed" "$(J V41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "size") | .indexed] == [false])'
@@ -188,9 +189,12 @@ if lsp_or_skip V17 "pre-computed callers" java; then
   assert_jq V46 "precomputed answer served when unrelated file edited" "$(J V46)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == false'
   printf '\n    public void callItems(Order o) { o.getItems(); }\n' >> "$V/$P/model/Item.java"
   rc="$(cli V47 -- callers Order.getItems -o json)"; assert_rc V47 "callers with new caller exits 0" 0 "$rc"
-  assert_jq V47 "answered live when new caller added" "$(J V47)" '.targets[0].provenance == "lsp-live"'
+  assert_jq V47 "answered live when new caller added" "$(J V47)" \
+    '.targets[0].provenance == "lsp-live" and ([.targets[0].callers.CALLS[] | select(.name == "callItems")] | length == 1)'
+  text_in V47 "a note says pre-computed answer is outdated" "$(J V47)" 'outdated'
   rc="$(cli V48 KNOT_LITE_LSP_JAVA=/nonexistent/server -- callers Order.getItems -o json)"; assert_rc V48 "callers with broken server exits 0" 0 "$rc"
   assert_jq V48 "served outdated indexed on server failure" "$(J V48)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == true'
+  text_in V48 "a note says pre-computed answer is outdated" "$(J V48)" 'outdated'
   mv "$V/$P/model/Item.java.bak" "$V/$P/model/Item.java"
 fi
 

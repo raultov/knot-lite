@@ -5,7 +5,7 @@
 //! published views and `Invalidate` only writes the index stamp.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use super::slot::{Shared, Slot, SlotGuard, snapshot_slot};
 use super::start::{Next, await_start, decide_start, take_start_outcome};
@@ -142,6 +142,7 @@ async fn run_target_on_slot(
             started,
             last_used,
             attempts,
+            ledger: slot_ledger,
             ..
         } = &mut **slot
         else {
@@ -153,14 +154,25 @@ async fn run_target_on_slot(
         let prev_attempts = *attempts;
 
         // Run edit sync if applicable (P6-D10).
-        if crate::lsp::sync::sync_edits(req.lang)
+        let sync_outcome = if crate::lsp::sync::sync_edits(req.lang)
             && ctx.settings.sync != crate::lsp::sync::SyncMode::Off
         {
             let repo_root = repo_root_from_abs_rel(&req.abs_file, &req.rel_file);
             let repo_key = crate::lsp::settings::repo_key(&repo_root);
+            let ws = ctx.settings.cache_dir.join(&repo_key).join("jdtls-ws");
+            let marker = std::fs::metadata(&ws)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default();
             let ledger_path =
                 crate::lsp::sync::ledger_path(&ctx.settings.cache_dir, &repo_key, req.lang);
-            let mut ledger = crate::lsp::sync::Ledger::load(&ledger_path, "");
+            let ledger = slot_ledger
+                .get_or_insert_with(|| crate::lsp::sync::Ledger::load(&ledger_path, &marker));
+            if !marker.is_empty() && ledger.workspace_marker != marker {
+                *ledger = crate::lsp::sync::Ledger::new();
+            }
             let mut universe: Vec<(String, PathBuf)> = ctx
                 .settings
                 .inventory_files
@@ -175,21 +187,30 @@ async fn run_target_on_slot(
             if universe.is_empty() {
                 universe.push((req.rel_file.clone(), req.abs_file.clone()));
             }
-            let _ = crate::lsp::sync::sync_before(
+            let outcome = crate::lsp::sync::sync_before(
                 &mut started.session,
-                &mut ledger,
+                ledger,
                 crate::lsp::sync::SyncInput {
                     mode: ctx.settings.sync,
                     repo_root: &repo_root,
                     universe: &universe,
+                    changed_files: Some(&req.changed_files),
                     deadline: req.deadline,
                 },
             )
-            .await;
-            let _ = ledger.save(&ledger_path);
-        }
+            .await
+            .unwrap_or_default();
+            if outcome.synced > 0 || ledger.workspace_marker != marker {
+                let _ = ledger.save(&ledger_path, &marker);
+            }
+            outcome
+        } else {
+            crate::lsp::sync::SyncOutcome::default()
+        };
 
-        let outcome = run_target(&mut started.session, req, filter).await;
+        let mut outcome = run_target(&mut started.session, req, filter).await;
+        outcome.sync_synced = sync_outcome.synced;
+        outcome.sync_left = sync_outcome.left;
         *last_used = clock.now();
         (outcome, prev_attempts)
     };

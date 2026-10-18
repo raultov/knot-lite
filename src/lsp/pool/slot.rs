@@ -43,6 +43,7 @@ pub(super) enum Slot {
         last_used: Instant,
         stamp: Option<IndexStamp>,
         attempts: u32,
+        ledger: Option<crate::lsp::sync::Ledger>,
     },
     Failed {
         attempts: u32,

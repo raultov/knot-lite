@@ -56,6 +56,8 @@ pub struct LiveRequest {
     pub deadline: Instant,
     /// Pause before the retry-on-empty (tests shorten it).
     pub retry_pause: Duration,
+    /// Repository files changed since the index (hint for edit sync).
+    pub changed_files: std::sync::Arc<Vec<String>>,
 }
 
 /// How a live query ended.
@@ -140,6 +142,10 @@ pub struct LiveOutcome {
     /// The document's symbols, when they were asked for and the server
     /// answers `documentSymbol`; `None` otherwise.
     pub symbols: Option<Vec<OutlineSymbol>>,
+    /// Number of files synced with the server before this query.
+    pub sync_synced: usize,
+    /// Number of changed files left for subsequent queries.
+    pub sync_left: usize,
 }
 
 impl LiveOutcome {
@@ -155,6 +161,8 @@ impl LiveOutcome {
             retried_empty: false,
             ms: 0,
             symbols: None,
+            sync_synced: 0,
+            sync_left: 0,
         }
     }
 }
@@ -292,6 +300,8 @@ fn finish(result: Result<Collected, Failure>, retried_empty: bool, ms: u64) -> L
             retried_empty,
             ms: 0,
             symbols: collected.symbols,
+            sync_synced: 0,
+            sync_left: 0,
         },
         Err(Failure::NoPosition(detail)) => {
             LiveOutcome::without_answer(LiveStatus::NoPosition, detail)
@@ -683,6 +693,7 @@ mod tests {
                 heuristic_hint: 0,
                 deadline: Instant::now() + Duration::from_secs(30),
                 retry_pause: Duration::from_millis(10),
+                changed_files: std::sync::Arc::new(Vec::new()),
             }
         }
 

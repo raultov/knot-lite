@@ -142,9 +142,10 @@ if lsp_or_skip R20 "stale target" rust; then
   printf '// shifted\n// shifted\n' | cat - "$R/src/geometry.rs.bak" > "$R/src/geometry.rs"
   rc="$(cli R45 -- callers total_area -o json)"; assert_rc R45 "callers with shifted lines exits 0" 0 "$rc"
   assert_jq R45 "reanchored live with callers matching" "$(J R45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  assert_set_eq R45 "caller set matches pre-shift answer" "$(function_set "$(J R20)")" "$(function_set "$(J R45)")"
   mv "$R/src/geometry.rs.bak" "$R/src/geometry.rs"
   rc="$(cli R50 -- explore src/geometry.rs -o json)"; assert_rc R50 "explore with overlay exits 0" 0 "$rc"
-  assert_jq R50 "explore counts through overlay" "$(J R50)" '.groups != null'
+  assert_jq R50 "explore counts through overlay" "$(J R50)" '([.groups[].entities[] | select(.name == "triple_circle") | .indexed] == [false])'
   rc="$(cli R41 -- explore src/geometry.rs -o json)"; assert_rc R41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq R41 "outline from the server; triple_circle listed, not indexed" "$(J R41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "triple_circle") | .indexed] == [false])'
@@ -182,7 +183,9 @@ if lsp_or_skip R17 "pre-computed callers" rust; then
   assert_jq R46 "precomputed answer served when unrelated file edited" "$(J R46)" '.targets[0].provenance == "lsp-indexed" and .targets[0].lsp.outdated == false'
   printf 'pub fn caller_in_shapes() -> f64 { crate::geometry::total_area(&[]) }\n' >> "$R/src/shapes.rs"
   rc="$(cli R47 -- callers total_area -o json)"; assert_rc R47 "callers with new caller exits 0" 0 "$rc"
-  assert_jq R47 "answered live when new caller added" "$(J R47)" '.targets[0].provenance == "lsp-live"'
+  assert_jq R47 "answered live when new caller added" "$(J R47)" \
+    '.targets[0].provenance == "lsp-live" and ([.targets[0].callers.CALLS[] | select(.name == "caller_in_shapes")] | length == 1)'
+  text_in R47 "a note says pre-computed answer is outdated" "$(J R47)" 'outdated'
   mv "$R/src/shapes.rs.bak" "$R/src/shapes.rs"
 fi
 

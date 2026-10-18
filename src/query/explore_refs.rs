@@ -132,6 +132,7 @@ impl ExploreLive<'_> {
             heuristic_hint: 0,
             deadline,
             retry_pause: DEFAULT_RETRY_PAUSE,
+            changed_files: std::sync::Arc::new(Vec::new()),
         }
     }
 

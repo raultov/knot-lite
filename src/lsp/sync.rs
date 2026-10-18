@@ -118,7 +118,8 @@ impl Ledger {
     }
 
     /// Save to `path` (atomic rename).
-    pub fn save(&self, path: &Path) -> Result<()> {
+    pub fn save(&mut self, path: &Path, workspace_marker: &str) -> Result<()> {
+        self.workspace_marker = workspace_marker.to_owned();
         let mut text = String::new();
         text.push_str(&serde_json::to_string(&self.workspace_marker)?);
         text.push('\n');
@@ -136,16 +137,25 @@ impl Ledger {
     }
 
     /// Files whose `(mtime, size)` differ from the ledger, sorted, capped at
-    /// `MAX_SYNC_FILES`.
-    pub fn diff(&self, universe: &[(String, PathBuf)]) -> Vec<String> {
-        let mut out = Vec::new();
+    /// `MAX_SYNC_FILES`. Returns `(to_sync, left_count)`.
+    ///
+    /// When the ledger is empty (missing or reset due to marker mismatch), P6-D10 specifies:
+    /// "a missing or unreadable ledger = the changed set of P6-D3".
+    /// In that case, files in `universe` not in `changed_hint` are seeded into `seen` directly
+    /// (they match the index), and only the files in `changed_hint` are returned for syncing.
+    pub fn diff(
+        &mut self,
+        universe: &[(String, PathBuf)],
+        changed_hint: Option<&[String]>,
+    ) -> (Vec<String>, usize) {
+        if self.seen.is_empty() {
+            return self.diff_empty_ledger(universe, changed_hint);
+        }
+        let mut changes = Vec::new();
         for (rel, abs) in universe {
             let Ok(meta) = std::fs::metadata(abs) else {
                 // Deleted file: always sync.
-                out.push(rel.clone());
-                if out.len() >= MAX_SYNC_FILES {
-                    break;
-                }
+                changes.push(rel.clone());
                 continue;
             };
             let mtime_secs = meta
@@ -158,14 +168,53 @@ impl Ledger {
             match self.seen.get(rel) {
                 Some(prev) if prev.mtime_secs == mtime_secs && prev.size == size => {}
                 _ => {
-                    out.push(rel.clone());
-                    if out.len() >= MAX_SYNC_FILES {
-                        break;
-                    }
+                    changes.push(rel.clone());
                 }
             }
         }
-        out
+        let total = changes.len();
+        let to_sync = changes.into_iter().take(MAX_SYNC_FILES).collect();
+        let left = total.saturating_sub(MAX_SYNC_FILES);
+        (to_sync, left)
+    }
+
+    fn diff_empty_ledger(
+        &mut self,
+        universe: &[(String, PathBuf)],
+        changed_hint: Option<&[String]>,
+    ) -> (Vec<String>, usize) {
+        let changed_set: std::collections::HashSet<&str> = changed_hint
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect();
+
+        let mut to_sync = Vec::new();
+        for (rel, abs) in universe {
+            let Ok(meta) = std::fs::metadata(abs) else {
+                if changed_set.contains(rel.as_str()) {
+                    to_sync.push(rel.clone());
+                }
+                continue;
+            };
+            let mtime_secs = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let size = meta.len();
+
+            if changed_set.contains(rel.as_str()) {
+                to_sync.push(rel.clone());
+            } else {
+                self.seen.insert(rel.clone(), Seen { mtime_secs, size });
+            }
+        }
+        let total = to_sync.len();
+        let capped = to_sync.into_iter().take(MAX_SYNC_FILES).collect();
+        let left = total.saturating_sub(MAX_SYNC_FILES);
+        (capped, left)
     }
 
     /// Record `rel` as seen.
@@ -211,11 +260,21 @@ pub fn ledger_path(cache_root: &Path, repo_key: &str, lang: LspLang) -> PathBuf 
     dir.join(name)
 }
 
+/// What [`sync_before`] produced (P6-D10, §10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SyncOutcome {
+    /// Number of files synced on this request.
+    pub synced: usize,
+    /// Number of remaining changed files left for subsequent requests.
+    pub left: usize,
+}
+
 /// What [`sync_before`] needs.
 pub struct SyncInput<'a> {
     pub mode: SyncMode,
     pub repo_root: &'a Path,
     pub universe: &'a [(String, PathBuf)],
+    pub changed_files: Option<&'a [String]>,
     pub deadline: Instant,
 }
 
@@ -224,19 +283,20 @@ pub async fn sync_before(
     session: &mut LspSession,
     ledger: &mut Ledger,
     input: SyncInput<'_>,
-) -> Result<usize> {
+) -> Result<SyncOutcome> {
     let SyncInput {
         mode,
         repo_root,
         universe,
+        changed_files,
         deadline,
     } = input;
     if mode == SyncMode::Off {
-        return Ok(0);
+        return Ok(SyncOutcome::default());
     }
-    let diff = ledger.diff(universe);
+    let (diff, left) = ledger.diff(universe, changed_files);
     if diff.is_empty() {
-        return Ok(0);
+        return Ok(SyncOutcome::default());
     }
 
     if mode == SyncMode::Open || mode == SyncMode::OpenWatched {
@@ -275,7 +335,10 @@ pub async fn sync_before(
         ledger.mark(rel, &abs);
     }
 
-    Ok(diff.len())
+    Ok(SyncOutcome {
+        synced: diff.len(),
+        left,
+    })
 }
 
 #[cfg(test)]
@@ -310,19 +373,21 @@ mod tests {
         .await;
         let mut ledger = Ledger::new();
         let universe = vec![("a.java".to_owned(), path)];
-        let synced = sync_before(
+        let outcome = sync_before(
             &mut session,
             &mut ledger,
             SyncInput {
                 mode: SyncMode::Open,
                 repo_root: tmp.path(),
                 universe: &universe,
+                changed_files: Some(&["a.java".to_owned()]),
                 deadline: Instant::now() + Duration::from_secs(5),
             },
         )
         .await
         .unwrap();
-        assert_eq!(synced, 1);
+        assert_eq!(outcome.synced, 1);
+        assert_eq!(outcome.left, 0);
         assert_eq!(handle.counters.did_open_count(), 1);
         assert_eq!(handle.counters.did_close_count(), 1);
         assert_eq!(handle.counters.did_change_watched_files_count(), 0);
@@ -344,19 +409,21 @@ mod tests {
         .await;
         let mut ledger = Ledger::new();
         let universe = vec![("a.java".to_owned(), path)];
-        let synced = sync_before(
+        let outcome = sync_before(
             &mut session,
             &mut ledger,
             SyncInput {
                 mode: SyncMode::Watched,
                 repo_root: tmp.path(),
                 universe: &universe,
+                changed_files: Some(&["a.java".to_owned()]),
                 deadline: Instant::now() + Duration::from_secs(5),
             },
         )
         .await
         .unwrap();
-        assert_eq!(synced, 1);
+        assert_eq!(outcome.synced, 1);
+        assert_eq!(outcome.left, 0);
         assert_eq!(handle.counters.did_open_count(), 0);
         assert_eq!(handle.counters.did_change_watched_files_count(), 1);
     }
@@ -374,10 +441,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("ledger.jsonl");
         let mut ledger = Ledger::new();
-        ledger.workspace_marker = "marker123".to_owned();
         write_file(tmp.path(), "a.rs", "fn a() {}");
         ledger.mark("a.rs", &tmp.path().join("a.rs"));
-        ledger.save(&path).expect("save");
+        ledger.save(&path, "marker123").expect("save");
         let loaded = Ledger::load(&path, "marker123");
         assert_eq!(loaded.seen.len(), 1);
         assert!(loaded.seen.contains_key("a.rs"));
@@ -398,6 +464,27 @@ mod tests {
     }
 
     #[test]
+    fn empty_ledger_seeds_unchanged_and_syncs_only_changed_hint() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut universe = Vec::new();
+        for i in 0..10 {
+            let rel = format!("f{i}.rs");
+            write_file(tmp.path(), &rel, "fn x() {}");
+            universe.push((rel.clone(), tmp.path().join(&rel)));
+        }
+        let mut ledger = Ledger::new();
+        let changed = vec!["f3.rs".to_owned()];
+        let (to_sync, left) = ledger.diff(&universe, Some(&changed));
+        assert_eq!(to_sync, vec!["f3.rs".to_owned()]);
+        assert_eq!(left, 0);
+        // The other 9 files were seeded into seen:
+        assert_eq!(ledger.seen.len(), 9);
+        assert!(!ledger.seen.contains_key("f3.rs"));
+        assert!(ledger.seen.contains_key("f0.rs"));
+        assert!(ledger.seen.contains_key("f9.rs"));
+    }
+
+    #[test]
     fn diff_detects_new_and_changed_files() {
         let tmp = tempfile::tempdir().unwrap();
         write_file(tmp.path(), "a.rs", "fn a() {}");
@@ -409,10 +496,11 @@ mod tests {
             .iter()
             .map(|r| (r.to_string(), tmp.path().join(r)))
             .collect();
-        assert!(ledger.diff(&universe).is_empty());
+        assert!(ledger.diff(&universe, None).0.is_empty());
         write_file(tmp.path(), "b.rs", "fn b() { /* edited */ }");
-        let diff = ledger.diff(&universe);
+        let (diff, left) = ledger.diff(&universe, None);
         assert_eq!(diff, vec!["b.rs".to_string()]);
+        assert_eq!(left, 0);
     }
 
     #[test]
@@ -423,21 +511,26 @@ mod tests {
         ledger.mark("a.rs", &tmp.path().join("a.rs"));
         std::fs::remove_file(tmp.path().join("a.rs")).unwrap();
         let universe = vec![("a.rs".to_string(), tmp.path().join("a.rs"))];
-        assert_eq!(ledger.diff(&universe), vec!["a.rs".to_string()]);
+        let (diff, left) = ledger.diff(&universe, None);
+        assert_eq!(diff, vec!["a.rs".to_string()]);
+        assert_eq!(left, 0);
     }
 
     #[test]
     fn max_sync_files_and_note() {
         let tmp = tempfile::tempdir().unwrap();
-        let ledger = Ledger::new();
+        let mut ledger = Ledger::new();
         let mut universe = Vec::new();
+        let mut changed = Vec::new();
         for i in 0..MAX_SYNC_FILES + 10 {
             let rel = format!("f{i}.rs");
             write_file(tmp.path(), &rel, "fn x() {}");
             universe.push((rel.clone(), tmp.path().join(&rel)));
+            changed.push(rel);
         }
-        let diff = ledger.diff(&universe);
+        let (diff, left) = ledger.diff(&universe, Some(&changed));
         assert_eq!(diff.len(), MAX_SYNC_FILES);
+        assert_eq!(left, 10);
     }
 
     #[test]

@@ -60,6 +60,7 @@ fn dummy_request(lang: LspLang, repo_dir: &Path) -> LiveRequest {
         heuristic_hint: 0,
         deadline: Instant::now() + Duration::from_secs(30),
         retry_pause: Duration::from_millis(10),
+        changed_files: Arc::new(Vec::new()),
     }
 }
 

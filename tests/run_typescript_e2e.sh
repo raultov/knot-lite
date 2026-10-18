@@ -141,9 +141,10 @@ if lsp_or_skip T20 "stale target" ts; then
   printf '// shifted\n// shifted\n' | cat - "$T/src/util/format.ts.bak" > "$T/src/util/format.ts"
   rc="$(cli T45 -- callers formatName -o json)"; assert_rc T45 "callers with shifted lines exits 0" 0 "$rc"
   assert_jq T45 "reanchored live with callers matching" "$(J T45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  assert_set_eq T45 "caller set matches pre-shift answer" "$(function_set "$(J T20)")" "$(function_set "$(J T45)")"
   mv "$T/src/util/format.ts.bak" "$T/src/util/format.ts"
   rc="$(cli T50 -- explore src/util/format.ts -o json)"; assert_rc T50 "explore with overlay exits 0" 0 "$rc"
-  assert_jq T50 "explore counts through overlay" "$(J T50)" '.groups != null'
+  assert_jq T50 "explore counts through overlay" "$(J T50)" '([.groups[].entities[] | select(.name == "initials") | .indexed] == [false])'
   rc="$(cli T41 -- explore src/util/format.ts -o json)"; assert_rc T41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq T41 "outline from the server; initials listed, not indexed" "$(J T41)" \
     '.outline.provenance == "lsp-live" and .outline.reason == "changed_since_index" and ([.groups[].entities[] | select(.name == "initials") | .indexed] == [false])'

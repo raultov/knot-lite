@@ -225,19 +225,25 @@ re-measured the same day (see `docs/PLAN_PHASE5_SEARCH_LSP_CI.md`, Appendix D):
 
 ## Performance & Baselines (Phase 6 Measurements)
 
-Measured with the release build of 0.6.0 (knot 1.11.3) on work copies of `knot`, `knot-site`, and `spring-ai` (see `docs/PLAN_PHASE6_EDIT_AWARE_LSP.md`, Appendix D):
+Phase 6 implements language-server edit awareness (re-anchoring, overlay containers, freshness rule, and edit sync). Verified with 535 integration and end-to-end checks across Rust, TypeScript, JavaScript, and Java (see `docs/PLAN_PHASE6_EDIT_AWARE_LSP.md` Appendix B and D):
 
-- **Changed-set detection (Gate E1):** p95 latency ≤ 3 ms on `knot` and ≤ 18 ms on `spring-ai` with 0 changes (stat-first, hashes candidates only); with 20 changed files latency increased by ≤ +6 ms (well under the +10 ms gate).
-- **Re-anchoring accuracy (Gate R1):** 20/20 Rust, 20/20 TypeScript, and 20/20 Java targets returned identical caller container sets between re-anchored live queries on edited files and queries after re-indexing; 5/5 targets with deleted declarations correctly diagnosed as `stale_target`.
-- **Pre-computed freshness rule (Gate P1):** Unchanged targets and targets whose changes did not mention their name served `lsp-indexed` in 2–3 ms; targets with newly added callers in other files asked live and included the new callers (10/10); server failure fell back to `lsp-indexed` with `outdated: true`.
-- **Java edit synchronization (Gate J1):** With `SyncMode::Watched`, 16/16 Maven first sessions complete on the first attempt (compared to 0/8 with 0.5.0's `off` mode, which served stale background index results). The Phase 4 E2E retry loop on V21b was completely removed.
+- **End-to-end edit validation (535/535 checks passed):**
+  - *Re-anchoring on changed files:* live answers for modified targets (`lsp.reanchored = true`) across all 4 languages (R20, T20, J20, V20).
+  - *Deletion detection:* targets whose declarations were deleted diagnosed as `stale_target` (R44, T44, J44, V44).
+  - *Line shift invariance:* targets with shifted lines produce identical caller sets to pre-shift answers (R45, T45, J45, V45).
+  - *Overlay attribution:* newly added containers in edited files reported with `indexed: false` (R50, T50, V50).
+  - *Pre-computed freshness rule:* targets with unchanged callers remain `lsp-indexed`; targets with newly added callers query live and detect the new callers (R46–R47, V46–V47).
+  - *Fallback on server failure:* when language servers fail on outdated targets, knot-lite falls back to `lsp-indexed` with `outdated: true` and an explanatory note (V48).
+  - *Live MCP edit detection:* long-running MCP sessions detect additions in caller files without restart or re-index (V49).
+- **Edit synchronization:** `SyncMode::Watched` (`workspace/didChangeWatchedFiles`) selected as the default synchronization mode for jdtls. In E2E tests, live queries on edited files succeed on the first attempt without background index lag.
+- **Note on large-scale measurement gates (E1, R1, P1, J1):** Heavy multi-hour benchmark gates on the full `spring-ai` sandbox copies are deferred to dedicated measurement runs.
 
 ## Limitations
 
 - **Hybrid search is opt-in:** by default `search_hybrid_context` ranks by cosine similarity (as in 0.4.x). `KNOT_LITE_SEARCH=hybrid` turns on knot's candidate pool built in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, ordered by knot's own re-rank (`rerank`, called from the knot crate) and fused with the keyword order. On the Phase 5 query set the hybrid ranking gained 6.6 points of hit@5 over cosine on the held-out queries (83.3 % vs 76.7 %) — short of the 10-point bar this release required to make it the default — and lost one `knot-site` query; it is stronger on identifier queries and weaker on documentation/config questions, where knot's re-rank prefers definitions. The call-graph signal uses the heuristic `CALLS` edges only. Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`.
 - **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting, disabled or hits budget/deadline limits, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). If a target's declaration was deleted from a changed file, it is diagnosed as `stale_target`. Edits in existing files are automatically re-anchored live and synchronized to the server; unsaved in-editor buffers are not seen until saved to disk.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed file, live counts are attributed through fresh overlay containers.
-- **Java right after an edit (resolved in 0.6.0):** jdtls is now synchronized before each query via `workspace/didChangeWatchedFiles` (`KNOT_LITE_LSP_SYNC=watched`), resolving the Phase 4 background indexing lag (16/16 first sessions complete on first attempt).
+- **Java right after an edit:** jdtls is synchronized before each query via `workspace/didChangeWatchedFiles` (`KNOT_LITE_LSP_SYNC=watched`). In E2E fixtures the background indexing lag is resolved on the first attempt; formal measurement across large multi-module repositories (Gate J1) is ongoing.
 - **Files created after the index:** newly created files not yet present in the index inventory are not walked during queries; run `knot-lite index` to index new files.
 - **References that never spell the target's name:** the freshness rule checks whether changed files contain the target's identifier name. References that never spell the name (such as anonymous lambdas implementing a single-method functional interface) may not trigger live re-querying until re-indexed.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.

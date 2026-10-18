@@ -133,6 +133,7 @@ if lsp_or_skip J20 "stale target" ts; then
   printf '// shifted\n// shifted\n' | cat - "$J_REPO/src/pricing.js.bak" > "$J_REPO/src/pricing.js"
   rc="$(cli J45 -- callers discountedPrice -o json)"; assert_rc J45 "callers with shifted lines exits 0" 0 "$rc"
   assert_jq J45 "reanchored live with callers matching" "$(J J45)" '.targets[0].lsp.status == "ok" and .targets[0].lsp.reanchored == true'
+  assert_set_eq J45 "caller set matches pre-shift answer" "$(function_set "$(J J20)")" "$(function_set "$(J J45)")"
   mv "$J_REPO/src/pricing.js.bak" "$J_REPO/src/pricing.js"
   rc="$(cli J41 -- explore src/pricing.js -o json)"; assert_rc J41 "explore of the edited file exits 0" 0 "$rc"
   assert_jq J41 "outline from the server; unitPrice listed, not indexed" "$(J J41)" \

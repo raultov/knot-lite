@@ -164,6 +164,7 @@ pub fn live_request(
         heuristic_hint: pacing.heuristic_hint,
         deadline: pacing.deadline,
         retry_pause: DEFAULT_RETRY_PAUSE,
+        changed_files: std::sync::Arc::new(Vec::new()),
     })
 }
 

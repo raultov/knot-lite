@@ -630,7 +630,7 @@ fn diagnostic_notes(diagnostics: &[(&'static str, String)]) -> BTreeSet<String> 
     diagnostics
         .iter()
         .map(|(status, detail)| match *status {
-            "no_server" => detail.clone(),
+            "no_server" | "sync" | "precomputed_outdated_fallback" => detail.clone(),
             other => format!("language-server query {other}: {detail}"),
         })
         .collect()

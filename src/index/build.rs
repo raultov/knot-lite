@@ -237,6 +237,51 @@ struct RunDir {
     warnings: Vec<String>,
 }
 
+struct WriteArtifactsCtx<'a> {
+    layout: &'a IndexLayout,
+    resolved_edges: &'a BTreeSet<(Uuid, Uuid, String)>,
+    entities: &'a [ParsedEntity],
+    inventory: &'a Inventory,
+    jobs: usize,
+}
+
+struct WrittenArtifacts {
+    lexicon: LexiconStats,
+    shards: ShardStats,
+    edges: EdgeStats,
+}
+
+fn write_index_artifacts(
+    ctx: &WriteArtifactsCtx<'_>,
+    records: Vec<PendingRecord>,
+) -> anyhow::Result<WrittenArtifacts> {
+    let lexicon = write_lexicon(ctx.layout, &records, ctx.jobs)?;
+    let shards = write_shards(ctx.layout, records)?;
+    let entity_files: HashMap<Uuid, &str> = ctx
+        .entities
+        .iter()
+        .map(|entity| (entity.uuid, entity.file_path.as_str()))
+        .collect();
+    let edges = write_edges(ctx.layout, ctx.resolved_edges, &entity_files)?;
+    write_inventory(&ctx.layout.inventory, ctx.inventory)?;
+    Ok(WrittenArtifacts {
+        lexicon,
+        shards,
+        edges,
+    })
+}
+
+fn commit_manifest(
+    cfg: &Config,
+    dir: &RunDir,
+    parts: ManifestParts<'_>,
+) -> anyhow::Result<Manifest> {
+    let manifest = build_manifest(cfg, dir, parts);
+    write_manifest_atomic(&dir.layout.manifest, &manifest)?;
+    remove_previous_manifest(&dir.layout)?;
+    Ok(manifest)
+}
+
 /// Build (or refresh) the index of `cfg.repo_path`. Writes only under
 /// `<repo>/.knot-lite/`.
 pub fn build_index(
@@ -287,14 +332,14 @@ pub fn build_index(
 
     progress(ProgressEvent::Stage { name: "write" });
     let stage = Instant::now();
-    let lexicon = write_lexicon(&dir.layout, &records.pending, opts.jobs)?;
-    let shards = write_shards(&dir.layout, records.pending)?;
-    let entity_files: HashMap<Uuid, &str> = entities
-        .iter()
-        .map(|entity| (entity.uuid, entity.file_path.as_str()))
-        .collect();
-    let edges = write_edges(&dir.layout, &resolved.edges, &entity_files)?;
-    write_inventory(&dir.layout.inventory, &inventory)?;
+    let write_ctx = WriteArtifactsCtx {
+        layout: &dir.layout,
+        resolved_edges: &resolved.edges,
+        entities: &entities,
+        inventory: &inventory,
+        jobs: opts.jobs,
+    };
+    let written = write_index_artifacts(&write_ctx, records.pending)?;
     timings.write = elapsed_ms(stage);
 
     // LSP pre-computation stage (P3-D9)
@@ -313,7 +358,7 @@ pub fn build_index(
     timings.lsp = lsp_ms;
     timings.total = elapsed_ms(started);
 
-    let manifest = build_manifest(
+    let manifest = commit_manifest(
         cfg,
         &dir,
         ManifestParts {
@@ -323,19 +368,17 @@ pub fn build_index(
                 selection: &selection,
                 inventory: &inventory,
                 stats: &records.stats,
-                shards: &shards,
-                edges: &edges,
+                shards: &written.shards,
+                edges: &written.edges,
                 lsp: lsp_manifest.as_ref(),
                 lsp_edge_shards: list_record_files(&dir.layout.lsp_edges())?.len(),
             }),
             timings,
-            lexicon: lexicon.manifest(),
+            lexicon: written.lexicon.manifest(),
             lsp: lsp_manifest,
             started_at: run_started_at,
         },
-    );
-    write_manifest_atomic(&dir.layout.manifest, &manifest)?;
-    remove_previous_manifest(&dir.layout)?;
+    )?;
     progress(ProgressEvent::Done {
         total_ms: manifest.timings_ms.total,
     });
@@ -347,9 +390,9 @@ pub fn build_index(
         StageResults {
             spec,
             vectors,
-            shards,
-            edges,
-            lexicon,
+            shards: written.shards,
+            edges: written.edges,
+            lexicon: written.lexicon,
             resolver: resolved.metrics,
         },
     ))

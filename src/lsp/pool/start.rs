@@ -201,6 +201,7 @@ pub(super) fn handle_start_outcome(
                 last_used: now,
                 stamp: ctx.stamp.clone(),
                 attempts: ctx.attempts,
+                ledger: None,
             };
             Ok(())
         }

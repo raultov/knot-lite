@@ -399,6 +399,29 @@ impl Fallback {
     }
 }
 
+fn lsp_ineligible_fallback(record: &LoadedRecord, pool: Option<&LspPool>) -> Option<&'static str> {
+    if pool.is_none() {
+        return Some("disabled");
+    }
+    if shape_of(&record.line.kind) == TargetShape::None {
+        return Some("unsupported_kind");
+    }
+    if record.line.col.is_none() {
+        return Some("no_column");
+    }
+    None
+}
+
+fn check_live_limits(used: usize, max: usize, deadline: Instant) -> Option<&'static str> {
+    if used >= max {
+        Some("budget")
+    } else if Instant::now() >= deadline {
+        Some("deadline")
+    } else {
+        None
+    }
+}
+
 /// Extra information about a live request.
 #[derive(Debug, Clone)]
 struct TargetLiveInfo<'a> {
@@ -593,27 +616,14 @@ impl<'c, 'a> Describer<'c, 'a> {
         let Some(lang) = lsp_lang_for_label(label_for(Path::new(&record.file))) else {
             return fallback_plan(self);
         };
-        let Some(pool) = self.ctx.lsp.pool else {
+        if let Some(reason) = lsp_ineligible_fallback(record, self.ctx.lsp.pool) {
             return if precomputed.is_some() {
                 fallback_plan(self)
             } else {
-                Fallback::status("disabled")
-            };
-        };
-        if shape_of(&record.line.kind) == TargetShape::None {
-            return if precomputed.is_some() {
-                fallback_plan(self)
-            } else {
-                Fallback::status("unsupported_kind")
+                Fallback::status(reason)
             };
         }
-        if record.line.col.is_none() {
-            return if precomputed.is_some() {
-                fallback_plan(self)
-            } else {
-                Fallback::status("no_column")
-            };
-        }
+        let pool = self.ctx.lsp.pool.expect("pool confirmed");
         let request = match self.request(record, lang, hint) {
             Ok(request) => request,
             Err(Unlocated::Stale) => {
@@ -641,18 +651,15 @@ impl<'c, 'a> Describer<'c, 'a> {
                 };
             }
         };
-        if self.live_used >= self.ctx.lsp.settings.max_live_targets {
+        if let Some(reason) = check_live_limits(
+            self.live_used,
+            self.ctx.lsp.settings.max_live_targets,
+            self.deadline,
+        ) {
             return if precomputed.is_some() {
                 fallback_plan(self)
             } else {
-                Fallback::status("budget")
-            };
-        }
-        if Instant::now() >= self.deadline {
-            return if precomputed.is_some() {
-                fallback_plan(self)
-            } else {
-                Fallback::status("deadline")
+                Fallback::status(reason)
             };
         }
         self.live_used += 1;
@@ -723,13 +730,20 @@ impl<'c, 'a> Describer<'c, 'a> {
             deadline: self.deadline,
         };
         match live_request(&mut self.files, &fresh_target, pacing) {
-            Ok(request) => {
-                if self.live_used >= self.ctx.lsp.settings.max_live_targets {
-                    return Fallback::status("budget");
+            Ok(mut request) => {
+                if let Some(reason) = check_live_limits(
+                    self.live_used,
+                    self.ctx.lsp.settings.max_live_targets,
+                    self.deadline,
+                ) {
+                    return Fallback::status(reason);
                 }
-                if Instant::now() >= self.deadline {
-                    return Fallback::status("deadline");
-                }
+                request.changed_files = std::sync::Arc::new(
+                    self.ctx
+                        .edits
+                        .map(|e| e.changed(lang).to_vec())
+                        .unwrap_or_default(),
+                );
                 self.live_used += 1;
                 self.reanchored_targets += 1;
                 let own = fresh.containers.container_at(&record.file, fresh_line.l0).0;
@@ -771,7 +785,14 @@ impl<'c, 'a> Describer<'c, 'a> {
             heuristic_hint: hint,
             deadline: self.deadline,
         };
-        live_request(&mut self.files, &target, pacing)
+        let mut req = live_request(&mut self.files, &target, pacing)?;
+        req.changed_files = std::sync::Arc::new(
+            self.ctx
+                .edits
+                .map(|e| e.changed(lang).to_vec())
+                .unwrap_or_default(),
+        );
+        Ok(req)
     }
 
     /// Ask the language server; an answer that is not `ok` falls back to the heuristic one.
@@ -781,7 +802,25 @@ impl<'c, 'a> Describer<'c, 'a> {
             heuristic,
             live_info: target_info,
         } = args;
+        let lang = request.lang;
         let outcome = pool.query(request);
+        if outcome.sync_synced > 0 {
+            let note = if outcome.sync_left > 0 {
+                format!(
+                    "synced {} changed file(s) with {}; {} left for the next request",
+                    outcome.sync_synced,
+                    lang.server_program(),
+                    outcome.sync_left
+                )
+            } else {
+                format!(
+                    "synced {} changed file(s) with {}",
+                    outcome.sync_synced,
+                    lang.server_program()
+                )
+            };
+            self.diagnostics.push(("sync", note));
+        }
         if outcome.status != LiveStatus::Ok {
             if let Some(detail) = &outcome.detail {
                 self.diagnostics
