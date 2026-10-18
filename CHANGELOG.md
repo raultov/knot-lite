@@ -5,6 +5,11 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - unreleased
+
+### Fixed
+- **Phase 6 measurements:** real benchmark measurements for gates E1 (changed-set detection), R1 (re-anchoring accuracy), P1 (pre-computed freshness rule), and J1 (Java edit synchronization) executed on work copies with real language servers.
+
 ## [0.6.0] - 2026-10-18
 
 ### Added
