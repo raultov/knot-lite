@@ -583,12 +583,15 @@ fn compute_verdict(reports: &[J1ScenarioReport]) -> J1VerdictReport {
         .iter()
         .find(|(name, _)| name == "watched")
         .map_or(0, |(_, ms)| *ms);
+    let qualifies = |name: &str| {
+        passes.iter().any(|(p_name, ok)| p_name == name && *ok)
+            && bound_ok.iter().any(|(b_name, ok)| b_name == name && *ok)
+    };
+    // The noise rule may only keep `watched` when `watched` itself qualifies.
+    let watched_ok = qualifies("watched");
     let best = cost
         .iter()
-        .filter(|(name, _)| {
-            passes.iter().any(|(p_name, ok)| p_name == name && *ok)
-                && bound_ok.iter().any(|(b_name, ok)| b_name == name && *ok)
-        })
+        .filter(|(name, _)| qualifies(name))
         .min_by_key(|(_, ms)| *ms)
         .map(|(name, _)| name.clone());
 
@@ -598,12 +601,18 @@ fn compute_verdict(reports: &[J1ScenarioReport]) -> J1VerdictReport {
             "watched is the cheapest mode that completes every scenario and stays within the bound"
                 .to_owned(),
         ),
-        Some(name) if watched_cost > 0 && name_cost(&cost, &name) * 105 >= watched_cost * 100 => (
-            "watched".to_owned(),
-            format!(
-                "{name} is within 5% of watched and both pass; watched stays the default (noise rule, decision D2)"
-            ),
-        ),
+        Some(name)
+            if watched_ok
+                && watched_cost > 0
+                && name_cost(&cost, &name) * 105 >= watched_cost * 100 =>
+        {
+            (
+                "watched".to_owned(),
+                format!(
+                    "{name} is within 5% of watched and both pass; watched stays the default (noise rule, decision D2)"
+                ),
+            )
+        }
         Some(name) => (
             name.clone(),
             format!("{name} is the cheapest mode that completes every scenario within the bound"),
@@ -1002,4 +1011,59 @@ fn rust_ts_edits_gate() {
             results,
         },
     );
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+
+    /// A scenario where every mode has `avg_ms` and completes `need` unless listed in `short`.
+    fn scenario(name: &str, need: usize, costs: [u64; 4], short: &[&str]) -> J1ScenarioReport {
+        let modes = MODES
+            .iter()
+            .zip(costs)
+            .map(|(mode, avg_ms)| J1ModeResult {
+                mode: mode.label().to_owned(),
+                completed: if short.contains(&mode.label()) {
+                    need - 1
+                } else {
+                    need
+                },
+                total: need,
+                avg_ms,
+                sessions: Vec::new(),
+            })
+            .collect();
+        J1ScenarioReport {
+            gate: "J1".to_owned(),
+            scenario: name.to_owned(),
+            modes,
+        }
+    }
+
+    fn reports(costs: [u64; 4], short: &[&str]) -> Vec<J1ScenarioReport> {
+        REQUIRED
+            .iter()
+            .map(|(name, need)| scenario(name, *need, costs, short))
+            .collect()
+    }
+
+    #[test]
+    fn noise_rule_keeps_watched_when_it_passes() {
+        let verdict = compute_verdict(&reports([100, 1_010, 1_000, 990], &["off"]));
+        assert_eq!(verdict.winner, "watched");
+        assert!(verdict.note.contains("noise rule"));
+    }
+
+    #[test]
+    fn noise_rule_never_keeps_a_failing_watched() {
+        let verdict = compute_verdict(&reports([100, 1_010, 1_000, 990], &["off", "watched"]));
+        assert_eq!(verdict.winner, "open+watched");
+    }
+
+    #[test]
+    fn no_passing_mode_means_none() {
+        let all = ["off", "open", "watched", "open+watched"];
+        assert_eq!(compute_verdict(&reports([1, 1, 1, 1], &all)).winner, "none");
+    }
 }
