@@ -5,6 +5,15 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-14
+
+### Added
+- **`ort-load-dynamic` cargo feature** ([knot#54](https://github.com/raultov/knot/issues/54)). It forwards knot's feature of the same name: knot-lite loads Microsoft's official ONNX Runtime shared library (1.27 or newer) from `ORT_DYLIB_PATH` instead of linking the prebuilt static one, which needs a CPU with AVX and glibc 2.38. A missing or too old library stops `index` and searches with an error naming `ORT_DYLIB_PATH`. See README "CPUs without AVX, glibc older than 2.38".
+
+### Changed
+- **Upgrade `knot` to 1.16.0** (from 1.11.3). `KNOT_VERSION` follows. knot's resolver now also emits `ROUTES_TO` edges (HTTP endpoint → handler, Java/Kotlin), so `ROUTES_TO` joins the edge labels, last in their order. Indexes built with 1.11.3 still load; `status` reports the knot version they were built with. Not re-measured: the 0.6.1 figures were taken with knot 1.11.3.
+- **`make build` / `make install` use default features.** `--all-features` would now turn on `ort-load-dynamic`, and the binaries would then need the shared library at run time.
+
 ## [0.6.1] - 2026-10-19
 
 ### Fixed
