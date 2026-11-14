@@ -41,7 +41,7 @@ text_in V03 "the diagnostic says there is no index" "$(E V03)" 'has no index'
 rc="$(cli V04 -- index --lsp-precompute none -o json)"; assert_rc V04 "index exits 0" 0 "$rc"
 assert_jq V04 "entities and located columns counted" "$(J V04)" '.counts.entities > 0 and .counts.columns_located > 0'
 if [ -f "$V/.knot-lite/manifest.toml" ] && [ -f "$V/.knot-lite/.gitignore" ]; then pass V04 "manifest and .gitignore written"; else fail V04 "manifest or .gitignore missing" "in $V/.knot-lite"; fi
-text_in V04 "manifest pins knot 1.11.3" "$V/.knot-lite/manifest.toml" '^knot_version = "1\.11\.3"'
+text_in V04 "manifest pins knot 1.16.0" "$V/.knot-lite/manifest.toml" '^knot_version = "1\.16\.0"'
 rc="$(cli V05 -- status -o json)"; assert_rc V05 "status after the index exits 0" 0 "$rc"
 assert_jq V05 "index present and fresh" "$(J V05)" '.index.state == "present" and .index.details.freshness.state == "fresh"'
 
