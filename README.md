@@ -276,6 +276,24 @@ make install          # builds release binaries and copies them to ~/.cargo/bin
 Produces `knot-lite` (CLI) and `knot-lite-mcp` (stdio MCP server). Override the
 destination with `make install DESTDIR=/some/dir`.
 
+### CPUs without AVX, glibc older than 2.38
+
+The default build links the prebuilt ONNX Runtime that knot's `ort` dependency downloads. It does not
+link on glibc older than 2.38 (Debian 12, Ubuntu 22.04: `undefined symbol: __isoc23_strtol`) and dies
+with `Illegal instruction` on x86-64 CPUs without AVX. Build with the `ort-load-dynamic` feature
+instead and point `ORT_DYLIB_PATH` at Microsoft's official shared library, 1.27 or newer (1.28.0 is
+the version knot's `ort` targets):
+
+```sh
+cargo build --release --features ort-load-dynamic
+curl -LO https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-linux-x64-1.28.0.tgz
+tar xzf onnxruntime-linux-x64-1.28.0.tgz -C ~/.local/share
+export ORT_DYLIB_PATH=~/.local/share/onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so
+```
+
+Without a usable library, the first command that loads the embedding model (`index`, a search)
+stops with an error naming `ORT_DYLIB_PATH` and the minimum version.
+
 ## Configuration
 
 Resolution precedence: CLI flags → process environment → `~/.config/knot-lite/.env`
