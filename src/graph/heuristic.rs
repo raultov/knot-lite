@@ -34,6 +34,7 @@ pub const EDGE_REL_LABELS: &[&str] = &[
     "INCLUDES",
     "IMPORTS_VMOD",
     "DECLARED_UNUSED",
+    "ROUTES_TO",
 ];
 
 /// Counters of one resolver run (knot's `RunMetrics`, read out of its atomics).
@@ -143,13 +144,14 @@ mod tests {
             Includes,
             ImportsVmod,
             DeclaredUnused,
+            RoutesTo,
         ];
         for relationship in &all {
             match relationship {
                 Calls | Extends | Implements | References | ReferencesDOM | UsesCSSClass
                 | ImportsScript | ImportsStylesheet | MacroCalls | Contains | GenericBound
                 | DependsOn | Overrides | UsesBackend | UsesProbe | UsesAcl | Includes
-                | ImportsVmod | DeclaredUnused => {}
+                | ImportsVmod | DeclaredUnused | RoutesTo => {}
             }
         }
         all
