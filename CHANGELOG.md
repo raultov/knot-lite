@@ -5,6 +5,11 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-14
+
+### Changed
+- **Upgrade `knot` to 1.16.1.** `KNOT_VERSION` follows. knot 1.16.1 only changes knot's own MCP tools (`explore_file` no longer returns a partial `structuredContent`, [knot-server#12](https://github.com/raultov/knot-server/issues/12), and the tool descriptions list every indexed language family); knot-lite serves its own tools, so indexing and query results are unchanged. Indexes built with 1.16.0 still load. Not re-measured.
+
 ## [0.7.0] - 2026-11-14
 
 ### Added
