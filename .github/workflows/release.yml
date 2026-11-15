@@ -1,0 +1,70 @@
+name: Release
+
+# Publishes the GitHub release of a version tag (`vX.Y.Z`) with its CHANGELOG.md section as notes.
+# Push the tag only after CI is green on the tagged commit; run it by hand to (re)publish an
+# existing tag (the notes of an existing release are updated in place).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v0.7.2)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: GitHub release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tag itself on a tag push; the branch a manual run starts from (master), whose
+          # CHANGELOG.md and script also cover tags made before this workflow existed.
+          fetch-depth: 0
+      - name: check the tag
+        run: |
+          version="$(git show "refs/tags/$TAG:Cargo.toml" | awk -F'"' '/^\[package\]/ { pkg = 1 } pkg && /^version = / { print $2; exit }')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match Cargo.toml version $version"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "refs/tags/$TAG" origin/master; then
+            echo "::error::tag $TAG is not on master"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: notes
+        run: |
+          {
+            tests/ci/release_notes.sh "$VERSION"
+            printf '\nInstall: `cargo install knot-lite` (crates.io: https://crates.io/crates/knot-lite/%s)\n' "$VERSION"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+      - name: publish
+        run: |
+          # Only the highest version is marked Latest, so re-publishing an older tag never demotes it.
+          highest="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          latest=false
+          if [ "$TAG" = "$highest" ]; then latest=true; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --latest="$latest"
+          else
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --latest="$latest"
+          fi
