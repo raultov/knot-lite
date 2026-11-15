@@ -385,6 +385,11 @@ cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
   verified, `tests/ci/install_jdtls.sh`) — and seeds Gradle 8.9 (`tests/ci/seed_gradle.sh`). On failure the answers
   and the language-server logs are uploaded as the `e2e-logs` artifact.
 
+`.github/workflows/release.yml` publishes the GitHub release when a `vX.Y.Z` tag is pushed (push the tag after CI is
+green on the tagged commit). It checks that the tag matches the `Cargo.toml` version and is on `master`, takes the
+notes from the version's `CHANGELOG.md` section (`tests/ci/release_notes.sh`) and marks only the highest version as
+Latest. Run it by hand with a tag to publish one made earlier; an existing release gets its notes updated.
+
 Actions are pinned by commit SHA. Windows is not covered by CI.
 
 ## End-to-end tests

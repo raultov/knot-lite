@@ -88,9 +88,10 @@ tests/
 ├── mcp_stdio.rs      the stdio transport (Rust, part of `make check`)
 ├── run_all_e2e.sh    orchestrator of the E2E suites (`make e2e`)
 ├── run_{rust,typescript,javascript,java}_e2e.sh   one suite per language (Java also runs Gradle)
-├── ci/               install_jdtls.sh (pinned, checksum-verified), seed_gradle.sh (CI only)
+├── ci/               install_jdtls.sh (pinned, checksum-verified), seed_gradle.sh, release_notes.sh (CI only)
 └── e2e/              lib.sh (helpers, sourced) and fixtures/ (copied to the E2E home, never used in place)
 .github/workflows/ci.yml   CI: `make check` (Linux; + macOS on master), `make e2e` (Linux, strict)
+.github/workflows/release.yml   GitHub release of a `vX.Y.Z` tag, notes from CHANGELOG.md
 ```
 
 ## Gates
