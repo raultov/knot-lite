@@ -1558,6 +1558,27 @@ mod lsp_tests {
         assert_eq!(response.language.as_deref(), Some("rust"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn unindexed_symlink_leading_outside_is_not_outlined() {
+        let (tmp, index) = fixture_index();
+        let outside = tempfile::tempdir().expect("outside");
+        let secret = outside.path().join("secret.rs");
+        std::fs::write(&secret, "pub fn leaked_secret_fn() {}\n").expect("write");
+        std::os::unix::fs::symlink(&secret, tmp.path().join("src/leak.rs")).expect("symlink");
+        let servers = with_outline(
+            tmp.path(),
+            "src/leak.rs",
+            vec![symbol("leaked_secret_fn", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = explore_with(&index, tmp.path(), &settings(), Some(&pool), "src/leak.rs");
+        assert_eq!(response.resolution, "not_found");
+        assert!(response.file.is_none());
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
     #[test]
     fn explore_counts_use_overlay() {
         let (tmp, index) = fixture_index();

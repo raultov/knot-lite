@@ -21,7 +21,7 @@ use crate::index::load::LoadedIndex;
 use crate::lsp::ops::{OpSet, TargetShape};
 use crate::lsp::outline::OutlineSymbol;
 use crate::lsp::target::{DEFAULT_RETRY_PAUSE, LiveRequest, LiveStatus};
-use crate::lsp::uri::join_rel;
+use crate::lsp::uri::{CanonicalRoot, join_rel};
 
 /// Entities asked live per call, at most.
 pub const EXPLORE_LIVE_MAX: usize = 40;
@@ -262,7 +262,7 @@ pub fn family_rank(family: super::explore::KindFamily) -> u8 {
 }
 
 /// Whether `rel` is a file on disk that the index could describe: inside the
-/// repository, under no excluded directory.
+/// repository (also once symlinks are resolved), under no excluded directory.
 pub fn on_disk_candidate(root: &Path, rel: &str) -> bool {
     let path = Path::new(rel);
     let inside = !rel.is_empty()
@@ -274,5 +274,9 @@ pub fn on_disk_candidate(root: &Path, rel: &str) -> bool {
             crate::capability::scan::is_excluded_dir_name(&part.as_os_str().to_string_lossy())
         })
     });
-    inside && !excluded && join_rel(root, rel).is_file()
+    if !inside || excluded {
+        return false;
+    }
+    let path = join_rel(root, rel);
+    path.is_file() && CanonicalRoot::new(root).contains(&path)
 }
