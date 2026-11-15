@@ -5,6 +5,15 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-11-15
+
+### Fixed
+- **Callers of a deleted declaration are `stale_target` with LSP off too** ([#1](https://github.com/raultov/knot-lite/issues/1)). A target no language server may answer (live LSP disabled, unsupported kind, no column) whose declaration was deleted from a changed file was answered from the stale index as `disabled`. Its file is now re-parsed and the target is marked `stale_target`, with the "changed since the last index" note, as with a server on.
+- **`explore_file` no longer outlines files outside the repository through a symlink** ([#2](https://github.com/raultov/knot-lite/issues/2)). An unindexed path whose resolved target is outside the root is `not_found`, and no language server is asked.
+- **A live Rust query no longer writes `Cargo.lock` into the repository** ([#3](https://github.com/raultov/knot-lite/issues/3)). rust-analyzer's `cargo metadata` / `cargo check` resolve through `<scratch>/cargo-lock/Cargo.lock` (`CARGO_RESOLVER_LOCKFILE_PATH`, a copy of the repository's lockfile refreshed at every start). Needs cargo 1.97 or newer.
+- **`index` skips file symlinks that resolve outside the repository** ([#4](https://github.com/raultov/knot-lite/issues/4)), like escaping directory symlinks already were: their content no longer reaches `.knot-lite/`.
+- **`knot-lite-mcp` answers a non-JSON line with the JSON-RPC parse error** ([#5](https://github.com/raultov/knot-lite/issues/5)) (`-32700`, `id: null`) and keeps serving, instead of dropping it silently. knot-lite now ships its own stdio transport (`mcp_transport`); JSON that is not a client message is logged to stderr and ignored.
+
 ## [0.7.1] - 2026-11-14
 
 ### Changed
