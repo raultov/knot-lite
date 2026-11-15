@@ -259,6 +259,55 @@ fn mcp_stdio_protocol_session() {
     assert_eq!(error.get("code").and_then(Value::as_i64), Some(-32601));
 }
 
+#[test]
+fn mcp_stdio_answers_unparseable_lines_with_parse_error() {
+    let repo = fixture();
+    let (mut child, rx, _isolation) = spawn_server(repo.path());
+    let mut stdin = child.stdin.take().expect("child stdin");
+    writeln!(stdin, "this is not json").expect("write garbage");
+    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":1,"#).expect("write truncated");
+    writeln!(stdin).expect("write blank line");
+    writeln!(
+        stdin,
+        "{}",
+        request(3, "tools/list", &format!("{{{}}}", meta()))
+    )
+    .expect("write request");
+    stdin.flush().expect("flush");
+
+    let mut parse_errors = 0;
+    let mut listed = false;
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while parse_errors < 2 || !listed {
+        let remaining = deadline
+            .checked_duration_since(std::time::Instant::now())
+            .expect("timed out waiting for MCP responses");
+        let line = rx
+            .recv_timeout(remaining)
+            .expect("timed out waiting for MCP responses");
+        let value: Value = serde_json::from_str(&line)
+            .unwrap_or_else(|e| panic!("non-JSON line on stdout: {e}: {line}"));
+        if value.get("id").and_then(Value::as_u64) == Some(3) {
+            assert_tools_list(&result_of(&value));
+            listed = true;
+            continue;
+        }
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": null,
+                "error": { "code": -32700, "message": "Parse error" }
+            })
+        );
+        parse_errors += 1;
+    }
+    drop(stdin);
+    stop(&mut child);
+    // The blank line got no reply.
+    assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+}
+
 /// The fixture repository with its index built (language servers never run:
 /// the build pre-computes nothing for the fixture and the pool is absent).
 fn indexed_fixture() -> tempfile::TempDir {
