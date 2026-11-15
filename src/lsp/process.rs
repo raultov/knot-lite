@@ -21,7 +21,7 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use super::owner::{OWNER_ENV, OwnerToken, sweep_owned};
 use super::session::{InitInputs, LspSession, SessionIo, initialize};
-use super::spec::{Degraded, ServerSpec};
+use super::spec::{Degraded, ScratchCopy, ServerSpec};
 use crate::capability::languages::LspLang;
 use crate::capability::lsp_registry::install_hint;
 
@@ -110,6 +110,7 @@ async fn start(spec: &ServerSpec, ctx: &StartContext<'_>) -> Result<Started, Deg
         lsp_started: false,
         diagnostic: format!("{server}: cannot create its stderr log: {error}"),
     })?;
+    refresh_scratch_copies(&spec.scratch_copies);
     let mut child = spawn(spec, ctx, stderr_log.file).map_err(|error| Degraded {
         lsp_available: true,
         lsp_started: false,
@@ -308,6 +309,35 @@ pub fn tree_rss_bytes(system: &mut System, root_pid: u32) -> (u64, usize) {
         .fold((0, 0), |(bytes, count), memory| (bytes + memory, count + 1))
 }
 
+/// Bring the scratch copies of a spec up to date with their originals: copy
+/// an original that exists, remove the copy of one that does not. Failures are
+/// logged, never fatal (the server then resolves without the copy).
+fn refresh_scratch_copies(copies: &[ScratchCopy]) {
+    for copy in copies {
+        let refreshed = copy
+            .to
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| {
+                if copy.from.is_file() {
+                    std::fs::copy(&copy.from, &copy.to).map(drop)
+                } else {
+                    match std::fs::remove_file(&copy.to) {
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                        other => other,
+                    }
+                }
+            });
+        if let Err(error) = refreshed {
+            tracing::warn!(
+                from = %copy.from.display(),
+                to = %copy.to.display(),
+                "cannot refresh the scratch copy: {error}"
+            );
+        }
+    }
+}
+
 /// The stderr log file of one server run.
 struct StderrLog {
     path: PathBuf,
@@ -485,6 +515,46 @@ mod tests {
             "{}",
             degraded.diagnostic
         );
+    }
+
+    #[test]
+    fn scratch_copies_follow_their_originals() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("repo");
+        let copy = ScratchCopy {
+            from: repo.join("Cargo.lock"),
+            to: tmp
+                .path()
+                .join("scratch")
+                .join("cargo-lock")
+                .join("Cargo.lock"),
+        };
+        let copies = std::slice::from_ref(&copy);
+
+        // No original: nothing to copy, the parent exists for the server to write into.
+        refresh_scratch_copies(copies);
+        assert!(!copy.to.exists());
+        assert!(copy.to.parent().expect("parent").is_dir());
+
+        std::fs::write(&copy.from, "lock v1\n").expect("write");
+        refresh_scratch_copies(copies);
+        assert_eq!(
+            std::fs::read_to_string(&copy.to).expect("copy"),
+            "lock v1\n"
+        );
+
+        std::fs::write(&copy.from, "lock v2\n").expect("write");
+        refresh_scratch_copies(copies);
+        assert_eq!(
+            std::fs::read_to_string(&copy.to).expect("copy"),
+            "lock v2\n"
+        );
+
+        std::fs::remove_file(&copy.from).expect("remove");
+        refresh_scratch_copies(copies);
+        assert!(!copy.to.exists());
+        assert!(!copy.from.exists());
     }
 
     #[test]

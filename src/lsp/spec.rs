@@ -53,6 +53,8 @@ pub struct ServerSpec {
     pub args: Vec<String>,
     /// Environment of the child only (the process environment is never modified).
     pub env: Vec<(String, String)>,
+    /// Files copied into the scratch directory before every start.
+    pub scratch_copies: Vec<ScratchCopy>,
     /// `initializationOptions` of the `initialize` request.
     pub initialization_options: Value,
     /// How the server announces readiness.
@@ -67,6 +69,16 @@ pub struct ServerSpec {
     pub language_id_for: fn(&Path) -> &'static str,
     /// Whether this server requires edit synchronization (P6-D10).
     pub sync_edits: bool,
+}
+
+/// A repository file the server works on through a copy in the scratch
+/// directory, so the original is never rewritten.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScratchCopy {
+    /// The file in the repository (may be absent).
+    pub from: PathBuf,
+    /// The copy in the scratch directory; removed when `from` is absent.
+    pub to: PathBuf,
 }
 
 /// What [`spec_for`] needs.
@@ -130,10 +142,22 @@ fn rust_spec(inputs: &SpecInputs<'_>) -> ServerSpec {
         RUST_TIMEOUTS,
         rust_language_id,
     );
-    spec.env = vec![(
-        "CARGO_TARGET_DIR".to_owned(),
-        text(&inputs.scratch.join("target-ra")),
-    )];
+    // `cargo metadata` (and `cargo check` for build scripts) writes or updates
+    // `Cargo.lock` next to the manifest: cargo resolves through a copy in the
+    // scratch directory instead (`CARGO_RESOLVER_LOCKFILE_PATH`, cargo 1.97+;
+    // rust-analyzer overrides it with its own copy where it makes one).
+    let lockfile = inputs.scratch.join("cargo-lock").join("Cargo.lock");
+    spec.env = vec![
+        (
+            "CARGO_TARGET_DIR".to_owned(),
+            text(&inputs.scratch.join("target-ra")),
+        ),
+        ("CARGO_RESOLVER_LOCKFILE_PATH".to_owned(), text(&lockfile)),
+    ];
+    spec.scratch_copies = vec![ScratchCopy {
+        from: inputs.repo_root.join("Cargo.lock"),
+        to: lockfile,
+    }];
     spec.initialization_options = rust_options(inputs);
     spec
 }
@@ -189,7 +213,7 @@ pub fn program_from_status(lang: LspLang, status: LspStatus) -> Result<PathBuf, 
 
 impl ServerSpec {
     /// A spec with the common fields filled in; the caller sets the rest
-    /// (`args`, `env`, `initialization_options`).
+    /// (`args`, `env`, `scratch_copies`, `initialization_options`).
     fn new(
         inputs: &SpecInputs<'_>,
         readiness: ReadinessKind,
@@ -201,6 +225,7 @@ impl ServerSpec {
             program: inputs.program.to_path_buf(),
             args: Vec::new(),
             env: Vec::new(),
+            scratch_copies: Vec::new(),
             initialization_options: Value::Null,
             readiness,
             ready_timeout: timeouts.ready,
@@ -383,15 +408,29 @@ mod tests {
         let spec = default_spec(LspLang::Rust);
         assert_eq!(spec.program, Path::new("/bin/server"));
         assert!(spec.args.is_empty());
+        let lockfile = Path::new(SCRATCH).join("cargo-lock").join("Cargo.lock");
         assert_eq!(
             spec.env,
-            vec![(
-                "CARGO_TARGET_DIR".to_owned(),
-                Path::new(SCRATCH)
-                    .join("target-ra")
-                    .to_string_lossy()
-                    .into_owned()
-            )]
+            vec![
+                (
+                    "CARGO_TARGET_DIR".to_owned(),
+                    Path::new(SCRATCH)
+                        .join("target-ra")
+                        .to_string_lossy()
+                        .into_owned()
+                ),
+                (
+                    "CARGO_RESOLVER_LOCKFILE_PATH".to_owned(),
+                    lockfile.to_string_lossy().into_owned()
+                )
+            ]
+        );
+        assert_eq!(
+            spec.scratch_copies,
+            vec![ScratchCopy {
+                from: Path::new(ROOT).join("Cargo.lock"),
+                to: lockfile
+            }]
         );
         assert_eq!(spec.readiness, ReadinessKind::RustAnalyzerStatus);
         assert_eq!(spec.ready_timeout, Duration::from_secs(300));
