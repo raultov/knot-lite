@@ -18,6 +18,7 @@ pub mod lexicon;
 pub mod lsp;
 pub mod mcp_handler;
 pub mod mcp_tools;
+pub mod mcp_transport;
 pub mod models;
 pub mod query;
 pub mod utils;

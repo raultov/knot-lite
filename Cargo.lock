@@ -2015,6 +2015,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "toml",
  "tower",

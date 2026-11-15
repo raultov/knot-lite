@@ -3,10 +3,11 @@
 use clap::Parser as _;
 use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::mcp_server::{McpServerOptions, ToMcpServerHandler, server_runtime};
-use rust_mcp_sdk::{McpServer, StdioTransport, TransportOptions};
+use rust_mcp_sdk::{McpServer, TransportOptions};
 
 use knot_lite::config::{CommonArgs, Config};
 use knot_lite::mcp_handler::{KnotLiteMcpHandler, build_server_details};
+use knot_lite::mcp_transport::StdioServerTransport;
 use knot_lite::utils;
 
 #[derive(clap::Parser)]
@@ -42,7 +43,7 @@ async fn main() -> SdkResult<()> {
         );
         KnotLiteMcpHandler::new(cfg)
     };
-    let transport = StdioTransport::new(TransportOptions::default())?;
+    let transport = StdioServerTransport::new(TransportOptions::default());
     let server = server_runtime::create_server(McpServerOptions {
         server_details: build_server_details(),
         transport,

@@ -48,6 +48,8 @@ knot = "1.16.1"
 # --- MCP server (stateless MCP 2026-07-28, stdio only) ---
 rust-mcp-sdk = { version = "2.0", default-features = false, features = ["server", "macros", "stdio"] }
 async-trait = "0.1"
+# The stdio transport (`mcp_transport`) hands the SDK a stream of incoming messages.
+tokio-stream = "0.1"
 tokio = { version = "1", features = ["full"] }
 
 # --- Configuration & CLI ---
