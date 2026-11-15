@@ -10,6 +10,7 @@ use anyhow::Context as _;
 use super::chunk::is_tier1_candidate;
 use super::layout::is_reserved_rel;
 use crate::capability::scan::walk_repository;
+use crate::lsp::uri::CanonicalRoot;
 
 /// The files one index run considers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -30,8 +31,13 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
     let root_str = root
         .to_str()
         .context("repository path is not valid UTF-8")?;
+    // A file symlink that resolves outside the repository is never read: its
+    // content would end up in `.knot-lite/` (directory symlinks are already
+    // not followed by the walkers).
+    let canonical_root = CanonicalRoot::new(root);
     let mut parse: Vec<(String, PathBuf)> = knot::pipeline::input::discover_files(root_str, false)?
         .into_iter()
+        .filter(|path| canonical_root.contains(path))
         .map(|path| (relative(&path, root), path))
         .filter(|(rel, _)| !is_reserved_rel(rel))
         .collect();
@@ -40,7 +46,11 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
     let parsed: HashSet<&Path> = parse.iter().map(|(_, path)| path.as_path()).collect();
     let mut tier1_candidates: Vec<(String, PathBuf)> = walk_repository(root_str)
         .into_iter()
-        .filter(|path| !parsed.contains(path.as_path()) && is_tier1_candidate(path))
+        .filter(|path| {
+            !parsed.contains(path.as_path())
+                && is_tier1_candidate(path)
+                && canonical_root.contains(path)
+        })
         .map(|path| (relative(&path, root), path))
         .collect();
     tier1_candidates.sort_by(|a, b| a.0.cmp(&b.0));
@@ -132,6 +142,28 @@ mod tests {
 
         let selection = select_files(root).expect("select");
         assert_eq!(tier1_rels(&selection), vec!["exact.txt", "ok.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn select_skips_file_symlinks_leading_outside_the_root() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path().join("repo");
+        let outside = tmp.path().join("outside");
+        write(&outside, "secret.rs", b"pub fn leaked() {}\n");
+        write(&outside, "secret.sh", b"echo leaked\n");
+        write(&root, "src/lib.rs", b"pub fn f() {}\n");
+        write(&root, "run.sh", b"echo\n");
+        let link = |target: &str, rel: &str| {
+            std::os::unix::fs::symlink(target, root.join(rel)).expect("symlink");
+        };
+        link("../../outside/secret.rs", "src/leak.rs");
+        link("../outside/secret.sh", "leak.sh");
+        link("lib.rs", "src/alias.rs");
+
+        let selection = select_files(&root).expect("select");
+        assert_eq!(selection.parse_rel, vec!["src/alias.rs", "src/lib.rs"]);
+        assert_eq!(tier1_rels(&selection), vec!["run.sh"]);
     }
 
     #[test]
