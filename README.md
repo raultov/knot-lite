@@ -79,6 +79,9 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 | **1 — Files only** | no parser (`.sh`, `Makefile`, `Dockerfile`, …) | line-window chunks and file-level vectors |
 | **0 — Excluded** | binaries, huge files (> 256 KiB), lock files | nothing (gitignored files are never counted) |
 
+Symlinks that resolve outside the repository root are never followed: such files are not indexed, and
+`explore_file` does not outline them.
+
 ## Language servers
 
 `find_callers` answers each target from the first source that applies: **`lsp-indexed`** (the target was
@@ -110,6 +113,9 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
 - **Where they write.** Only under `<repo>/.knot-lite/` (the index) and the per-repository scratch directory
   `$KNOT_LITE_LSP_CACHE_DIR/<repo key>/` (rust-analyzer's target dir, jdtls's workspace, the last 5 stderr logs
   per language). Measured: the repository is left byte-identical (see Security for the one thing this relies on).
+  Cargo resolves through `<scratch>/cargo-lock/Cargo.lock` (`CARGO_RESOLVER_LOCKFILE_PATH`, a copy of the
+  repository's `Cargo.lock` when it has one), so `cargo metadata` never creates or rewrites the repository's
+  `Cargo.lock`; this needs cargo 1.97 or newer (older cargo ignores the variable).
 - **Budget per call.** At most `KNOT_LITE_LSP_MAX_LIVE_TARGETS` (default 10) live targets and
   `KNOT_LITE_LSP_DEADLINE_SECS` (default 30 s) of live time per `find_callers`; the rest fall back, with a note.
 - **Memory** (resident, measured): rust-analyzer ≈ 3.1 GiB on a 4.8 k-entity repository, jdtls ≈ 1.4 GiB on
@@ -254,7 +260,7 @@ Measured with the release build of 0.6.1 (knot 1.11.3) on work copies of `knot`,
 ## Limitations
 
 - **Hybrid search is opt-in:** by default `search_hybrid_context` ranks by cosine similarity (as in 0.4.x). `KNOT_LITE_SEARCH=hybrid` turns on knot's candidate pool built in memory (cosine window, definition pass, name probe, callers of the best roots) plus a BM25 channel over the indexed text, ordered by knot's own re-rank (`rerank`, called from the knot crate) and fused with the keyword order. On the Phase 5 query set the hybrid ranking gained 6.6 points of hit@5 over cosine on the held-out queries (83.3 % vs 76.7 %) — short of the 10-point bar this release required to make it the default — and lost one `knot-site` query; it is stronger on identifier queries and weaker on documentation/config questions, where knot's re-rank prefers definitions. The call-graph signal uses the heuristic `CALLS` edges only. Indexes built before 0.5.0 have no lexicon: the keyword channel then reads names, FQNs and signatures only until the next `knot-lite index`.
-- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting, disabled or hits budget/deadline limits, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). If a target's declaration was deleted from a changed file, it is diagnosed as `stale_target`. Edits in existing files are automatically re-anchored live and synchronized to the server; unsaved in-editor buffers are not seen until saved to disk.
+- **Heuristic fallback:** for languages without a server, and whenever a server is unavailable, still starting, disabled or hits budget/deadline limits, `find_callers` uses knot's heuristic edges (~93 % precision, ~86 % recall on Rust; indirect or dynamic calls may be missed). If a target's declaration was deleted from a changed file, it is diagnosed as `stale_target`, with or without a language server. Edits in existing files are automatically re-anchored live and synchronized to the server; unsaved in-editor buffers are not seen until saved to disk.
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed file, live counts are attributed through fresh overlay containers.
 - **Changed-set cost scales with the repository (Gate E1 missed its target):** every `find_callers` / `explore_file` call `stat`s the indexed files of the language-server languages before hashing the candidates. That is ~12 µs per file, so on `spring-ai` (2,278 Java files) the walk costs p95 28 ms with 0 changes, above the 20 ms this release targeted. It ships under P6-D16 because the walk adds +0 ms when 20 files change (it is not an edit-dependent cost) and `knot` is unaffected (2 ms); the cost still grows linearly with repository size, so expect ~25 ms per 2,000 files.
 - **Java right after an edit:** jdtls is synchronized before each query via `workspace/didChangeWatchedFiles` (`KNOT_LITE_LSP_SYNC=watched`, measured 32/32 complete in Gate J1; `open` and `open+watched` also pass, `off` does not). `open`/`watched` cost time on the first answer: on S1 about 7.1–7.3 s against 4.5 s for `off`, on S3 about 17–18.5 s against 16.4 s, because they make jdtls re-read the changed files before answering. Set `KNOT_LITE_LSP_SYNC=off` to restore the 0.5.0 behaviour and accept stale answers.
@@ -333,7 +339,8 @@ modified and the `.env` file is never written.
 ## MCP Server
 
 `knot-lite-mcp` speaks **MCP 2026-07-28** (stateless) over stdio and serves exactly one
-repository per instance. Example for opencode 2 (`opencode.jsonc`):
+repository per instance. A line that is not JSON is answered with the JSON-RPC parse error
+(`-32700`, `id: null`) and the server keeps serving. Example for opencode 2 (`opencode.jsonc`):
 
 ```jsonc
 {

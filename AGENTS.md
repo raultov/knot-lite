@@ -82,6 +82,7 @@ src/
 ├── cli_tools/        run_status, run_index, run_* queries, run_cli
 ├── mcp_tools/        thin tool wrappers (parse_args, query_tool)
 ├── mcp_handler.rs    tools() + dispatch() + ServerHandler
+├── mcp_transport.rs  stdio transport (answers non-JSON lines with -32700)
 └── bin/              knot-lite (CLI), knot-lite-mcp (stdio server)
 tests/
 ├── mcp_stdio.rs      the stdio transport (Rust, part of `make check`)
