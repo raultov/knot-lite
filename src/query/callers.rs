@@ -1835,6 +1835,42 @@ mod tests {
     }
 
     #[test]
+    fn deleted_declaration_is_stale_target_without_lsp() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::write(&lib, "pub fn unrelated() {}\n").expect("write");
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert!(response.notes.iter().any(|n| {
+            n.contains("changed since the last index and were answered from heuristic edges")
+        }));
+    }
+
+    #[test]
+    fn changed_file_keeping_declaration_stays_disabled_without_lsp() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, format!("{text}\n// edited\n")).expect("edit");
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "disabled")
+        );
+        assert!(
+            !response
+                .notes
+                .iter()
+                .any(|n| n.contains("changed since the last index"))
+        );
+    }
+
+    #[test]
     fn reanchored_flag_and_note() {
         let (tmp, index) = fixture_index();
         let lib = tmp.path().join("src/lib.rs");

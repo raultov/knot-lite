@@ -26,7 +26,8 @@ use crate::graph::containers::{
 use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::{LoadedIndex, LoadedRecord};
 use crate::index::lsp_records::LspTargetLine;
-use crate::index::reparse::{FreshFiles, match_all};
+use crate::index::reparse::{FreshFile, FreshFiles, match_all};
+use crate::index::shard::ShardLine;
 use crate::lsp::normalize::{LspGroups, RawLocation, TargetInfo, group_locations};
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::pool::LspPool;
@@ -412,6 +413,38 @@ fn lsp_ineligible_fallback(record: &LoadedRecord, pool: Option<&LspPool>) -> Opt
     None
 }
 
+/// The fresh re-parse of a target's changed file and the target's record in
+/// it; a `stale_target` fallback when the file cannot be re-parsed or the
+/// declaration is gone (P6-D6).
+fn locate_fresh<'f>(
+    fresh: &'f mut FreshFiles,
+    ctx: &CallersContext<'_>,
+    record: &LoadedRecord,
+    position: usize,
+) -> Result<(&'f FreshFile, &'f ShardLine), Fallback> {
+    let stale = |detail: String| Fallback {
+        status: "stale_target",
+        detail: Some(detail),
+    };
+    let parse_cfg = ParseConfig {
+        repo_root: ctx.lsp.repo_root.to_path_buf(),
+        custom_queries_path: None,
+        repo_name: ctx.repo.to_owned(),
+        include_config_files: false,
+        repo_path: ctx.lsp.repo_root.to_str().map(str::to_owned),
+    };
+    let file = fresh
+        .get(ctx.lsp.repo_root, &record.file, &parse_cfg)
+        .map_err(|err| stale(err.to_owned()))?;
+    let mapping = match_all(ctx.index, &record.file, &file.records);
+    file.records
+        .iter()
+        .zip(mapping)
+        .find(|(_, matched)| *matched == Some(position))
+        .map(|(line, _)| (file, line))
+        .ok_or_else(|| stale("the declaration was not found in the changed file".to_owned()))
+}
+
 fn check_live_limits(used: usize, max: usize, deadline: Instant) -> Option<&'static str> {
     if used >= max {
         Some("budget")
@@ -620,7 +653,7 @@ impl<'c, 'a> Describer<'c, 'a> {
             return if precomputed.is_some() {
                 fallback_plan(self)
             } else {
-                Fallback::status(reason)
+                self.ineligible(record, position, reason)
             };
         }
         let pool = self.ctx.lsp.pool.expect("pool confirmed");
@@ -675,6 +708,23 @@ impl<'c, 'a> Describer<'c, 'a> {
         )
     }
 
+    /// A target no language server may answer (`reason`). When its own file
+    /// changed since the index and its declaration cannot be found there any
+    /// more, it is a `stale_target` whether or not a server is on.
+    fn ineligible(
+        &mut self,
+        record: &LoadedRecord,
+        position: usize,
+        reason: &'static str,
+    ) -> Plan<'a> {
+        if self.ctx.edits.is_some_and(|e| e.is_changed(&record.file))
+            && let Err(stale) = locate_fresh(&mut self.fresh, self.ctx, record, position)
+        {
+            return Plan::Heuristic(Some(stale));
+        }
+        Fallback::status(reason)
+    }
+
     /// Re-anchor a stale target in its changed file (P6-D6).
     fn reanchor(&mut self, args: ReanchorArgs<'_, 'a>) -> Plan<'a> {
         let ReanchorArgs {
@@ -685,38 +735,9 @@ impl<'c, 'a> Describer<'c, 'a> {
             pool,
             precomputed,
         } = args;
-        let parse_cfg = ParseConfig {
-            repo_root: self.ctx.lsp.repo_root.to_path_buf(),
-            custom_queries_path: None,
-            repo_name: self.ctx.repo.to_owned(),
-            include_config_files: false,
-            repo_path: self.ctx.lsp.repo_root.to_str().map(str::to_owned),
-        };
-        let fresh = match self
-            .fresh
-            .get(self.ctx.lsp.repo_root, &record.file, &parse_cfg)
-        {
-            Ok(fresh) => fresh,
-            Err(err) => {
-                return Plan::Heuristic(Some(Fallback {
-                    status: "stale_target",
-                    detail: Some(err.to_owned()),
-                }));
-            }
-        };
-
-        let mapping = match_all(self.ctx.index, &record.file, &fresh.records);
-        let matched = fresh
-            .records
-            .iter()
-            .enumerate()
-            .find(|(j, _)| mapping[*j] == Some(position));
-
-        let Some((_, fresh_line)) = matched else {
-            return Plan::Heuristic(Some(Fallback {
-                status: "stale_target",
-                detail: Some("the declaration was not found in the changed file".to_owned()),
-            }));
+        let (fresh, fresh_line) = match locate_fresh(&mut self.fresh, self.ctx, record, position) {
+            Ok(found) => found,
+            Err(stale) => return Plan::Heuristic(Some(stale)),
         };
 
         let fresh_target = Target {
