@@ -106,17 +106,7 @@ pub fn scan_repository(root: &Path) -> anyhow::Result<ScanResult> {
 /// additionally skipping [`RESERVED_DIRS`], [`BUILD_OUTPUT_DIRS`] and
 /// non-regular files.
 pub(crate) fn walk_repository(root_str: &str) -> Vec<PathBuf> {
-    ignore::WalkBuilder::new(root_str)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .filter_entry(|entry| {
-            !(entry.depth() > 0
-                && entry.file_type().is_some_and(|t| t.is_dir())
-                && is_excluded_dir_name(entry.file_name().to_string_lossy().as_ref()))
-        })
-        .build()
+    walk_filtered(root_str, |_| true)
         .filter_map(|entry| match entry {
             Ok(entry) if entry.file_type().is_some_and(|t| t.is_file()) => Some(entry.into_path()),
             Ok(_) => None,
@@ -126,6 +116,38 @@ pub(crate) fn walk_repository(root_str: &str) -> Vec<PathBuf> {
             }
         })
         .collect()
+}
+
+/// Whether the walk of [`walk_repository`] reaches `target` (a path under
+/// `root_str`, file or file symlink): not ignored by `.gitignore`, the global
+/// git excludes or `.git/info/exclude`, and under no excluded directory.
+/// Only the ancestors of `target` are entered, so the cost does not grow with
+/// the size of the repository.
+pub(crate) fn walk_reaches(root_str: &str, target: &Path) -> bool {
+    let wanted = target.to_path_buf();
+    walk_filtered(root_str, move |path| wanted.starts_with(path))
+        .filter_map(Result::ok)
+        .any(|entry| entry.path() == target)
+}
+
+/// The ignore-aware walk of `root_str`, entering only the entries `keep`
+/// accepts.
+fn walk_filtered(
+    root_str: &str,
+    keep: impl Fn(&Path) -> bool + Send + Sync + 'static,
+) -> ignore::Walk {
+    ignore::WalkBuilder::new(root_str)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .filter_entry(move |entry| {
+            let excluded = entry.depth() > 0
+                && entry.file_type().is_some_and(|t| t.is_dir())
+                && is_excluded_dir_name(entry.file_name().to_string_lossy().as_ref());
+            !excluded && keep(entry.path())
+        })
+        .build()
 }
 
 fn classify(path: &Path, parsed: &HashSet<PathBuf>) -> FileClass {
@@ -296,6 +318,26 @@ mod tests {
             class_of(files, ".gitignore").is_some(),
             ".gitignore is walked"
         );
+    }
+
+    #[test]
+    fn walk_reaches_follows_the_walk_rules() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let git_ok = build_fixture(tmp.path());
+        fs::create_dir_all(tmp.path().join("target")).expect("mkdir target");
+        fs::write(tmp.path().join("target/out.rs"), "x\n").expect("write");
+        let root = tmp.path().to_str().expect("utf-8 root");
+        let reaches = |rel: &str| walk_reaches(root, &tmp.path().join(rel));
+        assert!(reaches("src/lib.rs"));
+        assert!(reaches("Makefile"));
+        assert!(!reaches("src/missing.rs"));
+        assert!(!reaches("target/out.rs"), "excluded directory");
+        assert!(!reaches(".git/inner.rs"), "reserved directory");
+        if git_ok {
+            assert!(!reaches("ignored.rs"), "gitignored");
+        } else {
+            eprintln!("git unavailable: skipped the gitignore assertion");
+        }
     }
 
     #[test]

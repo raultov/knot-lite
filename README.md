@@ -80,7 +80,8 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 | **0 — Excluded** | binaries, huge files (> 256 KiB), lock files | nothing (gitignored files are never counted) |
 
 Symlinks that resolve outside the repository root are never followed: such files are not indexed, and
-`explore_file` does not outline them.
+`explore_file` does not outline them. Neither does it outline a gitignored file (`.gitignore`, the global git
+excludes, `.git/info/exclude`): it is `not_found`, with or without a language server.
 
 ## Language servers
 

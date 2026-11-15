@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Targets past the re-parse limit are no longer `stale_target`** ([#6](https://github.com/raultov/knot-lite/issues/6)). With more than 32 changed target files in one `find_callers` call, the files past the per-call re-parse limit were reported as deleted declarations. Such a target now keeps its answer: its usual status (`disabled`, …) when no server may answer, `reparse_limit` when it needed re-anchoring (or the pre-computed answer marked `outdated`), and a note counts these targets. The note about changed caller files attributed through the last index loses its `language-server query reparse_limit:` prefix.
+- **`explore_file` no longer outlines gitignored files** ([#7](https://github.com/raultov/knot-lite/issues/7)). An unindexed path is only outlined by the language server when the index selection could reach it (git ignore rules, excluded directories); otherwise it is `not_found`, as with servers off.
 
 ## [0.7.2] - 2026-11-15
 
