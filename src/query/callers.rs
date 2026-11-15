@@ -16,7 +16,7 @@ use serde::{Serialize, Serializer};
 use serde_json::Value;
 
 use super::render::{Column, RenderDoc, RenderSection, str_at, u64_at};
-use super::sources::{Describer, PROVENANCE_HEURISTIC, PROVENANCE_INDEXED};
+use super::sources::{Describer, PROVENANCE_HEURISTIC, PROVENANCE_INDEXED, STATUS_REPARSE_LIMIT};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::config::OutputFormat;
 use crate::index::load::LoadedIndex;
@@ -256,7 +256,8 @@ pub struct CallersContext<'a> {
 pub struct TargetLspInfo {
     /// `ok` (live), `indexed`, or why the server did not answer: `not_ready`,
     /// `no_server`, `failed`, `no_position`, `no_column`, `stale_target`,
-    /// `unsupported_kind`, `budget`, `deadline`, `timeout`, `error`, `disabled`.
+    /// `reparse_limit`, `unsupported_kind`, `budget`, `deadline`, `timeout`,
+    /// `error`, `disabled`.
     pub status: &'static str,
     /// In-repository locations per operation; `null` when the operation did not run.
     pub ops: OpCounts,
@@ -630,7 +631,9 @@ fn diagnostic_notes(diagnostics: &[(&'static str, String)]) -> BTreeSet<String> 
     diagnostics
         .iter()
         .map(|(status, detail)| match *status {
-            "no_server" | "sync" | "precomputed_outdated_fallback" => detail.clone(),
+            "no_server" | "sync" | "precomputed_outdated_fallback" | STATUS_REPARSE_LIMIT => {
+                detail.clone()
+            }
             other => format!("language-server query {other}: {detail}"),
         })
         .collect()
@@ -1935,6 +1938,94 @@ mod tests {
             (target.provenance, status_of(target)),
             ("heuristic", "stale_target")
         );
+    }
+
+    /// More changed target files than the re-parse budget: an indexed repo of
+    /// `MAX_REPARSE_PER_CALL + 3` files that each declare `shared_helper`, then
+    /// `edit` applied to every file. Returns the response for `shared_helper`.
+    fn past_reparse_budget(
+        edit: fn(&str) -> String,
+        settings: &LspSettings,
+        pool: Option<&LspPool>,
+    ) -> CallersResponse {
+        use crate::index::reparse::MAX_REPARSE_PER_CALL;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(&src).expect("mkdir");
+        let count = MAX_REPARSE_PER_CALL + 3;
+        let files: Vec<_> = (0..count)
+            .map(|i| src.join(format!("m{i:02}.rs")))
+            .collect();
+        for file in &files {
+            std::fs::write(file, "pub fn shared_helper() -> u32 {\n    1\n}\n").expect("write");
+        }
+        run(&crate::config::test_support::config_for(
+            tmp.path().to_path_buf(),
+        ));
+        let index = load_index(&IndexLayout::for_repo(tmp.path())).expect("load");
+        for file in &files {
+            let text = std::fs::read_to_string(file).expect("read");
+            std::fs::write(file, edit(&text)).expect("edit");
+        }
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        let response = callers_response(&CallersContext {
+            index: &index,
+            repo: "demo",
+            query: "shared_helper",
+            max_targets: count,
+            filter: &code(),
+            lsp: LspContext {
+                settings,
+                repo_root: tmp.path(),
+                pool,
+            },
+            edits: Some(&edits),
+        });
+        assert_eq!(response.targets.len(), count);
+        assert!(
+            response
+                .targets
+                .iter()
+                .all(|t| status_of(t) != "stale_target"),
+            "{:?}",
+            response.targets.iter().map(status_of).collect::<Vec<_>>()
+        );
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.starts_with("3 target(s) in changed files were not re-parsed")),
+            "{:?}",
+            response.notes
+        );
+        response
+    }
+
+    #[test]
+    fn targets_past_reparse_budget_keep_their_status_without_lsp() {
+        let response = past_reparse_budget(
+            |text| format!("{text}// edited\n"),
+            &default_settings(),
+            None,
+        );
+        assert!(response.targets.iter().all(|t| status_of(t) == "disabled"));
+    }
+
+    #[test]
+    fn shifted_targets_past_reparse_budget_are_reparse_limit() {
+        let settings = LspSettings {
+            max_live_targets: 100,
+            ..default_settings()
+        };
+        let pool = FakeServers::new(|_| FakeScript::full()).pool();
+        let response =
+            past_reparse_budget(|text| format!("// edited\n{text}"), &settings, Some(&pool));
+        let limited = response
+            .targets
+            .iter()
+            .filter(|t| status_of(t) == "reparse_limit")
+            .count();
+        assert_eq!(limited, 3);
     }
 
     #[test]

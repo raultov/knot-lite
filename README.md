@@ -88,7 +88,7 @@ Symlinks that resolve outside the repository root are never followed: such files
 pre-computed by `knot-lite index`; pre-computed data is read even when servers are off), **`lsp-live`**
 (the server is asked now) or **`heuristic`** (knot's edges). Every target states its source and, when a
 server was considered but did not answer, why (`not_ready`, `no_server`, `failed`, `stale_target`,
-`budget`, `deadline`, `no_column`, `unsupported_kind`, `disabled`, …).
+`reparse_limit`, `budget`, `deadline`, `no_column`, `unsupported_kind`, `disabled`, …).
 
 - **Per language.** Rust → `rust-analyzer` (`rustup component add rust-analyzer`); TypeScript/JavaScript →
   `typescript-language-server` (`npm install -g typescript-language-server typescript`; the project's own
@@ -125,6 +125,8 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks:
   - *Re-anchoring:* If a target's declaration moved or its file changed, the file is re-parsed with knot's parser,
     the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
+    At most 32 changed files are re-parsed per call; a target whose changed file is past that limit is never called `stale_target`:
+    it keeps its indexed or heuristic answer (`lsp.status = reparse_limit` when it needed re-anchoring) and a note counts it.
   - *Overlay attribution:* Server response locations in changed files are mapped to fresh containers; newly added methods/functions
     unknown to the index are emitted with `indexed: false`.
   - *Freshness rule for pre-computed answers:* Pre-computed targets are served `lsp-indexed` only when their own file is unchanged,

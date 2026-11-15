@@ -26,7 +26,7 @@ use crate::graph::containers::{
 use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::{LoadedIndex, LoadedRecord};
 use crate::index::lsp_records::LspTargetLine;
-use crate::index::reparse::{FreshFile, FreshFiles, match_all};
+use crate::index::reparse::{FreshFile, FreshFiles, MAX_REPARSE_PER_CALL, ReparseError, match_all};
 use crate::index::shard::ShardLine;
 use crate::lsp::normalize::{LspGroups, RawLocation, TargetInfo, group_locations};
 use crate::lsp::ops::{TargetShape, shape_of};
@@ -385,6 +385,10 @@ fn fallback_info(status: &'static str) -> TargetLspInfo {
     }
 }
 
+/// Status (and diagnostic) of a changed target file left unparsed by the
+/// per-call re-parse budget ([`MAX_REPARSE_PER_CALL`]).
+pub const STATUS_REPARSE_LIMIT: &str = "reparse_limit";
+
 /// Why a target that a language server could answer is answered by the heuristic.
 struct Fallback {
     status: &'static str,
@@ -413,6 +417,15 @@ fn lsp_ineligible_fallback(record: &LoadedRecord, pool: Option<&LspPool>) -> Opt
     None
 }
 
+/// Why [`locate_fresh`] found no fresh record for a target.
+enum Unanchored {
+    /// The file cannot be re-parsed or the declaration is gone (P6-D6).
+    Stale(Fallback),
+    /// The per-call re-parse budget is spent: the file was not looked at, so
+    /// nothing says the declaration is gone.
+    OverBudget,
+}
+
 /// The fresh re-parse of a target's changed file and the target's record in
 /// it; a `stale_target` fallback when the file cannot be re-parsed or the
 /// declaration is gone (P6-D6).
@@ -421,10 +434,12 @@ fn locate_fresh<'f>(
     ctx: &CallersContext<'_>,
     record: &LoadedRecord,
     position: usize,
-) -> Result<(&'f FreshFile, &'f ShardLine), Fallback> {
-    let stale = |detail: String| Fallback {
-        status: "stale_target",
-        detail: Some(detail),
+) -> Result<(&'f FreshFile, &'f ShardLine), Unanchored> {
+    let stale = |detail: String| {
+        Unanchored::Stale(Fallback {
+            status: "stale_target",
+            detail: Some(detail),
+        })
     };
     let parse_cfg = ParseConfig {
         repo_root: ctx.lsp.repo_root.to_path_buf(),
@@ -435,7 +450,10 @@ fn locate_fresh<'f>(
     };
     let file = fresh
         .get(ctx.lsp.repo_root, &record.file, &parse_cfg)
-        .map_err(|err| stale(err.to_owned()))?;
+        .map_err(|err| match err {
+            ReparseError::Limit => Unanchored::OverBudget,
+            ReparseError::Failed(detail) => stale(detail.to_owned()),
+        })?;
     let mapping = match_all(ctx.index, &record.file, &file.records);
     file.records
         .iter()
@@ -510,6 +528,8 @@ pub struct Describer<'c, 'a> {
     deadline: Instant,
     live_used: usize,
     reanchored_targets: usize,
+    /// Targets in changed files left unparsed by the re-parse budget.
+    over_reparse_budget: usize,
     diagnostics: Diagnostics,
 }
 
@@ -523,6 +543,7 @@ impl<'c, 'a> Describer<'c, 'a> {
             deadline: Instant::now() + ctx.lsp.settings.deadline,
             live_used: 0,
             reanchored_targets: 0,
+            over_reparse_budget: 0,
             diagnostics: Vec::new(),
         }
     }
@@ -538,7 +559,16 @@ impl<'c, 'a> Describer<'c, 'a> {
     }
 
     /// What the live attempts reported, to be shown as notes.
-    pub fn into_diagnostics(self) -> Diagnostics {
+    pub fn into_diagnostics(mut self) -> Diagnostics {
+        if self.over_reparse_budget > 0 {
+            self.diagnostics.push((
+                STATUS_REPARSE_LIMIT,
+                format!(
+                    "{} target(s) in changed files were not re-parsed (limit of {MAX_REPARSE_PER_CALL} files per call) and were answered from the last index; run knot-lite index to refresh.",
+                    self.over_reparse_budget
+                ),
+            ));
+        }
         self.diagnostics
     }
 
@@ -710,17 +740,20 @@ impl<'c, 'a> Describer<'c, 'a> {
 
     /// A target no language server may answer (`reason`). When its own file
     /// changed since the index and its declaration cannot be found there any
-    /// more, it is a `stale_target` whether or not a server is on.
+    /// more, it is a `stale_target` whether or not a server is on. A changed
+    /// file past the re-parse budget keeps `reason` (counted in a note).
     fn ineligible(
         &mut self,
         record: &LoadedRecord,
         position: usize,
         reason: &'static str,
     ) -> Plan<'a> {
-        if self.ctx.edits.is_some_and(|e| e.is_changed(&record.file))
-            && let Err(stale) = locate_fresh(&mut self.fresh, self.ctx, record, position)
-        {
-            return Plan::Heuristic(Some(stale));
+        if self.ctx.edits.is_some_and(|e| e.is_changed(&record.file)) {
+            match locate_fresh(&mut self.fresh, self.ctx, record, position) {
+                Ok(_) => {}
+                Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
+                Err(Unanchored::OverBudget) => self.over_reparse_budget += 1,
+            }
         }
         Fallback::status(reason)
     }
@@ -737,7 +770,11 @@ impl<'c, 'a> Describer<'c, 'a> {
         } = args;
         let (fresh, fresh_line) = match locate_fresh(&mut self.fresh, self.ctx, record, position) {
             Ok(found) => found,
-            Err(stale) => return Plan::Heuristic(Some(stale)),
+            Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
+            Err(Unanchored::OverBudget) => {
+                self.over_reparse_budget += 1;
+                return Fallback::status(STATUS_REPARSE_LIMIT);
+            }
         };
 
         let fresh_target = Target {
@@ -871,7 +908,7 @@ impl<'c, 'a> Describer<'c, 'a> {
         }
         let (lookup, note) = build_lookup(&mut self.fresh, self.ctx, &outcome.locations);
         if let Some(note) = note {
-            self.diagnostics.push(("reparse_limit", note));
+            self.diagnostics.push((STATUS_REPARSE_LIMIT, note));
         }
         let answer = live_answer(self.ctx.index, target_info.own, position, &outcome, &lookup);
         let extra = heuristic.containers.difference(&answer.containers).count();
@@ -922,7 +959,7 @@ where
 
     let mut approximate_files = 0usize;
     for (rel, _) in sorted_files {
-        if fresh.count() < crate::index::reparse::MAX_REPARSE_PER_CALL {
+        if fresh.count() < MAX_REPARSE_PER_CALL {
             let _ = fresh.get(ctx.lsp.repo_root, rel, &parse_cfg);
         } else if !fresh.contains(rel) {
             approximate_files += 1;

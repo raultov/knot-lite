@@ -38,6 +38,17 @@ pub struct FreshFile {
     pub containers: ContainerTable,
 }
 
+/// Why [`FreshFiles::get`] has no fresh records for a file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReparseError<'a> {
+    /// The per-call budget ([`MAX_REPARSE_PER_CALL`]) is spent: the file was
+    /// not looked at, so nothing is known about its content.
+    Limit,
+    /// The file was looked at and could not be re-parsed (missing, too large,
+    /// parser error).
+    Failed(&'a str),
+}
+
 /// Per-call cache of re-parsed files (cap [`MAX_REPARSE_PER_CALL`]).
 #[derive(Default)]
 pub struct FreshFiles {
@@ -56,10 +67,10 @@ impl FreshFiles {
         repo_root: &Path,
         rel: &str,
         cfg: &ParseConfig,
-    ) -> Result<&FreshFile, &str> {
+    ) -> Result<&FreshFile, ReparseError<'_>> {
         if !self.cache.contains_key(rel) {
             if self.cache.len() >= MAX_REPARSE_PER_CALL {
-                return Err("re-parse limit reached");
+                return Err(ReparseError::Limit);
             }
             let res = reparse(repo_root, rel, cfg).map_err(|e| e.to_string());
             self.cache.insert(rel.to_owned(), res);
@@ -68,7 +79,7 @@ impl FreshFiles {
             .get(rel)
             .expect("inserted")
             .as_ref()
-            .map_err(String::as_str)
+            .map_err(|err| ReparseError::Failed(err.as_str()))
     }
 
     /// Pre-populate the cache with a batched re-parse of multiple files.
@@ -460,7 +471,17 @@ mod tests {
         let overflow = "overflow.rs";
         write_file(tmp.path(), overflow, "fn x() {}");
         let err = fresh.get(tmp.path(), overflow, &cfg);
-        assert!(err.is_err());
-        assert_eq!(err.unwrap_err(), "re-parse limit reached");
+        assert_eq!(err.unwrap_err(), ReparseError::Limit);
+        // Cached files are still served past the limit.
+        assert!(fresh.get(tmp.path(), "f0.rs", &cfg).is_ok());
+    }
+
+    #[test]
+    fn failed_reparse_is_not_the_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = parse_cfg(tmp.path());
+        let mut fresh = FreshFiles::new();
+        let err = fresh.get(tmp.path(), "missing.rs", &cfg).unwrap_err();
+        assert!(matches!(err, ReparseError::Failed(msg) if msg.contains("cannot stat")));
     }
 }
