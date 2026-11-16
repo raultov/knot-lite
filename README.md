@@ -76,7 +76,7 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 |---|---|---|
 | **3 — Full** | knot parser + language server found | entities + vectors; language-server graph (`lsp-live`, or `lsp-indexed` when pre-computed), heuristic fallback per target |
 | **2 — No LSP** | parser exists, language server missing | entities + vectors; **heuristic** graph |
-| **1 — Files only** | no parser (`.sh`, `Makefile`, `Dockerfile`, …) | line-window chunks and file-level vectors |
+| **1 — Files only** | no parser (`.sh`, `Makefile`, `Dockerfile`, …, ≤ 256 KiB) | line-window chunks and file-level vectors |
 | **0 — Excluded** | binaries, huge files (> 500 KiB), lock files | nothing (gitignored files are never counted) |
 
 Symlinks that resolve outside the repository root are never followed: such files are not indexed, are never
@@ -125,7 +125,7 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   `status` shows each running server's pid, readiness time and memory.
 - **Edit awareness (0.6.0).** Language servers no longer fall back to heuristic when a file is edited. On each query,
   knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks:
-  - *Re-anchoring:* If a target's declaration moved or its file changed, the file is re-parsed with knot's parser,
+  - *Re-anchoring:* If a target's declaration moved or its file changed, the file (up to 256 KiB) is re-parsed with knot's parser,
     the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
     At most 32 changed files are re-parsed per call; a target whose changed file is past that limit is never called `stale_target`:
     it keeps its indexed or heuristic answer (`lsp.status = reparse_limit` when it needed re-anchoring) and a note counts it.
