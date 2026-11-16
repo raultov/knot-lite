@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.4] - 2026-11-16
 
 ### Added
 - **Pinned Rust toolchain in `rust-toolchain.toml` and `rust-version` in `Cargo.toml`** ([#12](https://github.com/raultov/knot-lite/issues/12)). `rust-toolchain.toml` pins `channel = "1.100.0"` with `rustfmt`, `clippy` and `rust-analyzer`, matching `.github/workflows/ci.yml` (`RUST_TOOLCHAIN`, checked by `make check`), so local builds and CI run the same compiler and lints; `Cargo.toml` declares `rust-version = "1.98"`.
