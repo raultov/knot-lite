@@ -79,9 +79,10 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 | **1 — Files only** | no parser (`.sh`, `Makefile`, `Dockerfile`, …) | line-window chunks and file-level vectors |
 | **0 — Excluded** | binaries, huge files (> 256 KiB), lock files | nothing (gitignored files are never counted) |
 
-Symlinks that resolve outside the repository root are never followed: such files are not indexed, and
-`explore_file` does not outline them. Neither does it outline a gitignored file (`.gitignore`, the global git
-excludes, `.git/info/exclude`): it is `not_found`, with or without a language server.
+Symlinks that resolve outside the repository root are never followed: such files are not indexed, are never
+re-parsed or opened when they replace an indexed file, and `explore_file` does not outline them. Neither does it
+outline a gitignored file (`.gitignore`, the global git excludes, `.git/info/exclude`): it is `not_found`, with or
+without a language server.
 
 ## Language servers
 

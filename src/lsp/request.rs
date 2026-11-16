@@ -16,7 +16,7 @@ use async_lsp::lsp_types::Position;
 use super::ops::{ops_for, shape_of};
 use super::position::locate_name;
 use super::target::{DEFAULT_RETRY_PAUSE, LiveRequest};
-use super::uri::join_rel;
+use super::uri::{CanonicalRoot, join_rel};
 use crate::capability::languages::LspLang;
 use crate::index::hash::{sha256_hex, short16};
 use crate::index::shard::ShardLine;
@@ -44,6 +44,7 @@ impl SourceText {
 #[derive(Debug)]
 pub struct SourceFiles<'a> {
     root: &'a Path,
+    canonical_root: CanonicalRoot,
     files: HashMap<String, Result<SourceText, String>>,
 }
 
@@ -52,6 +53,7 @@ impl<'a> SourceFiles<'a> {
     pub fn new(root: &'a Path) -> Self {
         Self {
             root,
+            canonical_root: CanonicalRoot::new(root),
             files: HashMap::new(),
         }
     }
@@ -64,15 +66,22 @@ impl<'a> SourceFiles<'a> {
     /// The content of `rel`, or why it could not be read.
     pub fn get(&mut self, rel: &str) -> Result<&SourceText, &str> {
         let root = self.root;
+        let canonical_root = &self.canonical_root;
         self.files
             .entry(rel.to_owned())
-            .or_insert_with(|| read_source(&join_rel(root, rel)))
+            .or_insert_with(|| read_source(canonical_root, &join_rel(root, rel)))
             .as_ref()
             .map_err(String::as_str)
     }
 }
 
-fn read_source(path: &Path) -> Result<SourceText, String> {
+fn read_source(root: &CanonicalRoot, path: &Path) -> Result<SourceText, String> {
+    if !root.contains(path) {
+        return Err(format!(
+            "cannot read {}: missing or resolves outside the repository",
+            path.display()
+        ));
+    }
     let bytes =
         std::fs::read(path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     let sha16 = short16(sha256_hex(&bytes));

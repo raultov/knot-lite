@@ -420,16 +420,19 @@ fn explore_unindexed(ctx: &ExploreContext<'_>, rel: &str, response: &mut Explore
 
 /// Whether `file` differs from the content the index was built from.
 fn is_stale(ctx: &ExploreContext<'_>, file: &str) -> bool {
-    if let Some(edits) = ctx.edits {
+    if let Some(edits) = ctx.edits
+        && lsp_lang_for_label(label_for(Path::new(file))).is_some()
+    {
         return edits.is_changed(file);
     }
     let Some(indexed) = ctx.index.file_sha16.get(file) else {
         return false;
     };
     let mut files = SourceFiles::new(ctx.lsp.repo_root);
-    files
-        .get(file)
-        .is_ok_and(|source| source.sha16() != indexed.as_str())
+    match files.get(file) {
+        Ok(source) => source.sha16() != indexed.as_str(),
+        Err(_) => std::fs::symlink_metadata(files.abs_path(file)).is_ok(),
+    }
 }
 
 /// The indexed entities that may be counted live: a located column, a shape a
@@ -1576,6 +1579,54 @@ mod lsp_tests {
         let response = explore_with(&index, tmp.path(), &settings(), Some(&pool), "src/leak.rs");
         assert_eq!(response.resolution, "not_found");
         assert!(response.file.is_none());
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn indexed_file_swapped_for_outside_symlink_is_not_outlined() {
+        let (tmp, index) = fixture_index();
+        let outside = tempfile::tempdir().expect("outside");
+        let secret = outside.path().join("secret.rs");
+        std::fs::write(
+            &secret,
+            "pub fn outside_secret_fn() -> u32 { 9 }\npub fn target() {}\n",
+        )
+        .expect("write");
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::remove_file(&lib).expect("rm");
+        std::os::unix::fs::symlink(&secret, &lib).expect("symlink");
+
+        let servers = with_outline(
+            tmp.path(),
+            "src/lib.rs",
+            vec![symbol("outside_secret_fn", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        for maybe_edits in [None, Some(&edits)] {
+            let response = explore_response(&ExploreContext {
+                index: &index,
+                repo: "demo",
+                requested: "src/lib.rs",
+                include_markup: false,
+                lsp: LspContext {
+                    settings: &settings(),
+                    repo_root: tmp.path(),
+                    pool: Some(&pool),
+                },
+                edits: maybe_edits,
+            });
+            assert_eq!(response.resolution, "exact");
+            assert_eq!(response.outline.provenance, "index");
+            assert!(
+                rows(&response)
+                    .iter()
+                    .all(|e| e.name != "outside_secret_fn")
+            );
+            assert!(response.notes.iter().any(|n| n == STALE_NOTE));
+        }
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 

@@ -266,7 +266,7 @@ pub async fn run_target(
     let started = Instant::now();
     let sources = SourceCache::new(filter.root.raw());
     let mut retried_empty = false;
-    let result = match open_target(session, req) {
+    let result = match open_target(session, req, filter.root) {
         Ok(uri) => {
             let first = collect(session, req, &uri, filter, &sources).await;
             match first {
@@ -321,11 +321,21 @@ fn finish(result: Result<Collected, Failure>, retried_empty: bool, ms: u64) -> L
 }
 
 /// Check the server is running, open the target's document and return its URI.
-fn open_target(session: &mut LspSession, req: &LiveRequest) -> Result<Url, Failure> {
+fn open_target(
+    session: &mut LspSession,
+    req: &LiveRequest,
+    root: &super::uri::CanonicalRoot,
+) -> Result<Url, Failure> {
     if !session.is_alive() {
         return Err(Failure::Failed(
             "the language server is not running".to_owned(),
         ));
+    }
+    if !root.contains(&req.abs_file) {
+        return Err(Failure::NoPosition(format!(
+            "{} is missing or resolves outside the repository",
+            req.abs_file.display()
+        )));
     }
     let uri =
         path_to_uri(&req.abs_file).map_err(|error| Failure::NoPosition(format!("{error:#}")))?;

@@ -145,6 +145,10 @@ impl ExploreLive<'_> {
         let (Some(lang), Some(pool)) = (self.lang, self.lsp.pool) else {
             return Err(ExploreLsp::idle("off", self.lang));
         };
+        let path = join_rel(self.lsp.repo_root, self.rel);
+        if !CanonicalRoot::new(self.lsp.repo_root).contains(&path) {
+            return Err(ExploreLsp::idle("unavailable", Some(lang)));
+        }
         let started = Instant::now();
         let outcome = pool.query(self.request(
             lang,

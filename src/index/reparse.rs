@@ -19,6 +19,7 @@ use crate::index::build::{normalise_and_sort, parse_all, records_from_entities};
 use crate::index::load::LoadedIndex;
 use crate::index::shard::ShardLine;
 use crate::lsp::ops::shape_of;
+use crate::lsp::uri::CanonicalRoot;
 
 /// Maximum files re-parsed per tool call (P6-D7).
 pub const MAX_REPARSE_PER_CALL: usize = 32;
@@ -128,12 +129,19 @@ pub fn reparse_batch(
         return out;
     }
 
-    // Check size limit (P6-D4) and existence before sending to the parser.
+    // Check containment, size limit (P6-D4) and existence before sending to the parser.
+    let canonical_root = CanonicalRoot::new(repo_root);
     let mut eligible_rels = Vec::new();
     let mut eligible_paths = Vec::new();
     for rel in rels {
         let path = repo_root.join(rel);
         match std::fs::metadata(&path) {
+            Ok(_) if !canonical_root.contains(&path) => {
+                out.insert(
+                    rel.clone(),
+                    Err("the changed file resolves outside the repository".to_owned()),
+                );
+            }
             Ok(meta) if meta.len() > MAX_REPARSE_BYTES => {
                 out.insert(
                     rel.clone(),
@@ -483,5 +491,18 @@ mod tests {
         let mut fresh = FreshFiles::new();
         let err = fresh.get(tmp.path(), "missing.rs", &cfg).unwrap_err();
         assert!(matches!(err, ReparseError::Failed(msg) if msg.contains("cannot stat")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_leading_outside_is_not_reparsed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("secret.rs");
+        std::fs::write(&secret, "pub fn outside_secret_fn() {}\n").unwrap();
+        std::os::unix::fs::symlink(&secret, tmp.path().join("leak.rs")).unwrap();
+        let cfg = parse_cfg(tmp.path());
+        let err = reparse(tmp.path(), "leak.rs", &cfg).unwrap_err();
+        assert!(err.to_string().contains("outside the repository"), "{err}");
     }
 }

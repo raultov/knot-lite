@@ -14,6 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 use crate::index::inventory::file_sha16;
 use crate::index::load::LoadedIndex;
+use crate::lsp::uri::CanonicalRoot;
 
 /// Files whose language has a language-server mapping and whose content
 /// differs from the last index.  Lazily computed, once per tool call.
@@ -112,6 +113,7 @@ impl EditedFiles {
     fn compute_changed(&self) -> BTreeSet<String> {
         let start = std::time::Instant::now();
         let margin = Duration::from_secs(2);
+        let root = CanonicalRoot::new(&self.repo_root);
         let mut changed = BTreeSet::new();
         let mut hashed = 0usize;
 
@@ -119,11 +121,15 @@ impl EditedFiles {
             let path = self.repo_root.join(rel);
             let meta = std::fs::metadata(&path);
 
-            // Deleted files are always changed.
+            // Deleted files or symlinks resolving outside the repository are always changed.
             let Ok(meta) = meta else {
                 changed.insert(rel.clone());
                 continue;
             };
+            if !root.contains(&path) {
+                changed.insert(rel.clone());
+                continue;
+            }
 
             let is_candidate = self.is_candidate(&meta, *inv_bytes, margin);
             if !is_candidate {
