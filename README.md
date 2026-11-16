@@ -380,6 +380,13 @@ cargo test --release --lib measure:: -- --ignored --nocapture --test-threads=1
 
 ## Continuous integration
 
+`rust-toolchain.toml` pins the Rust compiler (`1.100.0`) together with `rustfmt`, `clippy` and `rust-analyzer`, and
+`Cargo.toml` declares `rust-version = "1.98"`. Cargo and rustup read `rust-toolchain.toml` before the rustup default,
+so local `make check` / `make e2e` runs and CI use the same compiler and lint set. To bump the compiler, update both
+`rust-toolchain.toml` and `RUST_TOOLCHAIN` in `.github/workflows/ci.yml` (`make check` fails if they disagree).
+Because rustup honours `rust-toolchain.toml` in every subdirectory of the checkout, keep temporary fixture copies that
+start `rust-analyzer` outside the repository (as `make e2e` does under `~/.local/share/knot-lite/e2e/work/`).
+
 `.github/workflows/ci.yml` runs on pushes to `master` and `phase-*`, on pull requests to `master` and on demand:
 
 - **`make check`** on `ubuntu-24.04`, and also on `macos-15` for `master` (other branches check on Linux only).

@@ -19,7 +19,10 @@ absent in a fresh clone. This file is the standing contract.
    directories of a Maven module; no file.)
    Never write into `../knot`, `~/.knot/repos/*` or any other repository. Read-only
    runs of `knot-lite status` on other checkouts are allowed. Never run `index` against `~/.knot/repos/*`.
-2. **Rust:** edition 2024; **no `unsafe`** (denied in `Cargo.toml`); **no `#[allow]`**;
+2. **Rust:** edition 2024 (`rust-version = "1.98"` in `Cargo.toml`), compiler pinned in
+   `rust-toolchain.toml` (`1.100.0`, with `rustfmt`, `clippy` and `rust-analyzer`, kept in sync
+   with `RUST_TOOLCHAIN` in `.github/workflows/ci.yml` and checked by `make check`); **no `unsafe`**
+   (denied in `Cargo.toml`); **no `#[allow]`**;
    `#[expect(..., reason = "...")]` only as a last resort and reported to the human.
    Fix clippy/dupes findings by refactoring — never silence them. Never loosen
    `clippy.toml`/`dupes.toml`.

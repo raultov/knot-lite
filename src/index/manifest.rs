@@ -699,4 +699,42 @@ mod tests {
             Some(KNOT_VERSION)
         );
     }
+
+    #[test]
+    fn rust_toolchain_matches_ci_and_cargo_toml() {
+        let toolchain: toml::Table = include_str!("../../rust-toolchain.toml")
+            .parse()
+            .expect("rust-toolchain.toml");
+        let section = toolchain["toolchain"].as_table().expect("[toolchain]");
+        let channel = section["channel"].as_str().expect("channel");
+        let components: Vec<&str> = section["components"]
+            .as_array()
+            .expect("components")
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .collect();
+        assert_eq!(components, ["rustfmt", "clippy", "rust-analyzer"]);
+
+        let ci = include_str!("../../.github/workflows/ci.yml");
+        let ci_pin = ci
+            .lines()
+            .find_map(|line| {
+                line.trim()
+                    .strip_prefix("RUST_TOOLCHAIN:")
+                    .map(|rest| rest.trim().trim_matches('"'))
+            })
+            .expect("RUST_TOOLCHAIN in ci.yml");
+        assert_eq!(
+            channel, ci_pin,
+            "rust-toolchain.toml and .github/workflows/ci.yml must pin the same Rust toolchain"
+        );
+
+        let cargo: toml::Table = include_str!("../../Cargo.toml")
+            .parse()
+            .expect("Cargo.toml");
+        let rust_version = cargo["package"]["rust-version"]
+            .as_str()
+            .expect("package.rust-version");
+        assert!(!rust_version.is_empty());
+    }
 }

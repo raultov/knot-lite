@@ -1,0 +1,8 @@
+# Pins the compiler and tools for this repository.
+#
+# Cargo/rustup resolves this file before the rustup default, so local builds
+# (`make check`, `make e2e`) and CI use the same compiler and lints. Keep
+# `channel` in sync with `RUST_TOOLCHAIN` in `.github/workflows/ci.yml`.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy", "rust-analyzer"]
