@@ -5,6 +5,11 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Callers of a deleted declaration in a language without a server are `stale_target`** ([#8](https://github.com/raultov/knot-lite/issues/8)). `Describer::plan` returned `lsp: null` for languages with no language server (such as Python) before checking whether the target's file changed, and `EditedFiles` only walks LSP-language files. Non-LSP target files are now checked against `file_sha16` and re-parsed when changed, so a deleted declaration is marked `stale_target` with the refresh note; a changed file that keeps the declaration still reports `lsp: null`.
+
 ## [0.7.3] - 2026-11-15
 
 ### Fixed

@@ -1874,6 +1874,58 @@ mod tests {
     }
 
     #[test]
+    fn deleted_declaration_in_non_lsp_language_is_stale_target() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let pkg = tmp.path().join("pkg");
+        std::fs::create_dir_all(&pkg).expect("mkdir");
+        std::fs::write(pkg.join("__init__.py"), "").expect("write");
+        std::fs::write(
+            pkg.join("helpers.py"),
+            "def py_helper():\n    return 1\n\n\ndef other():\n    return 2\n",
+        )
+        .expect("write");
+        std::fs::write(
+            pkg.join("main.py"),
+            "from pkg.helpers import py_helper\n\n\ndef run():\n    return py_helper()\n",
+        )
+        .expect("write");
+        run(&crate::config::test_support::config_for(
+            tmp.path().to_path_buf(),
+        ));
+        let index = load_index(&IndexLayout::for_repo(tmp.path())).expect("load");
+
+        // Edited while keeping the declaration: lsp stays None (`null`).
+        std::fs::write(
+            pkg.join("helpers.py"),
+            "def py_helper():\n    return 10\n\n\ndef other():\n    return 2\n",
+        )
+        .expect("edit");
+        let kept = respond(&index, tmp.path(), &default_settings(), None, "py_helper");
+        assert!(kept.targets[0].lsp.is_none());
+
+        // Deleted declaration: flagged stale_target with and without a pool.
+        std::fs::write(pkg.join("helpers.py"), "def other():\n    return 2\n").expect("delete");
+        let pool = FakeServers::missing().pool();
+        for maybe_pool in [None, Some(&pool)] {
+            let response = respond(
+                &index,
+                tmp.path(),
+                &default_settings(),
+                maybe_pool,
+                "py_helper",
+            );
+            let target = &response.targets[0];
+            assert_eq!(
+                (target.provenance, status_of(target)),
+                ("heuristic", "stale_target")
+            );
+            assert!(response.notes.iter().any(|n| {
+                n.contains("changed since the last index and were answered from heuristic edges")
+            }));
+        }
+    }
+
+    #[test]
     fn reanchored_flag_and_note() {
         let (tmp, index) = fixture_index();
         let lib = tmp.path().join("src/lib.rs");

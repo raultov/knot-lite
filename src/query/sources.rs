@@ -677,13 +677,13 @@ impl<'c, 'a> Describer<'c, 'a> {
             }
         };
         let Some(lang) = lsp_lang_for_label(label_for(Path::new(&record.file))) else {
-            return fallback_plan(self);
+            return self.ineligible(record, position, None);
         };
         if let Some(reason) = lsp_ineligible_fallback(record, self.ctx.lsp.pool) {
             return if precomputed.is_some() {
                 fallback_plan(self)
             } else {
-                self.ineligible(record, position, reason)
+                self.ineligible(record, position, Some(reason))
             };
         }
         let pool = self.ctx.lsp.pool.expect("pool confirmed");
@@ -738,24 +738,46 @@ impl<'c, 'a> Describer<'c, 'a> {
         )
     }
 
-    /// A target no language server may answer (`reason`). When its own file
-    /// changed since the index and its declaration cannot be found there any
-    /// more, it is a `stale_target` whether or not a server is on. A changed
-    /// file past the re-parse budget keeps `reason` (counted in a note).
+    /// A target no language server may answer (`reason`, or `None` when the
+    /// language has no server). When its own file changed since the index and
+    /// its declaration cannot be found there any more, it is a `stale_target`
+    /// whether or not a server is on. A changed file past the re-parse budget
+    /// keeps `reason` (counted in a note).
     fn ineligible(
         &mut self,
         record: &LoadedRecord,
         position: usize,
-        reason: &'static str,
+        reason: Option<&'static str>,
     ) -> Plan<'a> {
-        if self.ctx.edits.is_some_and(|e| e.is_changed(&record.file)) {
+        if self.file_changed(record) {
             match locate_fresh(&mut self.fresh, self.ctx, record, position) {
                 Ok(_) => {}
                 Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
                 Err(Unanchored::OverBudget) => self.over_reparse_budget += 1,
             }
         }
-        Fallback::status(reason)
+        reason.map_or(Plan::Heuristic(None), Fallback::status)
+    }
+
+    /// Whether `record`'s own file changed (or was removed) since the index.
+    ///
+    /// [`EditedFiles`] only covers files whose language has a language server;
+    /// when `edits` is enabled, every other indexed file is checked against
+    /// `file_sha16` on demand.
+    fn file_changed(&mut self, record: &LoadedRecord) -> bool {
+        let Some(edits) = self.ctx.edits else {
+            return false;
+        };
+        if lsp_lang_for_label(label_for(Path::new(&record.file))).is_some() {
+            return edits.is_changed(&record.file);
+        }
+        let Some(indexed) = self.ctx.index.file_sha16.get(&record.file) else {
+            return false;
+        };
+        !self
+            .files
+            .get(&record.file)
+            .is_ok_and(|source| source.sha16() == indexed.as_str())
     }
 
     /// Re-anchor a stale target in its changed file (P6-D6).
