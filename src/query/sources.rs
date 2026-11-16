@@ -677,13 +677,18 @@ impl<'c, 'a> Describer<'c, 'a> {
             }
         };
         let Some(lang) = lsp_lang_for_label(label_for(Path::new(&record.file))) else {
-            return self.ineligible(record, position, None);
+            return self
+                .stale_if_deleted(record, position)
+                .unwrap_or_else(|| fallback_plan(self));
         };
         if let Some(reason) = lsp_ineligible_fallback(record, self.ctx.lsp.pool) {
+            if let Some(stale) = self.stale_if_deleted(record, position) {
+                return stale;
+            }
             return if precomputed.is_some() {
                 fallback_plan(self)
             } else {
-                self.ineligible(record, position, Some(reason))
+                Fallback::status(reason)
             };
         }
         let pool = self.ctx.lsp.pool.expect("pool confirmed");
@@ -698,7 +703,11 @@ impl<'c, 'a> Describer<'c, 'a> {
                     pool,
                     precomputed,
                 });
-                if matches!(reanchor_plan, Plan::Heuristic(_)) && precomputed.is_some() {
+                if matches!(
+                    &reanchor_plan,
+                    Plan::Heuristic(Some(fb)) if fb.status != "stale_target"
+                ) && precomputed.is_some()
+                {
                     return fallback_plan(self);
                 }
                 return reanchor_plan;
@@ -738,25 +747,19 @@ impl<'c, 'a> Describer<'c, 'a> {
         )
     }
 
-    /// A target no language server may answer (`reason`, or `None` when the
-    /// language has no server). When its own file changed since the index and
-    /// its declaration cannot be found there any more, it is a `stale_target`
-    /// whether or not a server is on. A changed file past the re-parse budget
-    /// keeps `reason` (counted in a note).
-    fn ineligible(
-        &mut self,
-        record: &LoadedRecord,
-        position: usize,
-        reason: Option<&'static str>,
-    ) -> Plan<'a> {
+    /// When `record`'s own file changed since the index and its declaration
+    /// cannot be found there any more, it is a `stale_target` whether or not a
+    /// server is on or a pre-computed answer exists. A changed file past the
+    /// re-parse budget returns `None` (counted in a note).
+    fn stale_if_deleted(&mut self, record: &LoadedRecord, position: usize) -> Option<Plan<'a>> {
         if self.file_changed(record) {
             match locate_fresh(&mut self.fresh, self.ctx, record, position) {
                 Ok(_) => {}
-                Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
+                Err(Unanchored::Stale(stale)) => return Some(Plan::Heuristic(Some(stale))),
                 Err(Unanchored::OverBudget) => self.over_reparse_budget += 1,
             }
         }
-        reason.map_or(Plan::Heuristic(None), Fallback::status)
+        None
     }
 
     /// Whether `record`'s own file changed (or was removed) since the index.

@@ -2383,6 +2383,36 @@ mod tests {
     }
 
     #[test]
+    fn deleted_precomputed_declaration_is_stale_target() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::write(&lib, "pub fn caller() {}\n").expect("delete target");
+
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let starts = servers.starts();
+        let pool = servers.pool();
+        for maybe_pool in [None, Some(&pool)] {
+            let response = respond(
+                &index,
+                tmp.path(),
+                &default_settings(),
+                maybe_pool,
+                "target",
+            );
+            let target = &response.targets[0];
+            assert_eq!(
+                (target.provenance, status_of(target)),
+                ("heuristic", "stale_target")
+            );
+            assert!(response.notes.iter().any(|n| {
+                n.contains("changed since the last index and were answered from heuristic edges")
+            }));
+        }
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
     fn not_ready_falls_back_with_note() {
         let (tmp, index) = fixture_index();
         let pool = FakeServers::new(fixture_target_script(tmp.path()))

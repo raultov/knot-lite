@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Callers of a deleted declaration in a language without a server are `stale_target`** ([#8](https://github.com/raultov/knot-lite/issues/8)). `Describer::plan` returned `lsp: null` for languages with no language server (such as Python) before checking whether the target's file changed, and `EditedFiles` only walks LSP-language files. Non-LSP target files are now checked against `file_sha16` and re-parsed when changed, so a deleted declaration is marked `stale_target` with the refresh note; a changed file that keeps the declaration still reports `lsp: null`.
+- **Deleted declarations with a pre-computed answer are `stale_target`, not `lsp-indexed` (`outdated`)** ([#9](https://github.com/raultov/knot-lite/issues/9)). When a target had a pre-computed language-server answer and its declaration was deleted from its file, `Describer::plan` fell back to the outdated pre-computed answer both with servers off and after a stale re-anchor result. The changed-file re-parse check now runs before falling back to `lsp-indexed` (`outdated`), and a `stale_target` re-anchor result is preserved.
 
 ## [0.7.3] - 2026-11-15
 
