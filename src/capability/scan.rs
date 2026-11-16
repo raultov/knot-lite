@@ -156,21 +156,30 @@ fn classify(path: &Path, parsed: &HashSet<PathBuf>) -> FileClass {
             label: label_for(path),
         };
     }
-    if is_lock_file(path) {
-        return FileClass::Excluded(ExcludeReason::LockFile);
-    }
-    let Ok(metadata) = std::fs::metadata(path) else {
-        return FileClass::Excluded(ExcludeReason::Binary);
-    };
-    if metadata.len() > MAX_FILE_BYTES {
-        return FileClass::Excluded(ExcludeReason::TooLarge);
-    }
-    if is_binary(path) {
-        return FileClass::Excluded(ExcludeReason::Binary);
+    if let Some(reason) = exclude_reason(path) {
+        return FileClass::Excluded(reason);
     }
     FileClass::FilesOnly {
         key: files_only_key(path),
     }
+}
+
+/// Why `path` is excluded from the index (`TooLarge`, `Binary`, `LockFile`),
+/// or `None` when the index may describe it.
+pub(crate) fn exclude_reason(path: &Path) -> Option<ExcludeReason> {
+    if is_lock_file(path) {
+        return Some(ExcludeReason::LockFile);
+    }
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return Some(ExcludeReason::Binary);
+    };
+    if metadata.len() > MAX_FILE_BYTES {
+        return Some(ExcludeReason::TooLarge);
+    }
+    if is_binary(path) {
+        return Some(ExcludeReason::Binary);
+    }
+    None
 }
 
 pub(crate) fn is_lock_file(path: &Path) -> bool {

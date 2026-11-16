@@ -1582,6 +1582,36 @@ mod lsp_tests {
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
+    #[test]
+    fn unindexed_oversized_or_binary_file_is_not_outlined() {
+        let (tmp, index) = fixture_index();
+        let huge = format!(
+            "pub fn case_huge_fn() -> u32 {{ 1 }}\n{}",
+            "// padding padding padding padding\n".repeat(16_000)
+        );
+        assert!(huge.len() as u64 > crate::capability::scan::MAX_FILE_BYTES);
+        std::fs::write(tmp.path().join("src/huge.rs"), huge).expect("write huge");
+        std::fs::write(
+            tmp.path().join("src/bin.rs"),
+            b"pub fn nul_fn() {}\n\0binary\n",
+        )
+        .expect("write bin");
+
+        let servers = with_outline(
+            tmp.path(),
+            "src/huge.rs",
+            vec![symbol("case_huge_fn", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let starts = servers.starts();
+        let pool = servers.pool();
+        for rel in ["src/huge.rs", "src/bin.rs"] {
+            let response = explore_with(&index, tmp.path(), &settings(), Some(&pool), rel);
+            assert_eq!(response.resolution, "not_found", "{rel}");
+            assert!(response.file.is_none(), "{rel}");
+        }
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
     #[cfg(unix)]
     #[test]
     fn indexed_file_swapped_for_outside_symlink_is_not_outlined() {

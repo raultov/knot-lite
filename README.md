@@ -77,12 +77,12 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 | **3 — Full** | knot parser + language server found | entities + vectors; language-server graph (`lsp-live`, or `lsp-indexed` when pre-computed), heuristic fallback per target |
 | **2 — No LSP** | parser exists, language server missing | entities + vectors; **heuristic** graph |
 | **1 — Files only** | no parser (`.sh`, `Makefile`, `Dockerfile`, …) | line-window chunks and file-level vectors |
-| **0 — Excluded** | binaries, huge files (> 256 KiB), lock files | nothing (gitignored files are never counted) |
+| **0 — Excluded** | binaries, huge files (> 500 KiB), lock files | nothing (gitignored files are never counted) |
 
 Symlinks that resolve outside the repository root are never followed: such files are not indexed, are never
 re-parsed or opened when they replace an indexed file, and `explore_file` does not outline them. Neither does it
-outline a gitignored file (`.gitignore`, the global git excludes, `.git/info/exclude`): it is `not_found`, with or
-without a language server.
+outline a file excluded by the index scan (> 500 KiB, binary, lock file) or a gitignored file (`.gitignore`, the
+global git excludes, `.git/info/exclude`): it is `not_found`, with or without a language server.
 
 ## Language servers
 
