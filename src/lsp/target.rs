@@ -243,8 +243,10 @@ impl<'a> SourceCache<'a> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let lines = files.entry(rel.to_owned()).or_insert_with(|| {
-            std::fs::read_to_string(join_rel(self.root, rel))
-                .ok()
+            let path = join_rel(self.root, rel);
+            path.is_file()
+                .then(|| std::fs::read_to_string(path).ok())
+                .flatten()
                 .map(|text| text.lines().map(str::to_owned).collect())
         });
         lines.as_ref()?.get(usize::try_from(line0).ok()?).cloned()
@@ -331,9 +333,9 @@ fn open_target(
             "the language server is not running".to_owned(),
         ));
     }
-    if !root.contains(&req.abs_file) {
+    if !root.contains_file(&req.abs_file) {
         return Err(Failure::NoPosition(format!(
-            "{} is missing or resolves outside the repository",
+            "{} is missing, not a regular file or resolves outside the repository",
             req.abs_file.display()
         )));
     }

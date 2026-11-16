@@ -76,9 +76,9 @@ impl<'a> SourceFiles<'a> {
 }
 
 fn read_source(root: &CanonicalRoot, path: &Path) -> Result<SourceText, String> {
-    if !root.contains(path) {
+    if !root.contains_file(path) {
         return Err(format!(
-            "cannot read {}: missing or resolves outside the repository",
+            "cannot read {}: missing, not a regular file or resolves outside the repository",
             path.display()
         ));
     }

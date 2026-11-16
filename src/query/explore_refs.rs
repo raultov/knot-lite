@@ -146,7 +146,7 @@ impl ExploreLive<'_> {
             return Err(ExploreLsp::idle("off", self.lang));
         };
         let path = join_rel(self.lsp.repo_root, self.rel);
-        if !CanonicalRoot::new(self.lsp.repo_root).contains(&path) {
+        if !CanonicalRoot::new(self.lsp.repo_root).contains_file(&path) {
             return Err(ExploreLsp::idle("unavailable", Some(lang)));
         }
         let started = Instant::now();
@@ -284,9 +284,8 @@ pub fn on_disk_candidate(root: &Path, rel: &str) -> bool {
         return false;
     }
     let path = join_rel(root, rel);
-    path.is_file()
+    CanonicalRoot::new(root).contains_file(&path)
         && crate::capability::scan::exclude_reason(&path).is_none()
-        && CanonicalRoot::new(root).contains(&path)
         && root
             .to_str()
             .is_some_and(|root_str| crate::capability::scan::walk_reaches(root_str, &path))

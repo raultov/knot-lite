@@ -131,8 +131,12 @@ pub fn read_inventory(path: &Path) -> anyhow::Result<Inventory> {
     Ok(Inventory::new(read_jsonl(path)?))
 }
 
-/// Streaming SHA-256 of a file: the first 16 hex characters and the size.
+/// Streaming SHA-256 of a regular file: the first 16 hex characters and the size.
 pub fn file_sha16(path: &Path) -> anyhow::Result<(String, u64)> {
+    let meta = std::fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
+    if !meta.is_file() {
+        anyhow::bail!("{} is not a regular file", path.display());
+    }
     let mut file =
         std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
     let mut hasher = Sha256::new();

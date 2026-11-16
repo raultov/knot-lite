@@ -43,6 +43,13 @@ impl CanonicalRoot {
         path.canonicalize()
             .is_ok_and(|canonical| canonical.starts_with(&self.canonical))
     }
+
+    /// Whether `path` is a regular file (after resolving symlinks) inside the
+    /// repository: a missing path, a non-regular file (FIFO, socket, directory)
+    /// or a symlink that leads out of the root is not.
+    pub fn contains_file(&self, path: &Path) -> bool {
+        path.is_file() && self.contains(path)
+    }
 }
 
 /// `root` + a `/`-separated repo-relative path, component by component so

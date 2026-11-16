@@ -136,6 +136,12 @@ pub fn reparse_batch(
     for rel in rels {
         let path = repo_root.join(rel);
         match std::fs::metadata(&path) {
+            Ok(meta) if !meta.is_file() => {
+                out.insert(
+                    rel.clone(),
+                    Err("the changed file is not a regular file".to_owned()),
+                );
+            }
             Ok(_) if !canonical_root.contains(&path) => {
                 out.insert(
                     rel.clone(),
@@ -504,5 +510,14 @@ mod tests {
         let cfg = parse_cfg(tmp.path());
         let err = reparse(tmp.path(), "leak.rs", &cfg).unwrap_err();
         assert!(err.to_string().contains("outside the repository"), "{err}");
+    }
+
+    #[test]
+    fn non_regular_file_is_not_reparsed() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("dir.rs")).unwrap();
+        let cfg = parse_cfg(tmp.path());
+        let err = reparse(tmp.path(), "dir.rs", &cfg).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"), "{err}");
     }
 }

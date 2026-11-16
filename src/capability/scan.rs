@@ -173,6 +173,9 @@ pub(crate) fn exclude_reason(path: &Path) -> Option<ExcludeReason> {
     let Ok(metadata) = std::fs::metadata(path) else {
         return Some(ExcludeReason::Binary);
     };
+    if !metadata.is_file() {
+        return Some(ExcludeReason::Binary);
+    }
     if metadata.len() > MAX_FILE_BYTES {
         return Some(ExcludeReason::TooLarge);
     }

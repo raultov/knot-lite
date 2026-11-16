@@ -121,12 +121,13 @@ impl EditedFiles {
             let path = self.repo_root.join(rel);
             let meta = std::fs::metadata(&path);
 
-            // Deleted files or symlinks resolving outside the repository are always changed.
+            // Deleted files, non-regular files (e.g. a FIFO) or symlinks
+            // resolving outside the repository are always changed.
             let Ok(meta) = meta else {
                 changed.insert(rel.clone());
                 continue;
             };
-            if !root.contains(&path) {
+            if !meta.is_file() || !root.contains(&path) {
                 changed.insert(rel.clone());
                 continue;
             }
@@ -336,6 +337,18 @@ mod tests {
         let edits = EditedFiles::new(&index, tmp.path());
         assert!(edits.is_changed("src/lib.rs"));
         assert!(!edits.is_changed("src/main.rs"));
+    }
+
+    #[test]
+    fn non_regular_file_is_changed_without_hashing() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        let index = stub_index(tmp.path(), "2099-01-01T00:00:00Z");
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).unwrap();
+        std::fs::create_dir(tmp.path().join("src/lib.rs")).unwrap();
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(edits.is_changed("src/lib.rs"));
+        assert_eq!(edits.stats().hashed, 0);
     }
 
     #[test]

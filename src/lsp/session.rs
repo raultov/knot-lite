@@ -695,8 +695,13 @@ impl LspSession {
     /// client never sends `didChange`.
     pub fn did_open(&mut self, abs: &Path) -> anyhow::Result<()> {
         let uri = path_to_uri(abs)?;
-        let mtime = std::fs::metadata(abs)
-            .and_then(|meta| meta.modified())
+        let meta = std::fs::metadata(abs)
+            .with_context(|| format!("reading the metadata of {}", abs.display()))?;
+        if !meta.is_file() {
+            anyhow::bail!("{} is not a regular file", abs.display());
+        }
+        let mtime = meta
+            .modified()
             .with_context(|| format!("reading the modification time of {}", abs.display()))?;
         match self.opened.get(&uri) {
             Some(opened_at) if *opened_at == mtime => return Ok(()),

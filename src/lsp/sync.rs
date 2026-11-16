@@ -158,6 +158,10 @@ impl Ledger {
                 changes.push(rel.clone());
                 continue;
             };
+            if !meta.is_file() {
+                changes.push(rel.clone());
+                continue;
+            }
             let mtime_secs = meta
                 .modified()
                 .ok()
@@ -197,6 +201,12 @@ impl Ledger {
                 }
                 continue;
             };
+            if !meta.is_file() {
+                if changed_set.contains(rel.as_str()) {
+                    to_sync.push(rel.clone());
+                }
+                continue;
+            }
             let mtime_secs = meta
                 .modified()
                 .ok()
@@ -223,6 +233,10 @@ impl Ledger {
             self.seen.remove(rel);
             return;
         };
+        if !meta.is_file() {
+            self.seen.remove(rel);
+            return;
+        }
         let mtime_secs = meta
             .modified()
             .ok()
@@ -302,7 +316,7 @@ pub async fn sync_before(
     if mode == SyncMode::Open || mode == SyncMode::OpenWatched {
         for rel in &diff {
             let abs = repo_root.join(rel);
-            if abs.exists() {
+            if abs.is_file() {
                 let _ = session.did_open(&abs);
                 let _ = session.did_close(&abs);
             } else {
@@ -316,7 +330,7 @@ pub async fn sync_before(
         for rel in &diff {
             let abs = repo_root.join(rel);
             if let Ok(uri) = path_to_uri(&abs) {
-                let typ = if !abs.exists() {
+                let typ = if !abs.is_file() {
                     FileChangeType::DELETED
                 } else {
                     FileChangeType::CHANGED
