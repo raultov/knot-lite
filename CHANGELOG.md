@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.5] - 2026-11-17
 
 ### Fixed
 - **A deleted or unreadable target file is `stale_target` with a language server on** ([#17](https://github.com/raultov/knot-lite/issues/17)). When the target's indexed file was deleted, replaced by a FIFO or a non-regular file, or swapped for a symlink escaping the repository, `Describer::plan` with a pool failed positioning the request and returned `no_position` (no re-index note), while servers off reported `stale_target`. Both the request-positioning error arm and the re-anchor positioning error arm now run the changed-file check first, so the target is `stale_target` with the refresh note; a missing declaration name in an unchanged file stays `no_position`.
