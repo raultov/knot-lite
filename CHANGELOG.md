@@ -5,6 +5,11 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Targets in a changed file over 256 KiB are no longer `stale_target`** ([#16](https://github.com/raultov/knot-lite/issues/16)). `reparse_batch` reported a file over `MAX_REPARSE_BYTES` as a generic re-parse failure, which `locate_fresh` mapped to `stale_target` although the declaration may still be there. The size limit now has its own outcome (`ReparseFailure::TooLarge` / `ReparseError::TooLarge`), handled like the per-call re-parse budget: the target keeps its answer — its usual status (`disabled`, `lsp: null`, …) when no server may answer, `reparse_limit` when it needed re-anchoring (or the pre-computed answer marked `outdated`) — and a note names the file as too large to re-parse. Missing files, parser failures and declarations not found in the changed file stay `stale_target`.
+
 ## [0.7.4] - 2026-11-16
 
 ### Added

@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::anyhow;
 use knot::models::ParsedEntity;
 use knot::pipeline::parser::ParseConfig;
 use knot::pipeline::prepare::prepare_entities;
@@ -45,15 +44,36 @@ pub enum ReparseError<'a> {
     /// The per-call budget ([`MAX_REPARSE_PER_CALL`]) is spent: the file was
     /// not looked at, so nothing is known about its content.
     Limit,
-    /// The file was looked at and could not be re-parsed (missing, too large,
-    /// parser error).
+    /// The file is larger than [`MAX_REPARSE_BYTES`]: it was not parsed, so
+    /// nothing is known about its declarations.
+    TooLarge,
+    /// The file was looked at and could not be re-parsed (missing, not a
+    /// regular file, outside the repository, parser error).
     Failed(&'a str),
+}
+
+/// Why [`reparse_batch`] has no fresh records for a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReparseFailure {
+    /// The file is larger than [`MAX_REPARSE_BYTES`] and was not parsed.
+    TooLarge,
+    /// The file could not be re-parsed, with the reason.
+    Failed(String),
+}
+
+impl std::fmt::Display for ReparseFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooLarge => f.write_str("the changed file is too large to re-parse"),
+            Self::Failed(reason) => f.write_str(reason),
+        }
+    }
 }
 
 /// Per-call cache of re-parsed files (cap [`MAX_REPARSE_PER_CALL`]).
 #[derive(Default)]
 pub struct FreshFiles {
-    cache: HashMap<String, Result<FreshFile, String>>,
+    cache: HashMap<String, Result<FreshFile, ReparseFailure>>,
 }
 
 impl FreshFiles {
@@ -73,14 +93,17 @@ impl FreshFiles {
             if self.cache.len() >= MAX_REPARSE_PER_CALL {
                 return Err(ReparseError::Limit);
             }
-            let res = reparse(repo_root, rel, cfg).map_err(|e| e.to_string());
+            let res = reparse_one(repo_root, rel, cfg);
             self.cache.insert(rel.to_owned(), res);
         }
         self.cache
             .get(rel)
             .expect("inserted")
             .as_ref()
-            .map_err(|err| ReparseError::Failed(err.as_str()))
+            .map_err(|failure| match failure {
+                ReparseFailure::TooLarge => ReparseError::TooLarge,
+                ReparseFailure::Failed(reason) => ReparseError::Failed(reason.as_str()),
+            })
     }
 
     /// Pre-populate the cache with a batched re-parse of multiple files.
@@ -123,11 +146,12 @@ pub fn reparse_batch(
     repo_root: &Path,
     rels: &[String],
     cfg: &ParseConfig,
-) -> HashMap<String, Result<FreshFile, String>> {
-    let mut out: HashMap<String, Result<FreshFile, String>> = HashMap::new();
+) -> HashMap<String, Result<FreshFile, ReparseFailure>> {
+    let mut out: HashMap<String, Result<FreshFile, ReparseFailure>> = HashMap::new();
     if rels.is_empty() {
         return out;
     }
+    let failed = |reason: String| Err(ReparseFailure::Failed(reason));
 
     // Check containment, size limit (P6-D4) and existence before sending to the parser.
     let canonical_root = CanonicalRoot::new(repo_root);
@@ -139,27 +163,24 @@ pub fn reparse_batch(
             Ok(meta) if !meta.is_file() => {
                 out.insert(
                     rel.clone(),
-                    Err("the changed file is not a regular file".to_owned()),
+                    failed("the changed file is not a regular file".to_owned()),
                 );
             }
             Ok(_) if !canonical_root.contains(&path) => {
                 out.insert(
                     rel.clone(),
-                    Err("the changed file resolves outside the repository".to_owned()),
+                    failed("the changed file resolves outside the repository".to_owned()),
                 );
             }
             Ok(meta) if meta.len() > MAX_REPARSE_BYTES => {
-                out.insert(
-                    rel.clone(),
-                    Err("the changed file is too large to re-parse".to_owned()),
-                );
+                out.insert(rel.clone(), Err(ReparseFailure::TooLarge));
             }
             Ok(_) => {
                 eligible_rels.push(rel.clone());
                 eligible_paths.push(path);
             }
             Err(err) => {
-                out.insert(rel.clone(), Err(format!("cannot stat {rel}: {err}")));
+                out.insert(rel.clone(), failed(format!("cannot stat {rel}: {err}")));
             }
         }
     }
@@ -178,7 +199,7 @@ pub fn reparse_batch(
             }
             for rel in eligible_rels {
                 let Some(mut file_entities) = by_file.remove(&rel) else {
-                    out.insert(rel.clone(), Err("no entities parsed".to_owned()));
+                    out.insert(rel.clone(), failed("no entities parsed".to_owned()));
                     continue;
                 };
                 normalise_and_sort(&mut file_entities);
@@ -197,21 +218,32 @@ pub fn reparse_batch(
         }
         Err(err) => {
             for rel in eligible_rels {
-                out.insert(rel.clone(), Err(err.to_string()));
+                out.insert(rel.clone(), failed(err.to_string()));
             }
         }
     }
     out
 }
 
+/// Re-parse a single file, keeping why it has no fresh records.
+fn reparse_one(
+    repo_root: &Path,
+    rel: &str,
+    cfg: &ParseConfig,
+) -> Result<FreshFile, ReparseFailure> {
+    reparse_batch(repo_root, &[rel.to_owned()], cfg)
+        .into_values()
+        .next()
+        .unwrap_or_else(|| {
+            Err(ReparseFailure::Failed(
+                "re-parse produced no result".to_owned(),
+            ))
+        })
+}
+
 /// Re-parse a single file.
 pub fn reparse(repo_root: &Path, rel: &str, cfg: &ParseConfig) -> anyhow::Result<FreshFile> {
-    let map = reparse_batch(repo_root, &[rel.to_owned()], cfg);
-    match map.into_values().next() {
-        Some(Ok(fresh)) => Ok(fresh),
-        Some(Err(msg)) => Err(anyhow!(msg)),
-        None => Err(anyhow!("re-parse produced no result")),
-    }
+    reparse_one(repo_root, rel, cfg).map_err(anyhow::Error::msg)
 }
 
 /// Match a fresh record to its indexed counterpart (P6-D5).
@@ -497,6 +529,25 @@ mod tests {
         let mut fresh = FreshFiles::new();
         let err = fresh.get(tmp.path(), "missing.rs", &cfg).unwrap_err();
         assert!(matches!(err, ReparseError::Failed(msg) if msg.contains("cannot stat")));
+    }
+
+    #[test]
+    fn oversized_file_is_too_large_not_failed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let big = "fn x() {}\n".repeat(30_000);
+        write_file(tmp.path(), "big.rs", &big);
+        let cfg = parse_cfg(tmp.path());
+        let mut fresh = FreshFiles::new();
+        assert_eq!(
+            fresh.get(tmp.path(), "big.rs", &cfg).unwrap_err(),
+            ReparseError::TooLarge
+        );
+        // The cached outcome is served again without re-reading the file.
+        assert_eq!(
+            fresh.get(tmp.path(), "big.rs", &cfg).unwrap_err(),
+            ReparseError::TooLarge
+        );
+        assert_eq!(fresh.count(), 0);
     }
 
     #[cfg(unix)]

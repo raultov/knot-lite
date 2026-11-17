@@ -1969,6 +1969,22 @@ mod tests {
         assert!(!response.notes.iter().any(|n| n.contains("re-anchored")));
     }
 
+    /// Whether `notes` say that `rel` is too large to re-parse.
+    fn notes_too_large(notes: &[String], rel: &str) -> bool {
+        notes.iter().any(|n| {
+            n.starts_with(&format!(
+                "{rel} changed since the last index and is too large to re-parse"
+            ))
+        })
+    }
+
+    /// Whether `notes` carry the `stale_target` note.
+    fn notes_stale(notes: &[String]) -> bool {
+        notes.iter().any(|n| {
+            n.contains("changed since the last index and were answered from heuristic edges")
+        })
+    }
+
     #[test]
     fn reparse_limit_respected() {
         let (tmp, index) = fixture_index();
@@ -1986,10 +2002,77 @@ mod tests {
         );
         let target = &response.targets[0];
         println!("TARGET={:#?}", target);
+        // The declaration moved and the file is too large to re-parse: nothing
+        // says it is gone, so it is not a stale_target.
         assert_eq!(
             (target.provenance, status_of(target)),
-            ("heuristic", "stale_target")
+            ("heuristic", "reparse_limit")
         );
+        assert!(
+            notes_too_large(&response.notes, "src/lib.rs"),
+            "{:?}",
+            response.notes
+        );
+        assert!(!notes_stale(&response.notes), "{:?}", response.notes);
+    }
+
+    #[test]
+    fn too_large_changed_file_keeping_declaration_stays_disabled_without_lsp() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, text + &"// pad\n".repeat(40_000)).expect("edit");
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "disabled")
+        );
+        assert!(
+            notes_too_large(&response.notes, "src/lib.rs"),
+            "{:?}",
+            response.notes
+        );
+        assert!(!notes_stale(&response.notes), "{:?}", response.notes);
+    }
+
+    #[test]
+    fn too_large_changed_file_in_non_lsp_language_is_not_stale_target() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let pkg = tmp.path().join("pkg");
+        std::fs::create_dir_all(&pkg).expect("mkdir");
+        std::fs::write(pkg.join("__init__.py"), "").expect("write");
+        std::fs::write(pkg.join("helpers.py"), "def py_helper():\n    return 1\n").expect("write");
+        std::fs::write(
+            tmp.path().join("app.py"),
+            "from pkg.helpers import py_helper\n\n\ndef run():\n    return py_helper()\n",
+        )
+        .expect("write");
+        run(&crate::config::test_support::config_for(
+            tmp.path().to_path_buf(),
+        ));
+        let index = load_index(&IndexLayout::for_repo(tmp.path())).expect("load");
+        let text = std::fs::read_to_string(pkg.join("helpers.py")).expect("read");
+        std::fs::write(pkg.join("helpers.py"), text + &"# pad\n".repeat(50_000)).expect("edit");
+        let pool = FakeServers::missing().pool();
+        for maybe_pool in [None, Some(&pool)] {
+            let response = respond(
+                &index,
+                tmp.path(),
+                &default_settings(),
+                maybe_pool,
+                "py_helper",
+            );
+            let target = &response.targets[0];
+            assert_eq!(target.provenance, "heuristic");
+            assert!(target.lsp.is_none(), "{:?}", target.lsp);
+            assert!(
+                notes_too_large(&response.notes, "pkg/helpers.py"),
+                "{:?}",
+                response.notes
+            );
+            assert!(!notes_stale(&response.notes), "{:?}", response.notes);
+        }
     }
 
     /// More changed target files than the re-parse budget: an indexed repo of

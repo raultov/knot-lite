@@ -26,7 +26,9 @@ use crate::graph::containers::{
 use crate::graph::heuristic::EDGE_REL_LABELS;
 use crate::index::load::{LoadedIndex, LoadedRecord};
 use crate::index::lsp_records::LspTargetLine;
-use crate::index::reparse::{FreshFile, FreshFiles, MAX_REPARSE_PER_CALL, ReparseError, match_all};
+use crate::index::reparse::{
+    FreshFile, FreshFiles, MAX_REPARSE_BYTES, MAX_REPARSE_PER_CALL, ReparseError, match_all,
+};
 use crate::index::shard::ShardLine;
 use crate::lsp::normalize::{LspGroups, RawLocation, TargetInfo, group_locations};
 use crate::lsp::ops::{TargetShape, shape_of};
@@ -419,11 +421,26 @@ fn lsp_ineligible_fallback(record: &LoadedRecord, pool: Option<&LspPool>) -> Opt
 
 /// Why [`locate_fresh`] found no fresh record for a target.
 enum Unanchored {
-    /// The file cannot be re-parsed or the declaration is gone (P6-D6).
+    /// The file is gone or cannot be re-parsed, or the declaration is gone (P6-D6).
     Stale(Fallback),
     /// The per-call re-parse budget is spent: the file was not looked at, so
     /// nothing says the declaration is gone.
     OverBudget,
+    /// The file is over the re-parse size limit: it was not parsed, so
+    /// nothing says the declaration is gone.
+    TooLarge,
+}
+
+/// The note of a changed target file too large to re-parse; one per file
+/// (notes are de-duplicated).
+fn too_large_note(rel: &str) -> (&'static str, String) {
+    (
+        STATUS_REPARSE_LIMIT,
+        format!(
+            "{rel} changed since the last index and is too large to re-parse (over {} KiB); its targets were answered from the last index; run knot-lite index to refresh.",
+            MAX_REPARSE_BYTES / 1024
+        ),
+    )
 }
 
 /// The fresh re-parse of a target's changed file and the target's record in
@@ -452,6 +469,7 @@ fn locate_fresh<'f>(
         .get(ctx.lsp.repo_root, &record.file, &parse_cfg)
         .map_err(|err| match err {
             ReparseError::Limit => Unanchored::OverBudget,
+            ReparseError::TooLarge => Unanchored::TooLarge,
             ReparseError::Failed(detail) => stale(detail.to_owned()),
         })?;
     let mapping = match_all(ctx.index, &record.file, &file.records);
@@ -750,13 +768,14 @@ impl<'c, 'a> Describer<'c, 'a> {
     /// When `record`'s own file changed since the index and its declaration
     /// cannot be found there any more, it is a `stale_target` whether or not a
     /// server is on or a pre-computed answer exists. A changed file past the
-    /// re-parse budget returns `None` (counted in a note).
+    /// re-parse budget or size limit returns `None` (with a note).
     fn stale_if_deleted(&mut self, record: &LoadedRecord, position: usize) -> Option<Plan<'a>> {
         if self.file_changed(record) {
             match locate_fresh(&mut self.fresh, self.ctx, record, position) {
                 Ok(_) => {}
                 Err(Unanchored::Stale(stale)) => return Some(Plan::Heuristic(Some(stale))),
                 Err(Unanchored::OverBudget) => self.over_reparse_budget += 1,
+                Err(Unanchored::TooLarge) => self.diagnostics.push(too_large_note(&record.file)),
             }
         }
         None
@@ -798,6 +817,10 @@ impl<'c, 'a> Describer<'c, 'a> {
             Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
             Err(Unanchored::OverBudget) => {
                 self.over_reparse_budget += 1;
+                return Fallback::status(STATUS_REPARSE_LIMIT);
+            }
+            Err(Unanchored::TooLarge) => {
+                self.diagnostics.push(too_large_note(&record.file));
                 return Fallback::status(STATUS_REPARSE_LIMIT);
             }
         };

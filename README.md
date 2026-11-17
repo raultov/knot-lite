@@ -127,8 +127,9 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks:
   - *Re-anchoring:* If a target's declaration moved or its file changed, the file (up to 256 KiB) is re-parsed with knot's parser,
     the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
-    At most 32 changed files are re-parsed per call; a target whose changed file is past that limit is never called `stale_target`:
-    it keeps its indexed or heuristic answer (`lsp.status = reparse_limit` when it needed re-anchoring) and a note counts it.
+    At most 32 changed files are re-parsed per call; a target whose changed file is past that limit, or over 256 KiB, is never called
+    `stale_target`: it keeps its indexed or heuristic answer (`lsp.status = reparse_limit` when it needed re-anchoring) and a note
+    counts it (or names the file too large to re-parse).
   - *Overlay attribution:* Server response locations in changed files are mapped to fresh containers; newly added methods/functions
     unknown to the index are emitted with `indexed: false`.
   - *Freshness rule for pre-computed answers:* Pre-computed targets are served `lsp-indexed` only when their own file is unchanged,
