@@ -731,6 +731,11 @@ impl<'c, 'a> Describer<'c, 'a> {
                 return reanchor_plan;
             }
             Err(why) => {
+                // The file may be gone or unreadable (deleted, FIFO, escaping
+                // symlink): that is a stale_target, as when no server is on.
+                if let Some(stale) = self.stale_if_deleted(record, position) {
+                    return stale;
+                }
                 return if precomputed.is_some() {
                     fallback_plan(self)
                 } else {
@@ -863,10 +868,12 @@ impl<'c, 'a> Describer<'c, 'a> {
                     },
                 )
             }
-            Err(why) => Plan::Heuristic(Some(Fallback {
-                status: "no_position",
-                detail: Some(why.detail()),
-            })),
+            Err(why) => self.stale_if_deleted(record, position).unwrap_or_else(|| {
+                Plan::Heuristic(Some(Fallback {
+                    status: "no_position",
+                    detail: Some(why.detail()),
+                }))
+            }),
         }
     }
 

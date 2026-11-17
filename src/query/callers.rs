@@ -2496,6 +2496,110 @@ mod tests {
     }
 
     #[test]
+    fn deleted_file_is_stale_target_with_a_live_pool() {
+        let (tmp, index) = fixture_index();
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).expect("delete");
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert!(notes_stale(&response.notes), "{:?}", response.notes);
+        assert!(!response.notes.iter().any(|n| n.contains("no_position")));
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_regular_file_is_stale_target_with_a_live_pool() {
+        let (tmp, index) = fixture_index();
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).expect("delete");
+        std::fs::create_dir(tmp.path().join("src/lib.rs")).expect("directory in place");
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert!(notes_stale(&response.notes), "{:?}", response.notes);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn escaping_symlink_is_stale_target_with_a_live_pool() {
+        let (tmp, index) = fixture_index();
+        let outside = tempfile::tempdir().expect("outside");
+        let secret = outside.path().join("secret.rs");
+        std::fs::write(&secret, "pub fn target() { }\n").expect("write");
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).expect("delete");
+        std::os::unix::fs::symlink(&secret, tmp.path().join("src/lib.rs")).expect("symlink");
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert!(notes_stale(&response.notes), "{:?}", response.notes);
+    }
+
+    #[test]
+    fn missing_name_in_an_unchanged_file_is_no_position() {
+        // The file is unchanged (hash matches) but no longer declares the name:
+        // not a stale_target, the target cannot be positioned.
+        let (tmp, mut index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::write(&lib, "pub fn other() -> u32 { 1 }\n").expect("write");
+        let (sha, _) = crate::index::inventory::file_sha16(&lib).expect("hash");
+        index.file_sha16.insert("src/lib.rs".into(), sha);
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "no_position")
+        );
+        assert!(!notes_stale(&response.notes), "{:?}", response.notes);
+        assert!(
+            response
+                .notes
+                .iter()
+                .any(|n| n.contains("no_position") && n.contains("declaration name")),
+            "{:?}",
+            response.notes
+        );
+    }
+
+    #[test]
     fn not_ready_falls_back_with_note() {
         let (tmp, index) = fixture_index();
         let pool = FakeServers::new(fixture_target_script(tmp.path()))
