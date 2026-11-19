@@ -2495,6 +2495,60 @@ mod tests {
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
+    /// Rename `target` in `src/lib.rs` keeping the file size, then set its
+    /// mtime back as `cp -p`, `rsync -t` or `touch -d` would (#18).
+    fn rename_target_with_old_mtime(root: &Path) {
+        let lib = root.join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        let renamed = text.replace("pub fn target()", "pub fn targex()");
+        assert_eq!(renamed.len(), text.len());
+        std::fs::write(&lib, renamed).expect("rename");
+        let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lib)
+            .and_then(|f| f.set_modified(past))
+            .expect("set mtime");
+    }
+
+    #[test]
+    fn same_size_rename_with_old_mtime_is_stale_target() {
+        let (tmp, index) = fixture_index();
+        rename_target_with_old_mtime(tmp.path());
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let pool = servers.pool();
+        for maybe_pool in [None, Some(&pool)] {
+            let response = respond(
+                &index,
+                tmp.path(),
+                &default_settings(),
+                maybe_pool,
+                "target",
+            );
+            let target = &response.targets[0];
+            assert_eq!(
+                (target.provenance, status_of(target)),
+                ("heuristic", "stale_target")
+            );
+            assert!(response.notes.iter().any(|n| {
+                n.contains("changed since the last index and were answered from heuristic edges")
+            }));
+        }
+    }
+
+    #[test]
+    fn same_size_rename_with_old_mtime_is_stale_target_with_precomputed() {
+        let (tmp, mut index) = fixture_index();
+        with_precomputed_target(&mut index);
+        rename_target_with_old_mtime(tmp.path());
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+    }
+
     #[test]
     fn deleted_file_is_stale_target_with_a_live_pool() {
         let (tmp, index) = fixture_index();

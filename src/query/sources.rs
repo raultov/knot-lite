@@ -316,12 +316,12 @@ pub fn indexed_is_current(
     let Some(edits) = edits else {
         return Ok(());
     };
+    // (a) own file unchanged, hashed whatever its size and mtime
+    if edits.is_target_changed(&record.file) {
+        return Err(Outdated::OwnFile);
+    }
     if edits.all_changed().is_empty() {
         return Ok(());
-    }
-    // (a) own file unchanged
-    if edits.is_changed(&record.file) {
-        return Err(Outdated::OwnFile);
     }
     // (b) no pre-computed edge from a changed file
     if let Some(incoming) = index.lsp_incoming.get(&record.line.id) {
@@ -788,15 +788,16 @@ impl<'c, 'a> Describer<'c, 'a> {
 
     /// Whether `record`'s own file changed (or was removed) since the index.
     ///
-    /// [`EditedFiles`] only covers files whose language has a language server;
-    /// when `edits` is enabled, every other indexed file is checked against
-    /// `file_sha16` on demand.
+    /// [`EditedFiles`] only covers files whose language has a language server,
+    /// and hashes this one whatever its size and mtime; when `edits` is
+    /// enabled, every other indexed file is checked against `file_sha16` on
+    /// demand.
     fn file_changed(&mut self, record: &LoadedRecord) -> bool {
         let Some(edits) = self.ctx.edits else {
             return false;
         };
         if lsp_lang_for_label(label_for(Path::new(&record.file))).is_some() {
-            return edits.is_changed(&record.file);
+            return edits.is_target_changed(&record.file);
         }
         let Some(indexed) = self.ctx.index.file_sha16.get(&record.file) else {
             return false;

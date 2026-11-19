@@ -5,10 +5,14 @@
 //! (coarse file-system clocks).  A candidate is **changed** when missing or
 //! its content hash differs from the inventory.  Computed lazily, once per
 //! call, never cached across calls.
+//!
+//! The coarse filters miss a same-size edit whose mtime was set back (`cp -p`,
+//! `rsync -t`, `tar x`, `touch -d`), so [`EditedFiles::is_target_changed`]
+//! hashes the few target files of a call whatever their size and mtime.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
@@ -20,8 +24,8 @@ use crate::lsp::uri::CanonicalRoot;
 /// differs from the last index.  Lazily computed, once per tool call.
 pub struct EditedFiles {
     repo_root: PathBuf,
-    /// Inventory entries of LSP-language files: `(rel, sha16, bytes)`.
-    universe: Vec<(String, String, u64)>,
+    /// Inventory entries of LSP-language files: `rel -> (sha16, bytes)`.
+    universe: HashMap<String, (String, u64)>,
     /// Index start time (P6-D3 boundary); `None` for indexes built before
     /// 0.6.0 → every candidate is hashed.
     index_start: Option<SystemTime>,
@@ -31,6 +35,8 @@ pub struct EditedFiles {
     by_lang: OnceLock<HashMap<LspLang, Vec<String>>>,
     /// Timing statistics.
     stats: OnceLock<EditStats>,
+    /// Exact (always hashed) answers of [`Self::is_target_changed`], per file.
+    exact: Mutex<HashMap<String, bool>>,
 }
 
 /// Cost of one changed-set computation.
@@ -55,7 +61,7 @@ impl EditedFiles {
             .filter(|(rel, _)| lsp_lang_for_label(label_for(Path::new(rel))).is_some())
             .map(|(rel, sha)| {
                 let bytes = index.file_bytes.get(rel).copied().unwrap_or(0);
-                (rel.clone(), sha.clone(), bytes)
+                (rel.clone(), (sha.clone(), bytes))
             })
             .collect();
         Self {
@@ -65,12 +71,38 @@ impl EditedFiles {
             changed: OnceLock::new(),
             by_lang: OnceLock::new(),
             stats: OnceLock::new(),
+            exact: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Whether `rel` changed (or was deleted) since the index.
+    /// Whether `rel` changed (or was deleted) since the index, by the coarse
+    /// size and mtime filters of the changed-set pass.
     pub fn is_changed(&self, rel: &str) -> bool {
         self.changed_set().contains(rel)
+    }
+
+    /// Whether the target file `rel` changed (or was deleted) since the
+    /// index, hashing it even when the size and mtime filters skip it, as
+    /// `status` does.  Cached per file for the call; `false` for files
+    /// outside the language-server universe.
+    pub fn is_target_changed(&self, rel: &str) -> bool {
+        let Some((inv_sha, _)) = self.universe.get(rel) else {
+            return false;
+        };
+        if self.changed.get().is_some_and(|set| set.contains(rel)) {
+            return true;
+        }
+        let mut exact = self
+            .exact
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(&changed) = exact.get(rel) {
+            return changed;
+        }
+        let root = CanonicalRoot::new(&self.repo_root);
+        let changed = self.examine(&root, rel, inv_sha, None).is_changed();
+        exact.insert(rel.to_owned(), changed);
+        changed
     }
 
     /// Changed files of `lang`, sorted.
@@ -117,36 +149,13 @@ impl EditedFiles {
         let mut changed = BTreeSet::new();
         let mut hashed = 0usize;
 
-        for (rel, inv_sha, inv_bytes) in &self.universe {
-            let path = self.repo_root.join(rel);
-            let meta = std::fs::metadata(&path);
-
-            // Deleted files, non-regular files (e.g. a FIFO) or symlinks
-            // resolving outside the repository are always changed.
-            let Ok(meta) = meta else {
-                changed.insert(rel.clone());
-                continue;
-            };
-            if !meta.is_file() || !root.contains(&path) {
-                changed.insert(rel.clone());
-                continue;
+        for (rel, (inv_sha, inv_bytes)) in &self.universe {
+            let examined = self.examine(&root, rel, inv_sha, Some((*inv_bytes, margin)));
+            if matches!(examined, Examined::Hashed { .. }) {
+                hashed += 1;
             }
-
-            let is_candidate = self.is_candidate(&meta, *inv_bytes, margin);
-            if !is_candidate {
-                continue;
-            }
-
-            hashed += 1;
-            match file_sha16(&path) {
-                Ok((sha, _)) => {
-                    if &sha != inv_sha {
-                        changed.insert(rel.clone());
-                    }
-                }
-                Err(_) => {
-                    changed.insert(rel.clone());
-                }
+            if examined.is_changed() {
+                changed.insert(rel.clone());
             }
         }
 
@@ -157,6 +166,34 @@ impl EditedFiles {
             ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
         });
         changed
+    }
+
+    /// Compare one indexed file with the inventory.  With `coarse =
+    /// Some((inv_bytes, margin))` a file the size and mtime filters rule out
+    /// is skipped without hashing; with `None` it is always hashed.
+    fn examine(
+        &self,
+        root: &CanonicalRoot,
+        rel: &str,
+        inv_sha: &str,
+        coarse: Option<(u64, Duration)>,
+    ) -> Examined {
+        let path = self.repo_root.join(rel);
+        // Deleted files, non-regular files (e.g. a FIFO) or symlinks
+        // resolving outside the repository are always changed.
+        let Ok(meta) = std::fs::metadata(&path) else {
+            return Examined::Gone;
+        };
+        if !meta.is_file() || !root.contains(&path) {
+            return Examined::Gone;
+        }
+        if let Some((inv_bytes, margin)) = coarse
+            && !self.is_candidate(&meta, inv_bytes, margin)
+        {
+            return Examined::Skipped;
+        }
+        let changed = !file_sha16(&path).is_ok_and(|(sha, _)| sha == inv_sha);
+        Examined::Hashed { changed }
     }
 
     fn is_candidate(&self, meta: &std::fs::Metadata, inv_bytes: u64, margin: Duration) -> bool {
@@ -178,6 +215,26 @@ impl EditedFiles {
             return true;
         }
         false
+    }
+}
+
+/// Outcome of comparing one indexed file with the inventory.
+enum Examined {
+    /// Missing, not a regular file, or resolving outside the repository.
+    Gone,
+    /// Ruled out by the size and mtime filters; not hashed.
+    Skipped,
+    /// Hashed (an unreadable file counts as changed).
+    Hashed { changed: bool },
+}
+
+impl Examined {
+    fn is_changed(&self) -> bool {
+        match self {
+            Self::Gone => true,
+            Self::Skipped => false,
+            Self::Hashed { changed } => *changed,
+        }
     }
 }
 
@@ -326,6 +383,57 @@ mod tests {
             !edits.is_changed("src/lib.rs"),
             "same bytes must not count as changed"
         );
+    }
+
+    /// Same-size edit with an mtime set back (`cp -p`, `touch -d`): the
+    /// coarse pass skips it, the target check hashes it.
+    #[test]
+    fn same_size_edit_with_old_mtime_is_a_changed_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        write_file(tmp.path(), "src/main.rs", "fn b() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        write_file(tmp.path(), "src/lib.rs", "fn z() {}");
+        let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        for rel in ["src/lib.rs", "src/main.rs"] {
+            let f = std::fs::OpenOptions::new()
+                .write(true)
+                .open(tmp.path().join(rel))
+                .unwrap();
+            f.set_modified(past).unwrap();
+        }
+
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(!edits.is_changed("src/lib.rs"), "coarse filters skip it");
+        assert_eq!(edits.stats().hashed, 0);
+        assert!(edits.is_target_changed("src/lib.rs"));
+        assert!(!edits.is_target_changed("src/main.rs"));
+        assert!(!edits.is_target_changed("README.md"), "not in the universe");
+    }
+
+    #[test]
+    fn target_check_is_cached_per_call() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(!edits.is_target_changed("src/lib.rs"));
+        write_file(tmp.path(), "src/lib.rs", "fn a() { /* late */ }");
+        assert!(
+            !edits.is_target_changed("src/lib.rs"),
+            "must use the cached result"
+        );
+    }
+
+    #[test]
+    fn deleted_file_is_a_changed_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).unwrap();
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(edits.is_target_changed("src/lib.rs"));
+        assert!(edits.is_changed("src/lib.rs"));
     }
 
     #[test]

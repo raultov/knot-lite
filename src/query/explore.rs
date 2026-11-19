@@ -423,7 +423,7 @@ fn is_stale(ctx: &ExploreContext<'_>, file: &str) -> bool {
     if let Some(edits) = ctx.edits
         && lsp_lang_for_label(label_for(Path::new(file))).is_some()
     {
-        return edits.is_changed(file);
+        return edits.is_target_changed(file);
     }
     let Some(indexed) = ctx.index.file_sha16.get(file) else {
         return false;
@@ -1658,6 +1658,42 @@ mod lsp_tests {
             assert!(response.notes.iter().any(|n| n == STALE_NOTE));
         }
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// A same-size edit whose mtime was set back (#18) is still stale.
+    #[test]
+    fn same_size_edit_with_old_mtime_is_stale() {
+        let (tmp, index) = fixture_index();
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        let renamed = text.replace("pub fn target()", "pub fn targex()");
+        assert_eq!(renamed.len(), text.len());
+        std::fs::write(&lib, renamed).expect("rename");
+        let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lib)
+            .and_then(|f| f.set_modified(past))
+            .expect("set mtime");
+
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        let response = explore_response(&ExploreContext {
+            index: &index,
+            repo: "demo",
+            requested: "src/lib.rs",
+            include_markup: false,
+            lsp: LspContext {
+                settings: &settings(),
+                repo_root: tmp.path(),
+                pool: None,
+            },
+            edits: Some(&edits),
+        });
+        assert!(
+            response.notes.iter().any(|n| n == STALE_NOTE),
+            "{:?}",
+            response.notes
+        );
     }
 
     #[test]
