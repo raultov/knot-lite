@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.6] - 2026-11-19
 
 ### Fixed
 - **A same-size edit with an old mtime is seen in the target's own file** ([#18](https://github.com/raultov/knot-lite/issues/18)). `EditedFiles` hashes a file only when its size differs or its mtime is at or after the index start minus 2 s, so a same-size edit whose mtime was set back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) was missed: with servers off a deleted Rust declaration was answered `disabled` from heuristic edges instead of `stale_target`, a pre-computed answer stayed `lsp-indexed`, and `explore_file` listed the indexed entities without the stale note, while `status` reported the file changed. The new `EditedFiles::is_target_changed` hashes the target's own file whatever its size and mtime (once per call); `Describer::file_changed`, the own-file rule of `indexed_is_current` and `explore_file`'s stale check use it. Other changed files are still found by the coarse filters.
