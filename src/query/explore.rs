@@ -1660,7 +1660,8 @@ mod lsp_tests {
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
-    /// A same-size edit whose mtime was set back (#18) is still stale.
+    /// A same-size edit whose mtime was set back (#18) is still stale; when a
+    /// server outlines it, `.edits.changed_files` counts it (#21).
     #[test]
     fn same_size_edit_with_old_mtime_is_stale() {
         let (tmp, index) = fixture_index();
@@ -1676,24 +1677,33 @@ mod lsp_tests {
             .and_then(|f| f.set_modified(past))
             .expect("set mtime");
 
-        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
-        let response = explore_response(&ExploreContext {
-            index: &index,
-            repo: "demo",
-            requested: "src/lib.rs",
-            include_markup: false,
-            lsp: LspContext {
-                settings: &settings(),
-                repo_root: tmp.path(),
-                pool: None,
-            },
-            edits: Some(&edits),
-        });
+        let pool = FakeServers::new(fixture_target_script(tmp.path())).pool();
+        let respond = |pool: Option<&LspPool>| {
+            let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+            explore_response(&ExploreContext {
+                index: &index,
+                repo: "demo",
+                requested: "src/lib.rs",
+                include_markup: false,
+                lsp: LspContext {
+                    settings: &settings(),
+                    repo_root: tmp.path(),
+                    pool,
+                },
+                edits: Some(&edits),
+            })
+        };
+        let response = respond(None);
         assert!(
             response.notes.iter().any(|n| n == STALE_NOTE),
             "{:?}",
             response.notes
         );
+
+        let response = respond(Some(&pool));
+        assert_eq!(response.outline.reason, Some("changed_since_index"));
+        let edits = response.edits.as_ref().expect("edits");
+        assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
     }
 
     #[test]

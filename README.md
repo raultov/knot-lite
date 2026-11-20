@@ -126,7 +126,10 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
 - **Edit awareness (0.6.0).** Language servers no longer fall back to heuristic when a file is edited. On each query,
   knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks.
   The target files of a call (and the file `explore_file` describes) are always hashed, so a same-size edit whose mtime was set
-  back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) is still seen there, as `status` sees it:
+  back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) is still seen there, as `status` sees it; such a file then counts as changed for
+  the rest of the call (overlay attribution, edit synchronization, `.edits.changed_files`). The target's document is re-opened in
+  the server (`didClose` + `didOpen`) when its mtime **or its content** differs from what the server was last sent, so a long-lived
+  server (`knot-lite-mcp`) never answers from an old buffer:
   - *Re-anchoring:* If a target's declaration moved or its file changed, the file (up to 256 KiB) is re-parsed with knot's parser,
     the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
     At most 32 changed files are re-parsed per call; a target whose changed file is past that limit, or over 256 KiB, is never called
@@ -258,7 +261,7 @@ Measured with the release build of 0.6.1 (knot 1.11.3) on work copies of `knot`,
   | S3 `spring-ai`, the caller in another module, no re-index (8) | 0/8 · 16386 ms | 8/8 · 18533 ms | 8/8 · 17169 ms | 8/8 · 17109 ms |
 
   Every answer was `lsp-live` and every edit was visible to changed-set detection; the stale ones simply missed the new caller. All four modes stay within `off + SYNC_WAIT` (10 s) per scenario. `watched` completes 32/32 and is the default: `open+watched` is 0.6 % cheaper (24389 ms vs 24542 ms in total) and also passes, so the 5 % noise rule keeps `watched` (decision D2). S3's pair: `AudioTranscriptionResponse.getMetadata` called from `models/spring-ai-openai/.../OpenAiAudioSpeechResponseMetadata.java`.
-- **Rust and TypeScript in long sessions (P6-D12, `rust_ts_edits.json`):** 8/8 edit iterations completed in each of four cases with `sync=off` — the E2E fixtures and the `knot` / `knot-site` work copies, where the new caller lives in **another** module (`print_with_pager` <- `src/cli_tools/deps.rs`, `jsonText` <- `src/toolcore/index.ts`). An edit in the target's own file is already synced by the `didOpen` reopen on an mtime change, so another file is the case where a missed file watch would show: rust-analyzer and tsserver see those edits without client synchronization.
+- **Rust and TypeScript in long sessions (P6-D12, `rust_ts_edits.json`):** 8/8 edit iterations completed in each of four cases with `sync=off` — the E2E fixtures and the `knot` / `knot-site` work copies, where the new caller lives in **another** module (`print_with_pager` <- `src/cli_tools/deps.rs`, `jsonText` <- `src/toolcore/index.ts`). An edit in the target's own file is already synced by the `didOpen` reopen on an mtime or content change, so another file is the case where a missed file watch would show: rust-analyzer and tsserver see those edits without client synchronization.
 - **Regressions (0.6.1 vs Phase 5):**
   - M5 load median (`m5_load.json`): `knot` 23 ms (baseline 20 ms), `knot-site` 4 ms (baseline 4 ms), `spring-ai` 198 ms (baseline 222 ms).
   - L7 pre-compute parity (`l7_precompute.json`): 10/10 targets identical (100.0%) on `spring-ai`.

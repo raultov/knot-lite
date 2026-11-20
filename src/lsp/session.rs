@@ -4,9 +4,9 @@
 //! halves of a pipe (a child's stdout/stdin in production, an in-memory duplex
 //! in the tests), runs the handshake and returns an [`LspSession`] that issues
 //! the four requests `find_callers` needs. Ported from the Phase 0 spike client
-//! (T4.2) with typed request errors, an mtime-aware `didOpen`, and an
-//! `initialize` request that never touches `InitializeParams::root_uri`
-//! (P3-D15).
+//! (T4.2) with typed request errors, a `didOpen` that re-opens a document whose
+//! mtime or content changed, and an `initialize` request that never touches
+//! `InitializeParams::root_uri` (P3-D15).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;
@@ -48,6 +48,7 @@ use tower::ServiceBuilder;
 use super::readiness::ReadinessState;
 use super::spec::ServerSpec;
 use super::uri::path_to_uri;
+use crate::index::hash::sha256_hex;
 
 /// Loopback event that breaks the main loop.
 pub struct Stop;
@@ -241,6 +242,16 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// What an open document looked like when it was (re-)opened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenedDoc {
+    /// The file's mtime.
+    mtime: SystemTime,
+    /// SHA-256 of the text sent with `didOpen`: a copy can restore an older
+    /// mtime (`cp -p`, `rsync -t`, `tar x`), so the mtime alone misses edits.
+    sha256: String,
+}
+
 /// What [`LspSession::shutdown`] managed to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShutdownOutcome {
@@ -270,8 +281,8 @@ pub struct LspSession {
     request_timeout: Duration,
     first_request_done: bool,
     language_id_for: fn(&Path) -> &'static str,
-    /// Open documents and the file's mtime when they were opened.
-    opened: BTreeMap<Url, SystemTime>,
+    /// Open documents and what the file looked like when they were opened.
+    opened: BTreeMap<Url, OpenedDoc>,
 }
 
 /// Router state shared with the main loop task.
@@ -691,8 +702,9 @@ impl LspSession {
     }
 
     /// Open a document, or re-open it when the file changed since it was opened
-    /// (`didClose` + `didOpen`, P3-D18). Idempotent for an unchanged file; the
-    /// client never sends `didChange`.
+    /// (`didClose` + `didOpen`, P3-D18): a new mtime or new content, since a
+    /// same-size edit may carry the old mtime back. Idempotent for an
+    /// unchanged file; the client never sends `didChange`.
     pub fn did_open(&mut self, abs: &Path) -> anyhow::Result<()> {
         let uri = path_to_uri(abs)?;
         let meta = std::fs::metadata(abs)
@@ -703,8 +715,14 @@ impl LspSession {
         let mtime = meta
             .modified()
             .with_context(|| format!("reading the modification time of {}", abs.display()))?;
+        let text =
+            std::fs::read_to_string(abs).with_context(|| format!("reading {}", abs.display()))?;
+        let doc = OpenedDoc {
+            mtime,
+            sha256: sha256_hex(text.as_bytes()),
+        };
         match self.opened.get(&uri) {
-            Some(opened_at) if *opened_at == mtime => return Ok(()),
+            Some(opened) if *opened == doc => return Ok(()),
             Some(_) => self
                 .server
                 .notify::<DidCloseTextDocument>(DidCloseTextDocumentParams {
@@ -713,8 +731,6 @@ impl LspSession {
                 .map_err(|error| anyhow!("didClose failed: {error}"))?,
             None => {}
         }
-        let text =
-            std::fs::read_to_string(abs).with_context(|| format!("reading {}", abs.display()))?;
         self.server
             .notify::<DidOpenTextDocument>(DidOpenTextDocumentParams {
                 text_document: TextDocumentItem {
@@ -725,7 +741,7 @@ impl LspSession {
                 },
             })
             .map_err(|error| anyhow!("didOpen failed: {error}"))?;
-        self.opened.insert(uri, mtime);
+        self.opened.insert(uri, doc);
         Ok(())
     }
 
@@ -1335,6 +1351,32 @@ mod tests {
             .expect("open for write")
             .set_modified(later)
             .expect("set mtime");
+        session.did_open(&path).expect("reopen");
+        session.did_open(&path).expect("unchanged since the reopen");
+        barrier(&session).await;
+        assert_eq!(handle.counters.did_close_count(), 1);
+        assert_eq!(handle.counters.did_open_count(), 2);
+        assert_eq!(session.opened_count(), 1, "still one document");
+    }
+
+    /// A same-size edit whose mtime was set back (`cp -p`, `rsync -t`,
+    /// `tar x`) must reach the server too, or it answers from the old buffer.
+    #[tokio::test]
+    async fn did_open_reopens_after_a_same_size_edit_with_the_old_mtime() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = source_file(&dir, "a.rs");
+        let (mut session, handle) = connect_rust(references_script()).await;
+        session.did_open(&path).expect("open");
+        let mtime = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .expect("mtime");
+        std::fs::write(&path, "pub fn b() {}\n").expect("same-size edit");
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .expect("open for write")
+            .set_modified(mtime)
+            .expect("restore mtime");
         session.did_open(&path).expect("reopen");
         session.did_open(&path).expect("unchanged since the reopen");
         barrier(&session).await;

@@ -5,6 +5,13 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A long-lived server re-reads a target file edited under its old mtime** ([#19](https://github.com/raultov/knot-lite/issues/19)). `LspSession::did_open` re-opened a document only when the file's mtime differed from the one recorded at the first open, so after a same-size edit whose mtime was restored (`cp -p`, `rsync -t`, `tar x`) a `knot-lite-mcp` server kept rust-analyzer on the old buffer: `find_callers` answered `lsp-live` / `ok` with no callers after asking at the re-anchored line, and `explore_file` outlined the old positions. The session now records the SHA-256 of the text it sent with the mtime and re-opens (`didClose` + `didOpen`) when either differs.
+- **Live callers in a target file edited under its old mtime use the fresh containers** ([#20](https://github.com/raultov/knot-lite/issues/20)). Since #18 `EditedFiles::is_target_changed` saw such an edit and the target was re-anchored, but `build_lookup` and `LiveRequest::changed_files` still used the coarse changed set, which left the file out: the server's reference locations were mapped to the indexed line ranges of the old layout, so the target was listed as its own caller and a real caller was missed. A target file `is_target_changed` finds changed now joins the call's changed set (`is_changed`, `changed`, `all_changed`, the new `has_changes`), and a re-anchored target's file is always checked first, so its locations are mapped through the fresh parse and the request lists it for edit sync.
+- **`.edits.changed_files` counts a target file edited under its old mtime** ([#21](https://github.com/raultov/knot-lite/issues/21)). `find_callers` and `explore_file` filled `.edits.changed_files` from the coarse pass only, so it read `0` next to `reparsed: 1` while `status` reported the file changed. `EditStats::changed` (and `hashed`) now include the target files `is_target_changed` examined.
+
 ## [0.7.6] - 2026-11-19
 
 ### Fixed

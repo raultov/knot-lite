@@ -2536,6 +2536,90 @@ mod tests {
         }
     }
 
+    /// Swap `target` and `caller` in `src/lib.rs` (same bytes, same size) and
+    /// set its mtime back, so only the target check sees the change (#20).
+    fn reorder_lib_with_old_mtime(root: &Path) {
+        let lib = root.join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        let target_fn = "pub fn target() -> u32 {\n    1\n}\n";
+        let caller_fn = "pub fn caller() -> u32 {\n    target() + util::helper()\n}\n";
+        let reordered = text
+            .replace(target_fn, "@TARGET@")
+            .replace(caller_fn, target_fn)
+            .replace("@TARGET@", caller_fn);
+        assert_eq!(reordered.len(), text.len());
+        assert!(
+            reordered.find("pub fn caller").unwrap() < reordered.find("pub fn target").unwrap()
+        );
+        std::fs::write(&lib, reordered).expect("reorder");
+        let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lib)
+            .and_then(|f| f.set_modified(past))
+            .expect("set mtime");
+    }
+
+    #[test]
+    fn same_size_reorder_with_old_mtime_maps_live_callers_through_the_fresh_parse() {
+        let (tmp, index) = fixture_index();
+        reorder_lib_with_old_mtime(tmp.path());
+        // What a server that saw the reordered file answers: `target` is
+        // declared on line 6, `caller` (line 2) calls it on line 3.
+        let scene = Scene::new(tmp.path());
+        let fresh_pos = Position::new(6, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(fresh_pos, vec![scene.item("target", "src/lib.rs", 6)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![
+                    scene.call("caller", "src/lib.rs", 2),
+                    scene.call("helper", "src/util.rs", 0),
+                ],
+            )],
+            references: vec![(
+                fresh_pos,
+                vec![
+                    scene.location("src/lib.rs", 3),
+                    scene.location("src/util.rs", 1),
+                    scene.location("src/util.rs", 8),
+                ],
+            )],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!((target.provenance, status_of(target)), ("lsp-live", "ok"));
+        assert!(target.lsp.as_ref().unwrap().reanchored);
+        assert_eq!(
+            rows(target, "CALLS"),
+            vec![("caller".to_owned(), 1), ("helper".to_owned(), 1)]
+        );
+        assert_eq!(rows(target, "REFERENCES"), vec![("run".to_owned(), 1)]);
+        assert_eq!((target.caller_count, target.self_references), (3, 0));
+        let edits = response.edits.as_ref().expect("edits");
+        assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
+    }
+
+    /// `.edits.changed_files` counts a target file only the target check
+    /// found changed (#21).
+    #[test]
+    fn same_size_rename_with_old_mtime_counts_the_changed_file() {
+        let (tmp, index) = fixture_index();
+        rename_target_with_old_mtime(tmp.path());
+        let response = respond(&index, tmp.path(), &default_settings(), None, "target");
+        assert_eq!(status_of(&response.targets[0]), "stale_target");
+        let edits = response.edits.as_ref().expect("edits");
+        assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
+    }
+
     #[test]
     fn same_size_rename_with_old_mtime_is_stale_target_with_precomputed() {
         let (tmp, mut index) = fixture_index();

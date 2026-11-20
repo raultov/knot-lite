@@ -320,7 +320,7 @@ pub fn indexed_is_current(
     if edits.is_target_changed(&record.file) {
         return Err(Outdated::OwnFile);
     }
-    if edits.all_changed().is_empty() {
+    if !edits.has_changes() {
         return Ok(());
     }
     // (b) no pre-computed edge from a changed file
@@ -336,10 +336,10 @@ pub fn indexed_is_current(
         return Ok(());
     };
     for rel in edits.changed(lang) {
-        if let Ok(source) = files.get(rel)
+        if let Ok(source) = files.get(&rel)
             && crate::lsp::position::text_has_ident(source.text(), &record.line.name)
         {
-            return Err(Outdated::Mention(rel.clone()));
+            return Err(Outdated::Mention(rel));
         }
     }
     Ok(())
@@ -818,6 +818,11 @@ impl<'c, 'a> Describer<'c, 'a> {
             pool,
             precomputed,
         } = args;
+        // The file no longer has the indexed content (that is why the target
+        // is re-anchored): hash it into the call's changed set even when the
+        // coarse filters skip it (same size, mtime set back), so the request
+        // lists it and its references are mapped through the fresh parse.
+        self.file_changed(record);
         let (fresh, fresh_line) = match locate_fresh(&mut self.fresh, self.ctx, record, position) {
             Ok(found) => found,
             Err(Unanchored::Stale(stale)) => return Plan::Heuristic(Some(stale)),
@@ -850,12 +855,7 @@ impl<'c, 'a> Describer<'c, 'a> {
                 ) {
                     return Fallback::status(reason);
                 }
-                request.changed_files = std::sync::Arc::new(
-                    self.ctx
-                        .edits
-                        .map(|e| e.changed(lang).to_vec())
-                        .unwrap_or_default(),
-                );
+                request.changed_files = changed_files(self.ctx, lang);
                 self.live_used += 1;
                 self.reanchored_targets += 1;
                 let own = fresh.containers.container_at(&record.file, fresh_line.l0).0;
@@ -900,12 +900,7 @@ impl<'c, 'a> Describer<'c, 'a> {
             deadline: self.deadline,
         };
         let mut req = live_request(&mut self.files, &target, pacing)?;
-        req.changed_files = std::sync::Arc::new(
-            self.ctx
-                .edits
-                .map(|e| e.changed(lang).to_vec())
-                .unwrap_or_default(),
-        );
+        req.changed_files = changed_files(self.ctx, lang);
         Ok(req)
     }
 
@@ -976,6 +971,11 @@ impl<'c, 'a> Describer<'c, 'a> {
     }
 }
 
+/// The changed files of `lang` a live request carries for edit sync.
+fn changed_files(ctx: &CallersContext<'_>, lang: LspLang) -> std::sync::Arc<Vec<String>> {
+    std::sync::Arc::new(ctx.edits.map(|e| e.changed(lang)).unwrap_or_default())
+}
+
 fn build_lookup<'s, 'c, 'a>(
     fresh: &'s mut FreshFiles,
     ctx: &'c CallersContext<'a>,
@@ -988,7 +988,7 @@ where
     let Some(edits) = ctx.edits else {
         return (ContainerLookup::index_only(&index.containers), None);
     };
-    if edits.all_changed().is_empty() {
+    if !edits.has_changes() {
         return (ContainerLookup::index_only(&index.containers), None);
     }
 

@@ -8,11 +8,14 @@
 //!
 //! The coarse filters miss a same-size edit whose mtime was set back (`cp -p`,
 //! `rsync -t`, `tar x`, `touch -d`), so [`EditedFiles::is_target_changed`]
-//! hashes the few target files of a call whatever their size and mtime.
+//! hashes the few target files of a call whatever their size and mtime.  A
+//! target file it finds changed joins the changed set for the rest of the
+//! call: it is synced with the language server, its references are mapped
+//! through a fresh parse, and it is counted in [`EditStats::changed`].
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
@@ -29,14 +32,12 @@ pub struct EditedFiles {
     /// Index start time (P6-D3 boundary); `None` for indexes built before
     /// 0.6.0 → every candidate is hashed.
     index_start: Option<SystemTime>,
-    /// Lazily computed set of changed (or deleted) files.
+    /// Lazily computed set of files the coarse pass found changed (or deleted).
     changed: OnceLock<BTreeSet<String>>,
-    /// Lazily computed per-language sorted lists.
-    by_lang: OnceLock<HashMap<LspLang, Vec<String>>>,
-    /// Timing statistics.
+    /// Timing statistics of the coarse pass.
     stats: OnceLock<EditStats>,
     /// Exact (always hashed) answers of [`Self::is_target_changed`], per file.
-    exact: Mutex<HashMap<String, bool>>,
+    exact: Mutex<HashMap<String, Examined>>,
 }
 
 /// Cost of one changed-set computation.
@@ -44,11 +45,11 @@ pub struct EditedFiles {
 pub struct EditStats {
     /// Files examined (the LSP-language universe).
     pub universe: usize,
-    /// Files whose hash was computed (the candidates).
+    /// Files whose hash was computed (the candidates and the target files).
     pub hashed: usize,
-    /// Files that turned out to be changed (or deleted).
+    /// Files that turned out to be changed (or deleted), by either pass.
     pub changed: usize,
-    /// Milliseconds the computation took.
+    /// Milliseconds the coarse pass took.
     pub ms: u64,
 }
 
@@ -69,22 +70,24 @@ impl EditedFiles {
             universe,
             index_start: parse_rfc3339(&index.manifest.started_at),
             changed: OnceLock::new(),
-            by_lang: OnceLock::new(),
             stats: OnceLock::new(),
             exact: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Whether `rel` changed (or was deleted) since the index, by the coarse
-    /// size and mtime filters of the changed-set pass.
+    /// Whether `rel` changed (or was deleted) since the index: found by the
+    /// coarse size and mtime filters, or by an earlier
+    /// [`Self::is_target_changed`] of this call.
     pub fn is_changed(&self, rel: &str) -> bool {
         self.changed_set().contains(rel)
+            || self.exact_lock().get(rel).is_some_and(Examined::is_changed)
     }
 
     /// Whether the target file `rel` changed (or was deleted) since the
     /// index, hashing it even when the size and mtime filters skip it, as
-    /// `status` does.  Cached per file for the call; `false` for files
-    /// outside the language-server universe.
+    /// `status` does.  Cached per file for the call; a changed file joins
+    /// the changed set; `false` for files outside the language-server
+    /// universe.
     pub fn is_target_changed(&self, rel: &str) -> bool {
         let Some((inv_sha, _)) = self.universe.get(rel) else {
             return false;
@@ -92,33 +95,56 @@ impl EditedFiles {
         if self.changed.get().is_some_and(|set| set.contains(rel)) {
             return true;
         }
-        let mut exact = self
-            .exact
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(&changed) = exact.get(rel) {
-            return changed;
+        let mut exact = self.exact_lock();
+        if let Some(examined) = exact.get(rel) {
+            return examined.is_changed();
         }
         let root = CanonicalRoot::new(&self.repo_root);
-        let changed = self.examine(&root, rel, inv_sha, None).is_changed();
-        exact.insert(rel.to_owned(), changed);
+        let examined = self.examine(&root, rel, inv_sha, None);
+        let changed = examined.is_changed();
+        exact.insert(rel.to_owned(), examined);
         changed
     }
 
     /// Changed files of `lang`, sorted.
-    pub fn changed(&self, lang: LspLang) -> &[String] {
-        self.by_lang_map().get(&lang).map_or(&[], |v| v.as_slice())
+    pub fn changed(&self, lang: LspLang) -> Vec<String> {
+        self.all_changed()
+            .into_iter()
+            .filter(|rel| lsp_lang_for_label(label_for(Path::new(rel))) == Some(lang))
+            .collect()
     }
 
     /// All changed files, sorted.
-    pub fn all_changed(&self) -> &BTreeSet<String> {
-        self.changed_set()
+    pub fn all_changed(&self) -> BTreeSet<String> {
+        let mut all = self.changed_set().clone();
+        all.extend(
+            self.exact_lock()
+                .iter()
+                .filter(|(_, examined)| examined.is_changed())
+                .map(|(rel, _)| rel.clone()),
+        );
+        all
     }
 
-    /// Cost of the changed-set pass (computed on first use).
+    /// Whether any file changed (cheaper than `!all_changed().is_empty()`).
+    pub fn has_changes(&self) -> bool {
+        !self.changed_set().is_empty() || self.exact_lock().values().any(Examined::is_changed)
+    }
+
+    /// Cost of the changed-set pass (computed on first use), counting the
+    /// target files [`Self::is_target_changed`] hashed or found changed so far.
     pub fn stats(&self) -> EditStats {
-        let _ = self.changed_set();
-        self.stats.get().copied().unwrap_or_default()
+        let coarse = self.changed_set();
+        let mut stats = self.stats.get().copied().unwrap_or_default();
+        for (rel, examined) in self.exact_lock().iter() {
+            if matches!(examined, Examined::Hashed { .. }) {
+                stats.hashed += 1;
+            }
+            if examined.is_changed() && !coarse.contains(rel) {
+                stats.changed += 1;
+            }
+        }
+        stats
     }
 
     // ---- internals ----
@@ -127,19 +153,10 @@ impl EditedFiles {
         self.changed.get_or_init(|| self.compute_changed())
     }
 
-    fn by_lang_map(&self) -> &HashMap<LspLang, Vec<String>> {
-        self.by_lang.get_or_init(|| {
-            let mut map: HashMap<LspLang, Vec<String>> = HashMap::new();
-            for rel in self.changed_set() {
-                if let Some(lang) = lsp_lang_for_label(label_for(Path::new(rel))) {
-                    map.entry(lang).or_default().push(rel.clone());
-                }
-            }
-            for v in map.values_mut() {
-                v.sort();
-            }
-            map
-        })
+    fn exact_lock(&self) -> MutexGuard<'_, HashMap<String, Examined>> {
+        self.exact
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn compute_changed(&self) -> BTreeSet<String> {
@@ -409,6 +426,59 @@ mod tests {
         assert!(edits.is_target_changed("src/lib.rs"));
         assert!(!edits.is_target_changed("src/main.rs"));
         assert!(!edits.is_target_changed("README.md"), "not in the universe");
+    }
+
+    /// A target file found changed by the exact check joins the changed set:
+    /// the request syncs it, `build_lookup` re-parses it, and `.edits`
+    /// counts it.
+    #[test]
+    fn changed_target_joins_the_changed_set() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        write_file(tmp.path(), "src/main.rs", "fn b() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        write_file(tmp.path(), "src/lib.rs", "fn z() {}");
+        let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        for rel in ["src/lib.rs", "src/main.rs"] {
+            let f = std::fs::OpenOptions::new()
+                .write(true)
+                .open(tmp.path().join(rel))
+                .unwrap();
+            f.set_modified(past).unwrap();
+        }
+
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(!edits.has_changes(), "coarse filters skip it");
+        assert_eq!(edits.stats().changed, 0);
+        assert!(edits.is_target_changed("src/lib.rs"));
+        assert!(!edits.is_target_changed("src/main.rs"));
+
+        assert!(edits.is_changed("src/lib.rs"));
+        assert!(!edits.is_changed("src/main.rs"));
+        assert!(edits.has_changes());
+        assert_eq!(edits.changed(LspLang::Rust), vec!["src/lib.rs".to_owned()]);
+        assert!(edits.changed(LspLang::Java).is_empty());
+        assert_eq!(
+            edits.all_changed(),
+            BTreeSet::from(["src/lib.rs".to_owned()])
+        );
+        let stats = edits.stats();
+        assert_eq!(stats.changed, 1);
+        assert_eq!(stats.hashed, 2, "both target files were hashed");
+    }
+
+    /// A file both passes found changed is counted once.
+    #[test]
+    fn changed_file_found_by_both_passes_is_counted_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        let edits = EditedFiles::new(&index, tmp.path());
+        write_file(tmp.path(), "src/lib.rs", "fn a() { /* longer */ }");
+        assert!(edits.is_target_changed("src/lib.rs"), "exact pass first");
+        assert!(edits.is_changed("src/lib.rs"), "coarse pass: size differs");
+        assert_eq!(edits.stats().changed, 1);
+        assert_eq!(edits.changed(LspLang::Rust).len(), 1);
     }
 
     #[test]
