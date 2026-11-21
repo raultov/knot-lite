@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.7] - 2026-11-21
 
 ### Fixed
 - **A long-lived server re-reads a target file edited under its old mtime** ([#19](https://github.com/raultov/knot-lite/issues/19)). `LspSession::did_open` re-opened a document only when the file's mtime differed from the one recorded at the first open, so after a same-size edit whose mtime was restored (`cp -p`, `rsync -t`, `tar x`) a `knot-lite-mcp` server kept rust-analyzer on the old buffer: `find_callers` answered `lsp-live` / `ok` with no callers after asking at the re-anchored line, and `explore_file` outlined the old positions. The session now records the SHA-256 of the text it sent with the mtime and re-opens (`didClose` + `didOpen`) when either differs.
