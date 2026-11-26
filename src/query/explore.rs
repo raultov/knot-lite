@@ -36,6 +36,7 @@ use crate::index::shard::{KIND_CHUNK, KIND_FILE};
 use crate::lsp::ops::{TargetShape, shape_of};
 use crate::lsp::outline::OutlineSymbol;
 use crate::lsp::request::{SourceFiles, Target, locate_target};
+use crate::lsp::uri::{CanonicalRoot, join_rel};
 
 /// Schema id of the explore document (P5-D3).
 pub const EXPLORE_SCHEMA_V2: &str = "knot-lite/explore/v2";
@@ -172,6 +173,15 @@ pub fn resolve_file(index: &LoadedIndex, rel: &str) -> FileResolution {
     }
 }
 
+/// Whether the repo-relative `rel` names a regular file inside the repository
+/// (symlinks resolved).
+fn is_repo_file(root: &Path, rel: &str) -> bool {
+    Path::new(rel)
+        .components()
+        .all(|part| matches!(part, std::path::Component::Normal(_)))
+        && CanonicalRoot::new(root).contains_file(&join_rel(root, rel))
+}
+
 /// One entity (or tier-1 record) of the file.
 #[derive(Debug, Clone, Serialize)]
 pub struct ExploreEntity {
@@ -306,7 +316,16 @@ const STALE_NOTE: &str = "the file changed since the last index; entities and li
 pub fn explore_response(ctx: &ExploreContext<'_>) -> ExploreResponse {
     let index = ctx.index;
     let rel = normalise_input_path(ctx.lsp.repo_root, ctx.requested);
-    let resolution = resolve_file(index, &rel);
+    let resolution = match resolve_file(index, &rel) {
+        // A file at exactly the requested path is described as itself, never
+        // as an indexed file whose path ends with it.
+        FileResolution::Suffix(_) | FileResolution::Ambiguous(_)
+            if is_repo_file(ctx.lsp.repo_root, &rel) =>
+        {
+            FileResolution::NotFound
+        }
+        resolution => resolution,
+    };
     let mut response = ExploreResponse {
         schema: EXPLORE_SCHEMA_V2,
         knot_lite_version: env!("CARGO_PKG_VERSION"),
@@ -1618,6 +1637,45 @@ mod lsp_tests {
         assert_eq!(response.outline.reason, Some("not_indexed"));
         assert_eq!(row(&response, "fresh").kind, "lsp:function");
         assert_eq!(response.language.as_deref(), Some("rust"));
+    }
+
+    /// A new file at exactly the requested path is described as itself, not
+    /// as the indexed `src/util.rs` that ends with the same path (#29).
+    #[test]
+    fn unindexed_file_wins_over_an_indexed_suffix_match() {
+        let (tmp, index) = fixture_index();
+        let servers_off =
+            |requested: &str| explore_with(&index, tmp.path(), &settings(), None, requested);
+        assert_eq!(
+            servers_off("util.rs").file.as_deref(),
+            Some("src/util.rs"),
+            "no util.rs at the root yet: the suffix match"
+        );
+        std::fs::write(tmp.path().join("util.rs"), "pub fn root_only() {}\n").expect("write");
+
+        // Servers off: not in the index, and not src/util.rs either.
+        let response = servers_off("util.rs");
+        assert_eq!((response.resolution, response.file), ("not_found", None));
+        assert!(response.groups.is_empty());
+        assert!(
+            response.notes[0].contains("'util.rs' is not in the index"),
+            "{:?}",
+            response.notes
+        );
+
+        // Server on: the outline of the root file.
+        let servers = with_outline(
+            tmp.path(),
+            "util.rs",
+            vec![symbol("root_only", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let pool = servers.pool();
+        let response = explore_with(&index, tmp.path(), &settings(), Some(&pool), "util.rs");
+        assert_eq!(
+            (response.resolution, response.file.as_deref()),
+            ("not_indexed", Some("util.rs"))
+        );
+        assert_eq!(row(&response, "root_only").kind, "lsp:function");
     }
 
     #[cfg(unix)]
