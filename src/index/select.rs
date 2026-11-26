@@ -9,7 +9,7 @@ use anyhow::Context as _;
 
 use super::chunk::is_tier1_candidate;
 use super::layout::is_reserved_rel;
-use crate::capability::scan::walk_repository;
+use crate::capability::scan::{walk_reaches, walk_repository};
 use crate::lsp::uri::CanonicalRoot;
 
 /// The files one index run considers.
@@ -31,13 +31,16 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
     let root_str = root
         .to_str()
         .context("repository path is not valid UTF-8")?;
-    // A file symlink that resolves outside the repository is never read: its
-    // content would end up in `.knot-lite/` (directory symlinks are already
-    // not followed by the walkers).
+    // A file symlink that resolves outside the repository, or to a file the
+    // walk never selects by its own path (gitignored, under `.git/` or
+    // `.knot-lite/`), is never read: its content would end up in
+    // `.knot-lite/` (directory symlinks are already not followed by the
+    // walkers).
     let canonical_root = CanonicalRoot::new(root);
     let mut parse: Vec<(String, PathBuf)> = knot::pipeline::input::discover_files(root_str, false)?
         .into_iter()
         .filter(|path| canonical_root.contains(path))
+        .filter(|path| link_target_selectable(root, &canonical_root, path))
         .map(|path| (relative(&path, root), path))
         .filter(|(rel, _)| !is_reserved_rel(rel))
         .collect();
@@ -63,6 +66,31 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
     })
 }
 
+/// Whether the file at `path` may be read for `root`'s index as far as
+/// symlinks go: it is no symlink, or it resolves to a regular file inside the
+/// repository that the walk reaches by its own path (not under a reserved or
+/// build-output directory such as `.git/`, not gitignored).
+pub(crate) fn link_target_selectable(
+    root: &Path,
+    canonical_root: &CanonicalRoot,
+    path: &Path,
+) -> bool {
+    let is_link = std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink());
+    if !is_link {
+        return true;
+    }
+    let Ok(target) = path.canonicalize() else {
+        return false;
+    };
+    let Ok(target_rel) = target.strip_prefix(canonical_root.canonical()) else {
+        return false;
+    };
+    target.is_file()
+        && root
+            .to_str()
+            .is_some_and(|root_str| walk_reaches(root_str, &root.join(target_rel)))
+}
+
 /// Repo-relative path with `/` separators on every platform.
 fn relative(path: &Path, root: &Path) -> String {
     knot::pipeline::files::to_repo_relative(path, root).replace('\\', "/")
@@ -72,8 +100,8 @@ fn relative(path: &Path, root: &Path) -> String {
 mod tests {
     use super::*;
     use crate::index::chunk::MAX_TIER1_BYTES;
+    use crate::index::fixture::git_init;
     use std::fs;
-    use std::process::Command;
 
     fn write(root: &Path, rel: &str, body: &[u8]) {
         let path = root.join(rel);
@@ -110,12 +138,7 @@ mod tests {
     fn select_honours_gitignore_inside_git() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let root = tmp.path();
-        let git_ok = Command::new("git")
-            .arg("init")
-            .current_dir(root)
-            .output()
-            .is_ok_and(|out| out.status.success());
-        if !git_ok {
+        if !git_init(root) {
             eprintln!("git unavailable: skipped select_honours_gitignore_inside_git");
             return;
         }
@@ -164,6 +187,50 @@ mod tests {
         let selection = select_files(&root).expect("select");
         assert_eq!(selection.parse_rel, vec!["src/alias.rs", "src/lib.rs"]);
         assert_eq!(tier1_rels(&selection), vec!["run.sh"]);
+    }
+
+    /// An in-repository file symlink is read only when its target is a file
+    /// the walk selects by its own path: never a gitignored file nor one
+    /// under `.git/` (#30).
+    #[cfg(unix)]
+    #[test]
+    fn select_skips_file_symlinks_to_ignored_or_reserved_files() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path();
+        if !git_init(root) {
+            eprintln!(
+                "git unavailable: skipped select_skips_file_symlinks_to_ignored_or_reserved_files"
+            );
+            return;
+        }
+        write(root, ".gitignore", b".env\n");
+        write(root, ".env", b"API_TOKEN=envsecretzq\n");
+        write(root, "README.md", b"# Readme\n");
+        write(root, "src/lib.rs", b"pub fn f() {}\n");
+        let link = |target: &str, rel: &str| {
+            std::os::unix::fs::symlink(target, root.join(rel)).expect("symlink");
+        };
+        link(".env", "notes.md");
+        link(".git/config", "gitcfg.md");
+        link("README.md", "alias.md");
+
+        let selection = select_files(root).expect("select");
+        assert_eq!(
+            selection.parse_rel,
+            vec!["README.md", "alias.md", "src/lib.rs"]
+        );
+        assert_eq!(tier1_rels(&selection), vec![".gitignore"]);
+        let canonical = CanonicalRoot::new(root);
+        assert!(!link_target_selectable(
+            root,
+            &canonical,
+            &root.join("notes.md")
+        ));
+        assert!(link_target_selectable(
+            root,
+            &canonical,
+            &root.join("README.md")
+        ));
     }
 
     #[test]

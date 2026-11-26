@@ -82,8 +82,10 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 | **0 — Excluded** | binaries, huge files (> 500 KiB), lock files | nothing (gitignored files are never counted) |
 
 Symlinks that resolve outside the repository root are never followed: such files are not indexed, are never
-re-parsed or opened when they replace an indexed file, and `explore_file` does not outline them. Neither does it
-outline a file excluded by the index scan (> 500 KiB, binary, lock file) or a gitignored file (`.gitignore`, the
+re-parsed or opened when they replace an indexed file, and `explore_file` does not outline them. The same holds
+for a file symlink inside the repository whose target the index would not select by its own path (a gitignored
+file, anything under `.git/`, `.knot-lite/` or a build-output directory), so its content never reaches
+`.knot-lite/`. Neither does `explore_file` outline a file excluded by the index scan (> 500 KiB, binary, lock file) or a gitignored file (`.gitignore`, the
 global git excludes, `.git/info/exclude`): it is `not_found`, with or without a language server.
 
 ## Language servers

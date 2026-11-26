@@ -37,6 +37,11 @@ impl CanonicalRoot {
         &self.raw
     }
 
+    /// The root with symlinks resolved (the root as configured when that fails).
+    pub fn canonical(&self) -> &Path {
+        &self.canonical
+    }
+
     /// Whether `path` exists and its canonical form (symlinks resolved) lies
     /// inside the repository: a symlink that leads out of the root is not.
     pub fn contains(&self, path: &Path) -> bool {

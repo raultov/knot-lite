@@ -1823,15 +1823,42 @@ mod lsp_tests {
         assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
     }
 
+    /// An unindexed symlink to a gitignored file is not outlined either (#30).
+    #[cfg(unix)]
+    #[test]
+    fn unindexed_symlink_to_a_gitignored_file_is_not_outlined() {
+        let (tmp, index) = fixture_index();
+        if !crate::index::fixture::git_init(tmp.path()) {
+            eprintln!(
+                "git unavailable: skipped unindexed_symlink_to_a_gitignored_file_is_not_outlined"
+            );
+            return;
+        }
+        std::fs::write(tmp.path().join(".gitignore"), "secrets.rs\n").expect("write");
+        std::fs::write(
+            tmp.path().join("secrets.rs"),
+            "pub fn private_token_fn() {}\n",
+        )
+        .expect("write");
+        std::os::unix::fs::symlink("../secrets.rs", tmp.path().join("src/notes.rs"))
+            .expect("symlink");
+        let servers = with_outline(
+            tmp.path(),
+            "src/notes.rs",
+            vec![symbol("private_token_fn", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = explore_with(&index, tmp.path(), &settings(), Some(&pool), "src/notes.rs");
+        assert_eq!((response.resolution, response.file), ("not_found", None));
+        assert!(response.groups.is_empty());
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
     #[test]
     fn unindexed_gitignored_file_is_not_outlined() {
         let (tmp, index) = fixture_index();
-        let git_ok = std::process::Command::new("git")
-            .arg("init")
-            .current_dir(tmp.path())
-            .output()
-            .is_ok_and(|out| out.status.success());
-        if !git_ok {
+        if !crate::index::fixture::git_init(tmp.path()) {
             eprintln!("git unavailable: skipped unindexed_gitignored_file_is_not_outlined");
             return;
         }

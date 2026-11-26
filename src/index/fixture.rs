@@ -66,6 +66,17 @@ pub fn write_fixture_repo(root: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// `git init` in `root`, so that its `.gitignore` applies (the walkers honour
+/// ignore rules only inside a git work tree); `false` when git is unavailable.
+#[cfg(test)]
+pub(crate) fn git_init(root: &Path) -> bool {
+    std::process::Command::new("git")
+        .arg("init")
+        .current_dir(root)
+        .output()
+        .is_ok_and(|out| out.status.success())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
