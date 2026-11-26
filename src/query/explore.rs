@@ -84,23 +84,46 @@ pub fn family_of(kind: &str) -> KindFamily {
     }
 }
 
-/// Make a user-supplied path repo-relative: an absolute path under `root`
-/// loses the root, `\` becomes `/` and a leading `./` is dropped.
+/// Make a user-supplied path repo-relative: an absolute path inside `root`
+/// loses the root (also when it reaches the root through a symlink), `\`
+/// becomes `/`, and empty and `.` segments are dropped. An absolute path
+/// outside the repository is returned as given.
 pub fn normalise_input_path(root: &Path, input: &str) -> String {
-    let path = Path::new(input.trim());
+    let trimmed = input.trim();
+    let path = Path::new(trimmed);
     let relative = if path.is_absolute() {
-        path.strip_prefix(root).map_or_else(
-            |_| input.trim().to_owned(),
-            |rel| rel.to_string_lossy().into_owned(),
-        )
+        match strip_root(root, path) {
+            Some(relative) => relative,
+            None => return trimmed.to_owned(),
+        }
     } else {
-        input.trim().to_owned()
+        trimmed.to_owned()
     };
-    let mut normalised = relative.replace('\\', "/");
-    while let Some(rest) = normalised.strip_prefix("./") {
-        normalised = rest.to_owned();
+    relative
+        .replace('\\', "/")
+        .split('/')
+        .filter(|segment| !segment.is_empty() && *segment != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// The absolute `path` relative to `root`: without `root` itself, or else
+/// without its deepest ancestor that resolves to the same directory (the
+/// repository reached through a symlink). `None` outside the repository.
+fn strip_root(root: &Path, path: &Path) -> Option<String> {
+    let lossy = |relative: &Path| relative.to_string_lossy().into_owned();
+    if let Ok(relative) = path.strip_prefix(root) {
+        return Some(lossy(relative));
     }
-    normalised
+    let canonical_root = root.canonicalize().ok()?;
+    path.ancestors()
+        .find(|ancestor| {
+            ancestor
+                .canonicalize()
+                .is_ok_and(|canonical| canonical == canonical_root)
+        })
+        .and_then(|ancestor| path.strip_prefix(ancestor).ok())
+        .map(lossy)
 }
 
 /// How the requested file maps onto the index.
@@ -1100,6 +1123,9 @@ mod tests {
             ("src/lib.rs", "src/lib.rs"),
             ("/elsewhere/src/lib.rs", "/elsewhere/src/lib.rs"),
             ("  src/lib.rs  ", "src/lib.rs"),
+            ("src//lib.rs", "src/lib.rs"),
+            ("src/./lib.rs", "src/lib.rs"),
+            ("/work/repo//src/./lib.rs", "src/lib.rs"),
         ] {
             assert_eq!(normalise_input_path(root, input), expected, "{input:?}");
         }
@@ -1107,6 +1133,39 @@ mod tests {
         let absolute = tmp.path().join("src/lib.rs");
         let response = explore_at(&index, tmp.path(), &absolute.to_string_lossy(), false);
         assert_eq!(response.file.as_deref(), Some("src/lib.rs"));
+    }
+
+    /// An absolute path that reaches the repository through a symlink to its
+    /// root is inside the repository (#24).
+    #[cfg(unix)]
+    #[test]
+    fn explore_absolute_path_through_a_symlinked_root() {
+        let (tmp, index) = fixture_index();
+        let links = tempfile::tempdir().expect("tempdir");
+        let link = links.path().join("link");
+        std::os::unix::fs::symlink(tmp.path(), &link).expect("symlink");
+        for input in [
+            link.join("src/lib.rs").to_string_lossy().into_owned(),
+            format!("{}//src/./lib.rs", link.display()),
+        ] {
+            assert_eq!(normalise_input_path(tmp.path(), &input), "src/lib.rs");
+            let response = explore_at(&index, tmp.path(), &input, false);
+            assert_eq!(
+                (response.resolution, response.file.as_deref()),
+                ("exact", Some("src/lib.rs")),
+                "{input}"
+            );
+        }
+        // Still outside: the parent of the symlinked root.
+        let outside = link.join("../elsewhere.rs").to_string_lossy().into_owned();
+        assert_eq!(
+            normalise_input_path(tmp.path(), &outside),
+            "../elsewhere.rs"
+        );
+        assert_eq!(
+            explore_at(&index, tmp.path(), &outside, false).resolution,
+            "not_found"
+        );
     }
 
     fn markup_index() -> LoadedIndex {
