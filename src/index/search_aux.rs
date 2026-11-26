@@ -57,8 +57,10 @@ impl SearchAux {
     }
 }
 
-/// The stored lexicon, when the manifest names one this version reads and
-/// every file parses; anything else falls back to names (with a debug log).
+/// The stored lexicon, when the manifest names one this version reads, every
+/// file parses and they hold as many records as the manifest counts (a
+/// missing `lexicon/` directory or file is incomplete); anything else falls
+/// back to names (with a log line).
 fn stored_lexicon(index: &LoadedIndex, layout: &IndexLayout) -> Option<Bm25Index> {
     let table = index.manifest.lexicon.as_ref()?;
     if table.format != LEXICON_FORMAT_V1 || table.tokenizer != TOKENIZER {
@@ -78,6 +80,15 @@ fn stored_lexicon(index: &LoadedIndex, layout: &IndexLayout) -> Option<Bm25Index
     });
     if let Err(error) = read {
         tracing::warn!("cannot read the lexicon ({error:#}); using names only");
+        return None;
+    }
+    let found = u64::try_from(lines.len()).unwrap_or(u64::MAX);
+    if found != table.records {
+        tracing::warn!(
+            found,
+            expected = table.records,
+            "the lexicon is incomplete; using names only"
+        );
         return None;
     }
     Some(Bm25Index::from_lines(lines, index.records.len(), |id| {
@@ -236,6 +247,27 @@ mod tests {
             "not json\n",
         )
         .expect("write");
+        assert!(!load_index(&layout).expect("load").search_aux().lexicon_full);
+    }
+
+    /// A manifest that declares a lexicon whose directory is gone (#25).
+    #[test]
+    fn missing_lexicon_directory_counts_as_absent() {
+        let (tmp, _) = fixture_index();
+        let layout = IndexLayout::for_repo(tmp.path());
+        std::fs::remove_dir_all(layout.lexicon()).expect("remove lexicon/");
+        let index = load_index(&layout).expect("load");
+        let aux = index.search_aux();
+        assert!(!aux.lexicon_full);
+        let top = aux.lexicon.top(&query_terms("target"), |_| true, 1);
+        assert_eq!(top[0].0, position_of(&index, "target"), "names-only hits");
+    }
+
+    #[test]
+    fn a_missing_lexicon_file_counts_as_absent() {
+        let (tmp, _) = fixture_index();
+        let layout = IndexLayout::for_repo(tmp.path());
+        std::fs::remove_file(layout.lexicon_for("src/lib.rs").expect("path")).expect("remove");
         assert!(!load_index(&layout).expect("load").search_aux().lexicon_full);
     }
 
