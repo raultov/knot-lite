@@ -234,13 +234,14 @@ fn mcp_stdio_protocol_session() {
         ),
         call(6, "nope", "{}"),
         request(7, "tools/list", "{}"),
+        call(8, "find_callers", r#"{"entity_name":""}"#),
     ];
     for request in &requests {
         writeln!(stdin, "{request}").expect("write request");
     }
     stdin.flush().expect("flush requests");
 
-    let responses = collect_responses(&rx, &[1, 2, 3, 4, 5, 6, 7]);
+    let responses = collect_responses(&rx, &[1, 2, 3, 4, 5, 6, 7, 8]);
     stop(&mut child);
 
     assert_discover(&result_of(&responses["1"]));
@@ -257,6 +258,12 @@ fn mcp_stdio_protocol_session() {
     let no_meta = &responses["7"];
     let error = no_meta.get("error").expect("JSON-RPC error member");
     assert_eq!(error.get("code").and_then(Value::as_i64), Some(-32601));
+
+    // Out-of-schema arguments are a tool error, checked before the index is opened.
+    assert_eq!(
+        error_text(&result_of(&responses["8"])),
+        "invalid arguments for find_callers: 'entity_name' must be at least 1 character(s) long (got 0)"
+    );
 }
 
 #[test]

@@ -352,7 +352,9 @@ modified and the `.env` file is never written.
 `knot-lite-mcp` speaks **MCP 2026-07-28** (stateless) over stdio and serves exactly one
 repository per instance. A line that is not JSON is answered with the JSON-RPC parse error
 (`-32700`, `id: null`), a line longer than 16 MiB (it is not read) with the invalid-request error
-(`-32600`, `id: null`), and the server keeps serving. Example for opencode 2 (`opencode.jsonc`):
+(`-32600`, `id: null`), and the server keeps serving. A string argument outside the `minLength` /
+`maxLength` its tool's `inputSchema` declares (an empty `entity_name`, a `query` over 500 characters, …)
+is a tool error (`isError: true`) naming the argument. Example for opencode 2 (`opencode.jsonc`):
 
 ```jsonc
 {

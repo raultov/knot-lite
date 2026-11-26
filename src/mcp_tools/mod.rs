@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::config::{Config, OutputFormat};
 use crate::mcp_handler::KnotLiteMcpHandler;
@@ -28,20 +28,87 @@ pub(crate) struct QueryToolSpec<T, P> {
     pub format: fn(&Value, OutputFormat) -> String,
 }
 
-/// Deserialize tool arguments after validating and removing `repo_name`
-/// (knot accepts arrays for it; the typed struct only models the string form).
-pub(crate) fn parse_args<T: DeserializeOwned>(
+/// A tool input struct whose published `inputSchema` [`parse_args`] enforces.
+pub(crate) trait ToolInput: DeserializeOwned {
+    /// The input schema `tools/list` advertises (`json_schema()` of the struct).
+    fn input_schema() -> Map<String, Value>;
+}
+
+/// Implements [`ToolInput`] for `#[mcp_tool]` input structs.
+macro_rules! impl_tool_input {
+    ($($tool:ty),+ $(,)?) => {
+        $(
+            impl $crate::mcp_tools::ToolInput for $tool {
+                fn input_schema() -> serde_json::Map<String, serde_json::Value> {
+                    <$tool>::json_schema()
+                }
+            }
+        )+
+    };
+}
+
+impl_tool_input!(
+    explore_file::ExploreFileTool,
+    find_callers::FindCallersTool,
+    list_files::ListFilesTool,
+    search_hybrid_context::SearchHybridContextTool,
+    status::StatusTool,
+);
+
+/// Deserialize tool arguments after validating them against the published
+/// string-length bounds and validating and removing `repo_name` (knot accepts
+/// arrays for it; the typed struct only models the string form).
+pub(crate) fn parse_args<T: ToolInput>(
     tool: &str,
     params: &CallToolRequestParams,
     served_repo: &str,
 ) -> Result<T, CallToolError> {
     let mut args = params.arguments.clone().unwrap_or_default();
+    if let Err(e) = check_string_lengths(&T::input_schema(), &args) {
+        return Err(CallToolError::from_message(format!(
+            "invalid arguments for {tool}: {e}"
+        )));
+    }
     if let Err(e) = check_repo_scope(args.get("repo_name"), served_repo) {
         return Err(CallToolError::from_message(format!("{tool}: {e}")));
     }
     args.remove("repo_name");
     serde_json::from_value(Value::Object(args))
         .map_err(|e| CallToolError::from_message(format!("invalid arguments for {tool}: {e}")))
+}
+
+/// Check every string argument against the `minLength` / `maxLength` its
+/// property declares in `schema` (counted in characters, as JSON Schema
+/// does). Numeric bounds are left to the runners, which clamp them.
+fn check_string_lengths(
+    schema: &Map<String, Value>,
+    args: &Map<String, Value>,
+) -> Result<(), String> {
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (name, value) in args {
+        let (Some(text), Some(property)) = (value.as_str(), properties.get(name)) else {
+            continue;
+        };
+        let length = u64::try_from(text.chars().count()).unwrap_or(u64::MAX);
+        let bound = |key: &str| property.get(key).and_then(Value::as_u64);
+        if let Some(min) = bound("minLength")
+            && length < min
+        {
+            return Err(format!(
+                "'{name}' must be at least {min} character(s) long (got {length})"
+            ));
+        }
+        if let Some(max) = bound("maxLength")
+            && length > max
+        {
+            return Err(format!(
+                "'{name}' must be at most {max} characters long (got {length})"
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Common body of the four query tools.
@@ -55,7 +122,7 @@ pub(crate) async fn query_tool<T, P>(
     spec: QueryToolSpec<T, P>,
 ) -> Result<CallToolResult, CallToolError>
 where
-    T: DeserializeOwned,
+    T: ToolInput,
     P: Send + 'static,
 {
     let cfg = handler.config()?.clone();
@@ -389,6 +456,85 @@ mod tests {
         let params = call_params("find_callers", args);
         let tool: FindCallersTool = parse_args("find_callers", &params, "demo").expect("parse");
         assert_eq!(tool.entity_name, "E");
+    }
+
+    fn args_with(name: &str, value: &str) -> serde_json::Map<String, Value> {
+        let mut args = serde_json::Map::new();
+        args.insert(name.to_string(), json!(value));
+        args
+    }
+
+    fn parse_error<T: ToolInput + std::fmt::Debug>(
+        tool: &str,
+        args: serde_json::Map<String, Value>,
+    ) -> String {
+        parse_args::<T>(tool, &call_params(tool, args), "demo")
+            .unwrap_err()
+            .to_string()
+    }
+
+    /// `entity_name` outside its published 1..=255 characters is rejected (#27).
+    #[test]
+    fn parse_args_enforces_entity_name_length() {
+        let err = parse_error::<FindCallersTool>("find_callers", args_with("entity_name", ""));
+        assert_eq!(
+            err,
+            "invalid arguments for find_callers: 'entity_name' must be at least 1 character(s) long (got 0)"
+        );
+        let err = parse_error::<FindCallersTool>(
+            "find_callers",
+            args_with("entity_name", &"x".repeat(256)),
+        );
+        assert_eq!(
+            err,
+            "invalid arguments for find_callers: 'entity_name' must be at most 255 characters long (got 256)"
+        );
+        // The bound counts characters, not bytes.
+        for name in ["x".repeat(255), "é".repeat(255)] {
+            let params = call_params("find_callers", args_with("entity_name", &name));
+            let tool: FindCallersTool = parse_args("find_callers", &params, "demo").expect("parse");
+            assert_eq!(tool.entity_name, name);
+        }
+    }
+
+    /// A `query` over its published 500 characters is rejected (#26).
+    #[test]
+    fn parse_args_enforces_query_length() {
+        use crate::mcp_tools::search_hybrid_context::SearchHybridContextTool;
+        let err = parse_error::<SearchHybridContextTool>(
+            "search_hybrid_context",
+            args_with("query", &"x".repeat(501)),
+        );
+        assert!(err.contains("'query' must be at most 500"), "{err}");
+        let params = call_params(
+            "search_hybrid_context",
+            args_with("query", &"x".repeat(500)),
+        );
+        parse_args::<SearchHybridContextTool>("search_hybrid_context", &params, "demo")
+            .expect("500 characters are accepted");
+    }
+
+    /// Every declared string bound is enforced, optional fields included.
+    #[test]
+    fn parse_args_enforces_optional_string_lengths() {
+        use crate::mcp_tools::explore_file::ExploreFileTool;
+        use crate::mcp_tools::list_files::ListFilesTool;
+        use crate::mcp_tools::status::StatusTool;
+        let mut args = args_with("entity_name", "target");
+        args.insert("kinds".to_string(), json!("x".repeat(1025)));
+        let err = parse_error::<FindCallersTool>("find_callers", args);
+        assert!(err.contains("'kinds' must be at most 1024"), "{err}");
+        let err = parse_error::<ListFilesTool>("list_files", args_with("path", ""));
+        assert!(err.contains("'path' must be at least 1"), "{err}");
+        let err = parse_error::<ExploreFileTool>("explore_file", args_with("file_path", ""));
+        assert!(err.contains("'file_path' must be at least 1"), "{err}");
+        let err = parse_error::<StatusTool>("status", args_with("repo_name", &"a".repeat(256)));
+        assert!(err.contains("'repo_name' must be at most 255"), "{err}");
+        // Non-string values are left to the type checks (repo_name arrays stay accepted).
+        let mut args = args_with("entity_name", "target");
+        args.insert("repo_name".to_string(), json!(["demo"]));
+        let params = call_params("find_callers", args);
+        parse_args::<FindCallersTool>("find_callers", &params, "demo").expect("array repo_name");
     }
 
     #[test]
