@@ -5,6 +5,11 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **`KNOT_LITE_DRY_RUN` takes the usual boolean values** ([#31](https://github.com/raultov/knot-lite/issues/31)). `knot-lite-mcp` accepted only `true`/`false`, so `KNOT_LITE_DRY_RUN=1` or `=on` made it exit at startup with a parse error (code 2). It now takes `on`/`off`, `true`/`false`, `yes`/`no` and `1`/`0` (case-insensitive), as the other switches do; the README states the values.
+
 ## [0.7.7] - 2026-11-21
 
 ### Fixed

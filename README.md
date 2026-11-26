@@ -337,7 +337,7 @@ modified and the `.env` file is never written.
 | `KNOT_LITE_LSP_RUST` | override for `rust-analyzer` (program name or path) |
 | `KNOT_LITE_LSP_TS` | override for `typescript-language-server` |
 | `KNOT_LITE_LSP_JAVA` | override for `jdtls` |
-| `KNOT_LITE_DRY_RUN` | MCP only: answer protocol requests without a repository |
+| `KNOT_LITE_DRY_RUN` | MCP only: `on` answers protocol requests without a repository (default `off`; also `true`/`false`, `yes`/`no`, `1`/`0`) |
 | `RUST_LOG` | log level (CLI defaults to `error`, MCP to `info`; logs go to stderr) |
 
 ## Troubleshooting

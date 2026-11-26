@@ -308,6 +308,32 @@ fn mcp_stdio_answers_unparseable_lines_with_parse_error() {
     assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
 }
 
+/// `KNOT_LITE_DRY_RUN` takes the usual boolean spellings, not only `true` (#31).
+#[test]
+fn mcp_stdio_dry_run_accepts_boolean_spellings() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let missing = tmp.path().join("no-such-repository");
+    for value in ["1", "on", "yes", "true"] {
+        let (mut child, rx, _isolation) =
+            spawn_server_with(&missing, &[("KNOT_LITE_DRY_RUN", value)]);
+        let mut stdin = child.stdin.take().expect("child stdin");
+        writeln!(
+            stdin,
+            "{}",
+            request(1, "tools/list", &format!("{{{}}}", meta()))
+        )
+        .expect("write tools/list");
+        writeln!(stdin, "{}", call(2, "status", "{}")).expect("write status");
+        stdin.flush().expect("flush");
+        let responses = collect_responses(&rx, &[1, 2]);
+        drop(stdin);
+        stop(&mut child);
+        assert_tools_list(&result_of(&responses["1"]));
+        let refused = error_text(&result_of(&responses["2"]));
+        assert!(refused.contains("dry-run mode"), "{value}: {refused}");
+    }
+}
+
 /// The fixture repository with its index built (language servers never run:
 /// the build pre-computes nothing for the fixture and the pool is absent).
 fn indexed_fixture() -> tempfile::TempDir {

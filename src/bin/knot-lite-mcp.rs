@@ -21,7 +21,14 @@ struct McpCli {
     #[command(flatten)]
     common: CommonArgs,
     /// Answer protocol requests without opening the repository (quality checks).
-    #[arg(long, env = "KNOT_LITE_DRY_RUN", default_value_t = false, hide = true)]
+    /// `KNOT_LITE_DRY_RUN` takes on/off, true/false, yes/no or 1/0.
+    #[arg(
+        long,
+        env = "KNOT_LITE_DRY_RUN",
+        default_value_t = false,
+        hide = true,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
     dry_run: bool,
 }
 
