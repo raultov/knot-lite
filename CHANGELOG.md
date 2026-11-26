@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`knot-lite-mcp` answers a request line over 16 MiB** ([#23](https://github.com/raultov/knot-lite/issues/23)). The stdio transport discarded a line longer than its size cap (16 MiB) with a log line on stderr and wrote nothing, so a client waiting for that request waited for ever. It now replies with the JSON-RPC invalid-request error (`-32600`, `id: null`, the line is never read so its id is unknown) and keeps serving, as it does for non-JSON lines.
 - **`KNOT_LITE_DRY_RUN` takes the usual boolean values** ([#31](https://github.com/raultov/knot-lite/issues/31)). `knot-lite-mcp` accepted only `true`/`false`, so `KNOT_LITE_DRY_RUN=1` or `=on` made it exit at startup with a parse error (code 2). It now takes `on`/`off`, `true`/`false`, `yes`/`no` and `1`/`0` (case-insensitive), as the other switches do; the README states the values.
 
 ## [0.7.7] - 2026-11-21

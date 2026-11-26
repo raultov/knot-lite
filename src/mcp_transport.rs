@@ -3,9 +3,10 @@
 //! It behaves like the SDK's `StdioTransport` (one JSON-RPC message per line
 //! on stdin, replies on stdout, lines over the size cap dropped) with one
 //! difference: a line that is not JSON gets the JSON-RPC 2.0 parse error
-//! (`-32700`, `id: null`) instead of being dropped without a word, so the
-//! client learns why its request went unanswered. The reply goes through the
-//! same writer as every other message, so it never interleaves with one.
+//! (`-32700`, `id: null`) and a line over the size cap the invalid-request
+//! error (`-32600`, `id: null`) instead of being dropped without a word, so
+//! the client learns why its request went unanswered. The reply goes through
+//! the same writer as every other message, so it never interleaves with one.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,6 +34,20 @@ type Pending = Arc<Mutex<HashMap<RequestId, oneshot::Sender<ClientMessage>>>>;
 /// The JSON-RPC 2.0 reply to a line that is not JSON.
 pub const PARSE_ERROR_REPLY: &str =
     r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}"#;
+
+/// The JSON-RPC 2.0 reply to a line over the size cap of `max` bytes: it is
+/// never read, so its id is unknown.
+pub fn too_long_reply(max: usize) -> String {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": null,
+        "error": {
+            "code": -32600,
+            "message": format!("Invalid Request: message exceeds {max} bytes"),
+        },
+    })
+    .to_string()
+}
 
 /// Server-side stdio transport that answers unparseable lines.
 pub struct StdioServerTransport {
@@ -139,6 +154,20 @@ where
     }
 }
 
+/// Write `payload` (one JSON-RPC message) through the transport's writer.
+async fn reply(sender: &Sender, payload: &str) -> TransportResult<()> {
+    let guard = sender.read().await;
+    match guard.as_ref() {
+        Some(dispatcher) => {
+            McpDispatch::<ClientMessages, ServerMessages, ClientMessage, ServerMessage>::write_str(
+                dispatcher, payload, true,
+            )
+            .await
+        }
+        None => Ok(()),
+    }
+}
+
 /// Read messages from `readable` until it ends or `token` is cancelled.
 async fn read_loop<R>(
     readable: R,
@@ -160,7 +189,10 @@ where
             Ok(LineRead::Line(line)) => line,
             Ok(LineRead::Eof) => return Ok(()),
             Ok(LineRead::TooLong) => {
-                tracing::error!("dropping incoming message exceeding {max_line_length} bytes");
+                tracing::error!(
+                    "incoming message exceeds {max_line_length} bytes; replied with an invalid-request error"
+                );
+                reply(&sender, &too_long_reply(max_line_length)).await?;
                 continue;
             }
             Err(error) => {
@@ -177,15 +209,7 @@ where
             }
             Incoming::ParseError => {
                 tracing::warn!("incoming line is not JSON; replied with a parse error");
-                let guard = sender.read().await;
-                if let Some(dispatcher) = guard.as_ref() {
-                    McpDispatch::<ClientMessages, ServerMessages, ClientMessage, ServerMessage>::write_str(
-                        dispatcher,
-                        PARSE_ERROR_REPLY,
-                        true,
-                    )
-                    .await?;
-                }
+                reply(&sender, PARSE_ERROR_REPLY).await?;
             }
             Incoming::Unrecognised => {
                 tracing::warn!("incoming JSON is not a JSON-RPC client message; ignored");
@@ -378,6 +402,62 @@ mod tests {
         assert!(matches!(classify(request), Incoming::Message(_)));
         assert!(matches!(classify(b"  \r"), Incoming::Blank));
         assert!(matches!(classify(b"42"), Incoming::Unrecognised));
+    }
+
+    /// The replies `read_loop` writes for `input` (size cap `max`) and how
+    /// many messages it forwards to the server.
+    async fn run_read_loop(input: &[u8], max: usize) -> (Vec<serde_json::Value>, usize) {
+        let (writer, mut written) = tokio::io::duplex(64 * 1024);
+        let sender: Sender = Arc::new(RwLock::new(Some(MessageDispatcher::new(
+            Arc::new(Mutex::new(HashMap::new())),
+            Mutex::new(Box::pin(writer)),
+            Duration::from_secs(1),
+        ))));
+        let (tx, mut rx) = mpsc::channel(16);
+        read_loop(
+            input,
+            tx,
+            Arc::clone(&sender),
+            max,
+            CancellationToken::new(),
+        )
+        .await
+        .expect("read loop");
+        // The last owner of the writer: dropping it ends `written`.
+        drop(sender);
+        let mut out = String::new();
+        written.read_to_string(&mut out).await.expect("replies");
+        let replies = out
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("a JSON reply"))
+            .collect();
+        let mut forwarded = 0;
+        while rx.try_recv().is_ok() {
+            forwarded += 1;
+        }
+        (replies, forwarded)
+    }
+
+    #[tokio::test]
+    async fn an_over_cap_line_is_answered_and_the_next_one_served() {
+        let request = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#;
+        let input = format!("{}\n{request}\nnot json\n", "x".repeat(200));
+        let (replies, forwarded) = run_read_loop(input.as_bytes(), 100).await;
+        assert_eq!(forwarded, 1, "the request after the long line is served");
+        assert_eq!(
+            replies,
+            vec![
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": null,
+                    "error": {
+                        "code": -32600,
+                        "message": "Invalid Request: message exceeds 100 bytes"
+                    }
+                }),
+                serde_json::from_str::<serde_json::Value>(PARSE_ERROR_REPLY).expect("json"),
+            ]
+        );
     }
 
     #[test]
