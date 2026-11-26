@@ -67,6 +67,8 @@ Index flags:
 - `--lsp-selection <heuristic|lsp-refs>`: how targets are chosen. `heuristic` (default) uses the heuristic caller count only (the 0.4.x rule). `lsp-refs` (opt-in) first asks the server for the references of a wider candidate pool (`--lsp-probe-min-fanin <N>`, default 3 heuristic callers, plus every interface, class and type; at most 4 × `--lsp-max-targets` candidates, within 40 % of the budget) and pre-computes the candidates with the most callers according to the server (≥ `--lsp-min-fanin`), reusing the probe's references in the answer; candidates the probe did not reach fall back to the heuristic rule. It picked better targets than `heuristic` in the Phase 5 measurements (overlap with the most-referenced targets 100 % vs 86 % on knot, 70 % vs 55 % on a spring-ai sample) but missed this release's bars (85 % overlap and +10 % callers covered), and its probe doubles the language-server time on knot, so it is not the default. `status --output json` shows the selection and how many candidates were probed per language.
 
 A warm re-index whose language files did not change reuses the pre-computed data and **starts no server**.
+With `KNOT_LITE_LSP=off` the index computes nothing: languages whose files did not change keep their pre-computed
+data (`reused`), the others lose it (`skipped`: it described the old files); only `--lsp-precompute none` removes it all.
 
 ## Capability tiers
 

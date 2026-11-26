@@ -10,7 +10,7 @@ use crate::index::build::{BuildOptions, ProgressEvent, build_index};
 use crate::index::select::select_files;
 use crate::lsp::launch::start_pool;
 use crate::lsp::pool::LspPool;
-use crate::lsp::precompute::{PrecomputeOptions, PrecomputePolicy};
+use crate::lsp::precompute::PrecomputePolicy;
 use crate::models::params::IndexParams;
 use crate::query::render::{Column, RenderDoc, RenderSection, render, str_at, u64_at};
 use crate::query::session::CLI_READY_WAIT;
@@ -29,20 +29,14 @@ pub fn run_index(cfg: &Config, params: &IndexParams) -> anyhow::Result<Value> {
     })
 }
 
-/// The policy that runs: `none` when language servers are off.
-fn effective_policy(cfg: &Config, params: &IndexParams) -> PrecomputePolicy {
-    if cfg.lsp.enabled {
-        params.lsp.policy
-    } else {
-        PrecomputePolicy::None
-    }
-}
-
 /// The pool pre-computation asks, when there is anything to ask. Creating it
 /// starts no server: a warm re-index whose languages are all reused never does.
+/// With language servers off there is none: the requested policy still runs,
+/// so unchanged languages keep their pre-computed data and the others are
+/// `skipped`.
 fn precompute_pool(cfg: &Config, params: &IndexParams) -> anyhow::Result<Option<LspPool>> {
-    let policy = effective_policy(cfg, params);
-    if policy == PrecomputePolicy::None {
+    let policy = params.lsp.policy;
+    if !cfg.lsp.enabled || policy == PrecomputePolicy::None {
         return Ok(None);
     }
     // Only TypeScript and Rust servers use the file list (files opened up
@@ -63,7 +57,6 @@ pub fn run_index_with(
     pool: Option<&LspPool>,
     progress: &mut dyn FnMut(ProgressEvent),
 ) -> anyhow::Result<Value> {
-    let policy = effective_policy(cfg, params);
     let opts = BuildOptions {
         force: params.force,
         commit_mode: params.commit_mode,
@@ -71,15 +64,13 @@ pub fn run_index_with(
             std::thread::available_parallelism().map_or(4, std::num::NonZero::get)
         }),
         batch_size: params.batch_size,
-        lsp: PrecomputeOptions {
-            policy,
-            ..params.lsp.clone()
-        },
+        lsp: params.lsp.clone(),
     };
+    let pool = pool.filter(|_| cfg.lsp.enabled);
     let mut report = build_index(cfg, embedder, &opts, pool, progress)?;
-    if policy != params.lsp.policy {
+    if !cfg.lsp.enabled && params.lsp.policy != PrecomputePolicy::None {
         report.warnings.push(format!(
-            "language-server pre-computation is off (policy {} ignored): KNOT_LITE_LSP=off",
+            "language servers are off (KNOT_LITE_LSP=off): nothing was pre-computed (policy {}); languages whose files did not change keep their pre-computed data, the others are skipped",
             params.lsp.policy.as_str()
         ));
     }
@@ -203,6 +194,7 @@ mod tests {
     use crate::embed::fake::FakeEmbedder;
     use crate::index::layout::IndexLayout;
     use crate::lsp::fake::{FakeServers, fixture_target_script};
+    use crate::lsp::precompute::PrecomputeOptions;
 
     #[test]
     fn index_json_has_schema_and_counts() {
@@ -354,21 +346,50 @@ mod tests {
         );
     }
 
-    #[test]
-    fn index_lsp_off_env_forces_none() {
-        let (tmp, mut cfg, params) = precompute_setup();
+    /// Index with language servers off (no pool, whatever the caller passes).
+    fn index_with_servers_off(cfg: &Config, params: &IndexParams) -> Value {
+        let mut cfg = cfg.clone();
         cfg.lsp.enabled = false;
-        assert_eq!(effective_policy(&cfg, &params), PrecomputePolicy::None);
-
+        let pool = FakeServers::new(fixture_target_script(&cfg.repo_path)).pool();
         let mut fake = FakeEmbedder::new(16);
-        let value = run_index_with(&cfg, &params, &mut fake, None, &mut |_| {}).expect("run");
-        assert!(value["lsp"].is_null(), "{value}");
+        run_index_with(&cfg, params, &mut fake, Some(&pool), &mut |_| {}).expect("run")
+    }
+
+    #[test]
+    fn index_lsp_off_computes_nothing() {
+        let (tmp, cfg, params) = precompute_setup();
+        let value = index_with_servers_off(&cfg, &params);
+        assert_eq!(value["lsp"]["languages"]["rust"]["status"], "skipped");
+        assert_eq!(value["counts"]["lsp_edges"], 0);
         let warnings = value["warnings"].to_string();
         assert!(warnings.contains("KNOT_LITE_LSP=off"), "{warnings}");
         assert!(warnings.contains("policy all"), "{warnings}");
         let table = format_index_output(&value, OutputFormat::Table);
         assert!(table.contains("KNOT_LITE_LSP=off"), "{table}");
         assert!(!IndexLayout::for_repo(tmp.path()).lsp_edges().exists());
+    }
+
+    /// `KNOT_LITE_LSP=off` never removes pre-computed data the files still
+    /// match: it is read with servers off (#28).
+    #[test]
+    fn index_lsp_off_keeps_precomputed_data_of_unchanged_languages() {
+        let (tmp, cfg, params) = precompute_setup();
+        let (first, _) = index_with_fake_pool(tmp.path(), &cfg, &params);
+        let layout = IndexLayout::for_repo(tmp.path());
+
+        let second = index_with_servers_off(&cfg, &params);
+        assert_eq!(second["lsp"]["languages"]["rust"]["status"], "reused");
+        assert_eq!(second["counts"]["lsp_edges"], first["counts"]["lsp_edges"]);
+        assert!(layout.lsp_edges().exists() && layout.lsp_targets().exists());
+
+        // A changed Rust file makes the data unusable: it goes, and nothing replaces it.
+        let lib = tmp.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        std::fs::write(&lib, format!("{text}\npub fn added() {{}}\n")).expect("edit");
+        let third = index_with_servers_off(&cfg, &params);
+        assert_eq!(third["lsp"]["languages"]["rust"]["status"], "skipped");
+        assert_eq!(third["counts"]["lsp_edges"], 0);
+        assert!(!layout.lsp_edges().exists());
     }
 
     #[test]
