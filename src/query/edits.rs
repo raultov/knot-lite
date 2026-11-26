@@ -106,6 +106,16 @@ impl EditedFiles {
         changed
     }
 
+    /// [`Self::is_target_changed`] for every target file of a call, before
+    /// the first target is described: the changed set is then complete from
+    /// the start, so a later target's edited file is also mapped through its
+    /// fresh parse for the live answers of the earlier targets.
+    pub fn examine_targets<'r>(&self, files: impl IntoIterator<Item = &'r str>) {
+        for rel in files {
+            self.is_target_changed(rel);
+        }
+    }
+
     /// Changed files of `lang`, sorted.
     pub fn changed(&self, lang: LspLang) -> Vec<String> {
         self.all_changed()
@@ -465,6 +475,28 @@ mod tests {
         let stats = edits.stats();
         assert_eq!(stats.changed, 1);
         assert_eq!(stats.hashed, 2, "both target files were hashed");
+    }
+
+    /// Examining every target file up front completes the changed set (#22).
+    #[test]
+    fn examined_target_files_join_the_changed_set_up_front() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        write_file(tmp.path(), "src/main.rs", "fn b() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        write_file(tmp.path(), "src/main.rs", "fn z() {}");
+        let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(tmp.path().join("src/main.rs"))
+            .and_then(|f| f.set_modified(past))
+            .unwrap();
+
+        let edits = EditedFiles::new(&index, tmp.path());
+        edits.examine_targets(["src/lib.rs", "src/main.rs", "README.md"]);
+        assert!(edits.is_changed("src/main.rs"));
+        assert!(!edits.is_changed("src/lib.rs"));
+        assert_eq!(edits.changed(LspLang::Rust), vec!["src/main.rs".to_owned()]);
     }
 
     /// A file both passes found changed is counted once.

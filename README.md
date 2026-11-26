@@ -129,9 +129,10 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   `status` shows each running server's pid, readiness time and memory.
 - **Edit awareness (0.6.0).** Language servers no longer fall back to heuristic when a file is edited. On each query,
   knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks.
-  The target files of a call (and the file `explore_file` describes) are always hashed, so a same-size edit whose mtime was set
-  back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) is still seen there, as `status` sees it; such a file then counts as changed for
-  the rest of the call (overlay attribution, edit synchronization, `.edits.changed_files`). The target's document is re-opened in
+  The target files of a call (and the file `explore_file` describes) are always hashed, all of them before the first target is
+  answered, so a same-size edit whose mtime was set back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) is still seen there, as `status`
+  sees it; such a file then counts as changed for the whole call (overlay attribution, edit synchronization, `.edits.changed_files`),
+  also for the targets listed before the one it declares. The target's document is re-opened in
   the server (`didClose` + `didOpen`) when its mtime **or its content** differs from what the server was last sent, so a long-lived
   server (`knot-lite-mcp`) never answers from an old buffer:
   - *Re-anchoring:* If a target's declaration moved or its file changed, the file (up to 256 KiB) is re-parsed with knot's parser,

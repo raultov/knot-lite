@@ -380,10 +380,17 @@ pub fn callers_response(ctx: &CallersContext<'_>) -> CallersResponse {
         Some((tier, matched)) => (Some(tier), matched),
         None => (None, Vec::new()),
     };
+    let shown = &matched[..matched.len().min(ctx.max_targets)];
+    if let Some(edits) = ctx.edits {
+        edits.examine_targets(
+            shown
+                .iter()
+                .map(|&position| ctx.index.records[position].file.as_str()),
+        );
+    }
     let mut describer = Describer::new(ctx);
-    let targets: Vec<CallerTarget> = matched
+    let targets: Vec<CallerTarget> = shown
         .iter()
-        .take(ctx.max_targets)
         .map(|&position| describer.describe(position))
         .collect();
     let languages = touched_languages(ctx, &targets);
@@ -2495,20 +2502,26 @@ mod tests {
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
-    /// Rename `target` in `src/lib.rs` keeping the file size, then set its
-    /// mtime back as `cp -p`, `rsync -t` or `touch -d` would (#18).
-    fn rename_target_with_old_mtime(root: &Path) {
-        let lib = root.join("src/lib.rs");
-        let text = std::fs::read_to_string(&lib).expect("read");
-        let renamed = text.replace("pub fn target()", "pub fn targex()");
-        assert_eq!(renamed.len(), text.len());
-        std::fs::write(&lib, renamed).expect("rename");
+    /// Write `text` to `path` (same size as before), then set its mtime back
+    /// as `cp -p`, `rsync -t` or `touch -d` would.
+    fn write_with_old_mtime(path: &Path, text: &str) {
+        let before = std::fs::read(path).expect("read").len();
+        assert_eq!(text.len(), before, "a same-size edit");
+        std::fs::write(path, text).expect("write");
         let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
         std::fs::OpenOptions::new()
             .write(true)
-            .open(&lib)
+            .open(path)
             .and_then(|f| f.set_modified(past))
             .expect("set mtime");
+    }
+
+    /// Rename `target` in `src/lib.rs` keeping the file size, then set its
+    /// mtime back (#18).
+    fn rename_target_with_old_mtime(root: &Path) {
+        let lib = root.join("src/lib.rs");
+        let text = std::fs::read_to_string(&lib).expect("read");
+        write_with_old_mtime(&lib, &text.replace("pub fn target()", "pub fn targex()"));
     }
 
     #[test]
@@ -2547,17 +2560,10 @@ mod tests {
             .replace(target_fn, "@TARGET@")
             .replace(caller_fn, target_fn)
             .replace("@TARGET@", caller_fn);
-        assert_eq!(reordered.len(), text.len());
         assert!(
             reordered.find("pub fn caller").unwrap() < reordered.find("pub fn target").unwrap()
         );
-        std::fs::write(&lib, reordered).expect("reorder");
-        let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(978_307_200);
-        std::fs::OpenOptions::new()
-            .write(true)
-            .open(&lib)
-            .and_then(|f| f.set_modified(past))
-            .expect("set mtime");
+        write_with_old_mtime(&lib, &reordered);
     }
 
     #[test]
@@ -2604,6 +2610,80 @@ mod tests {
         );
         assert_eq!(rows(target, "REFERENCES"), vec![("run".to_owned(), 1)]);
         assert_eq!((target.caller_count, target.self_references), (3, 0));
+        let edits = response.edits.as_ref().expect("edits");
+        assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
+    }
+
+    /// `src/util.rs` of the fixture plus `target_twin`, as `(original, reordered)`:
+    /// the reordered text swaps `helper` and `target_twin` (same bytes) and
+    /// keeps `Widget::run` on its lines.
+    fn util_with_twin() -> (String, String) {
+        let helper = "pub fn helper() -> u32 {\n    crate::target()\n}\n";
+        let widget = "pub struct Widget;\n\nimpl Widget {\n    pub fn run(&self) -> u32 {\n        crate::target()\n    }\n}\n";
+        let twin = "pub fn target_twin() -> u32 {\n    2\n}\n";
+        (
+            format!("{helper}\n{widget}\n{twin}"),
+            format!("{twin}\n{widget}\n{helper}"),
+        )
+    }
+
+    /// Several targets: `target` (src/lib.rs) is described before
+    /// `target_twin`, whose file src/util.rs was reordered under its old
+    /// mtime. The callers of `target` in src/util.rs are still mapped
+    /// through the fresh parse of src/util.rs (#22).
+    #[test]
+    fn a_later_target_file_edited_under_an_old_mtime_maps_earlier_callers_freshly() {
+        let (tmp, cfg) = fixture();
+        let (original, reordered) = util_with_twin();
+        let util = tmp.path().join("src/util.rs");
+        std::fs::write(&util, original).expect("write util.rs");
+        run(&cfg);
+        let index = load_index(&IndexLayout::for_repo(tmp.path())).expect("load");
+        write_with_old_mtime(&util, &reordered);
+
+        // A server that saw the reordered file: `helper` (now line 12) calls
+        // `target` on line 13, `Widget::run` (line 7) mentions it on line 8.
+        let scene = Scene::new(tmp.path());
+        let target_pos = Position::new(2, 7);
+        let servers = FakeServers::new(move |_| FakeScript {
+            prepare: vec![(target_pos, vec![scene.item("target", "src/lib.rs", 2)])],
+            incoming: vec![(
+                "target".to_owned(),
+                vec![
+                    scene.call("caller", "src/lib.rs", 6),
+                    scene.call("helper", "src/util.rs", 12),
+                ],
+            )],
+            references: vec![(
+                target_pos,
+                vec![
+                    scene.location("src/lib.rs", 7),
+                    scene.location("src/util.rs", 13),
+                    scene.location("src/util.rs", 8),
+                ],
+            )],
+            ..FakeScript::full()
+        });
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "arget",
+        );
+        let names: Vec<&str> = response.targets.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, vec!["target", "target_twin"]);
+
+        let target = &response.targets[0];
+        assert_eq!((target.provenance, status_of(target)), ("lsp-live", "ok"));
+        assert!(!target.lsp.as_ref().unwrap().reanchored);
+        assert_eq!(
+            rows(target, "CALLS"),
+            vec![("caller".to_owned(), 1), ("helper".to_owned(), 1)]
+        );
+        assert_eq!(rows(target, "REFERENCES"), vec![("run".to_owned(), 1)]);
+        assert!(response.targets[1].lsp.as_ref().unwrap().reanchored);
         let edits = response.edits.as_ref().expect("edits");
         assert_eq!((edits.changed_files, edits.reparsed), (1, 1));
     }
