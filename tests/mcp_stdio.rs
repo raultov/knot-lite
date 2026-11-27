@@ -42,9 +42,21 @@ fn spawn_server_with(
     repo: &std::path::Path,
     extra_env: &[(&str, &str)],
 ) -> (Child, Receiver<String>, tempfile::TempDir) {
+    spawn_server_in(repo, extra_env, "")
+}
+
+/// [`spawn_server_with`] with `dotenv` as the content of the knot-lite `.env` file.
+fn spawn_server_in(
+    repo: &std::path::Path,
+    extra_env: &[(&str, &str)],
+    dotenv: &str,
+) -> (Child, Receiver<String>, tempfile::TempDir) {
     let isolation = tempfile::tempdir().expect("config isolation tempdir");
     let non_exec = isolation.path().join("not-an-lsp");
     std::fs::write(&non_exec, b"stub").expect("write non-exec stub");
+    if !dotenv.is_empty() {
+        std::fs::write(isolation.path().join(".env"), dotenv).expect("write .env");
+    }
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_knot-lite-mcp"))
         .arg("--repo-path")
@@ -313,6 +325,80 @@ fn mcp_stdio_answers_unparseable_lines_with_parse_error() {
     stop(&mut child);
     // The blank line got no reply.
     assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+}
+
+/// A request the server cannot read is still a request: it gets one error
+/// reply with its id, and the server goes on (#32).
+#[test]
+fn mcp_stdio_answers_requests_it_cannot_read() {
+    let repo = fixture();
+    let (mut child, rx, _isolation) = spawn_server(repo.path());
+    let mut stdin = child.stdin.take().expect("child stdin");
+    let list = |id: u64| request(id, "tools/list", &format!("{{{}}}", meta()));
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":14,"method":"tools/call","params":"x"}}"#
+    )
+    .expect("write string params");
+    writeln!(stdin, "[{}]", list(21)).expect("write batch");
+    writeln!(stdin, r#"{{"jsonrpc":"2.0","id":17}}"#).expect("write no method");
+    // Notifications never get a reply, readable or not.
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"notifications/x","params":"x"}}"#
+    )
+    .expect("write notification");
+    writeln!(stdin, "{}", list(3)).expect("write request");
+    stdin.flush().expect("flush");
+
+    let responses = collect_responses(&rx, &[14, 21, 17, 3]);
+    drop(stdin);
+    stop(&mut child);
+    for id in ["14", "21", "17"] {
+        let code = responses[id]["error"]["code"].as_i64();
+        assert_eq!(code, Some(-32600), "{id}: {}", responses[id]);
+    }
+    assert_tools_list(&result_of(&responses["3"]));
+    assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+}
+
+/// `KNOT_LITE_DRY_RUN` follows the precedence of every other variable: an
+/// empty value is unset (#37) and the `.env` file is read (#35).
+#[test]
+fn mcp_stdio_dry_run_is_read_like_every_other_variable() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let missing = tmp.path().join("no-such-repository");
+    type Env<'a> = &'a [(&'a str, &'a str)];
+    let cases: &[(Env<'_>, &str, bool)] = &[
+        (&[("KNOT_LITE_DRY_RUN", "")], "", false),
+        (&[], "KNOT_LITE_DRY_RUN=on\n", true),
+        (&[("KNOT_LITE_DRY_RUN", "")], "KNOT_LITE_DRY_RUN=on\n", true),
+        (
+            &[("KNOT_LITE_DRY_RUN", "off")],
+            "KNOT_LITE_DRY_RUN=on\n",
+            false,
+        ),
+    ];
+    for (env, dotenv, dry) in cases {
+        // A dry run never opens the repository, so it starts on a missing one.
+        let present = fixture();
+        let repo = if *dry {
+            missing.clone()
+        } else {
+            present.path().to_path_buf()
+        };
+        let (mut child, rx, _isolation) = spawn_server_in(&repo, env, dotenv);
+        let mut stdin = child.stdin.take().expect("child stdin");
+        writeln!(stdin, "{}", call(2, "status", "{}")).expect("write status");
+        stdin.flush().expect("flush");
+        let responses = collect_responses(&rx, &[2]);
+        drop(stdin);
+        stop(&mut child);
+        let result = result_of(&responses["2"]);
+        let refused = result.get("isError").and_then(Value::as_bool) == Some(true)
+            && error_text(&result).contains("dry-run mode");
+        assert_eq!(refused, *dry, "{env:?} / {dotenv:?}: {result}");
+    }
 }
 
 /// `KNOT_LITE_DRY_RUN` takes the usual boolean spellings, not only `true` (#31).
