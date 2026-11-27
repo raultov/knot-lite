@@ -197,17 +197,13 @@ impl Reader<'_> {
         let Some(raw) = first_set(self.lookup, &[key]) else {
             return default;
         };
-        match raw.to_ascii_lowercase().as_str() {
-            "on" | "true" | "1" | "yes" => true,
-            "off" | "false" | "0" | "no" => false,
-            _ => {
-                self.warnings.push(format!(
-                    "{key}='{raw}' is not a boolean (on|off|true|false|1|0|yes|no); using the default ({})",
-                    if default { "on" } else { "off" }
-                ));
-                default
-            }
-        }
+        crate::config::parse_switch(&raw).unwrap_or_else(|| {
+            self.warnings.push(format!(
+                "{key}='{raw}' is not a boolean (on|off|true|false|1|0|yes|no); using the default ({})",
+                if default { "on" } else { "off" }
+            ));
+            default
+        })
     }
 
     /// Non-negative integer value of `key` clamped to `cap`; `None` when unset or invalid.

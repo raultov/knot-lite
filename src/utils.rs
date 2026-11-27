@@ -12,17 +12,25 @@ pub const CLI_LOG_LEVEL: &str = "error";
 /// Default log level for the MCP server binary.
 pub const MCP_LOG_LEVEL: &str = "info";
 
-/// Initialise `tracing` with `RUST_LOG` (falling back to `default_level`),
-/// writing to stderr without ANSI colours.
-pub fn init_logging(default_level: &str) -> Result<()> {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+/// Initialise `tracing` with the `configured` filter (the value of `RUST_LOG`
+/// from the process environment or the knot-lite `.env`; `default_level` when
+/// it is unset or invalid), writing to stderr without ANSI colours.
+pub fn init_logging(default_level: &str, configured: Option<&str>) -> Result<()> {
+    let filter = log_filter(default_level, configured);
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .try_init()
         .map_err(|e| anyhow::anyhow!("failed to initialize logging: {e}"))
+}
+
+/// The filter `configured` describes, or the one of `default_level` when it
+/// is unset or not a valid directive list.
+fn log_filter(default_level: &str, configured: Option<&str>) -> EnvFilter {
+    configured
+        .and_then(|directives| EnvFilter::try_new(directives).ok())
+        .unwrap_or_else(|| EnvFilter::new(default_level))
 }
 
 /// The `k` highest-scored entries of `scored`: score descending, ties by the
@@ -42,6 +50,16 @@ pub fn top_scored(mut scored: Vec<(usize, f32)>, k: usize) -> Vec<(usize, f32)> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_filter_uses_the_configured_directives_or_the_default() {
+        let shown =
+            |default: &str, configured: Option<&str>| log_filter(default, configured).to_string();
+        assert_eq!(shown("error", None), "error");
+        assert_eq!(shown("error", Some("debug")), "debug");
+        assert_eq!(shown("info", Some("knot_lite=trace")), "knot_lite=trace");
+        assert_eq!(shown("info", Some("knot_lite=loud")), "info");
+    }
 
     #[test]
     fn top_scored_orders_by_score_then_key() {

@@ -5,7 +5,7 @@ use rust_mcp_sdk::error::SdkResult;
 use rust_mcp_sdk::mcp_server::{McpServerOptions, ToMcpServerHandler, server_runtime};
 use rust_mcp_sdk::{McpServer, TransportOptions};
 
-use knot_lite::config::{CommonArgs, Config};
+use knot_lite::config::{CommonArgs, Config, EnvLayers, LOG_ENV, resolve_dry_run};
 use knot_lite::mcp_handler::{KnotLiteMcpHandler, build_server_details};
 use knot_lite::mcp_transport::StdioServerTransport;
 use knot_lite::utils;
@@ -21,22 +21,22 @@ struct McpCli {
     #[command(flatten)]
     common: CommonArgs,
     /// Answer protocol requests without opening the repository (quality checks).
-    /// `KNOT_LITE_DRY_RUN` takes on/off, true/false, yes/no or 1/0.
-    #[arg(
-        long,
-        env = "KNOT_LITE_DRY_RUN",
-        default_value_t = false,
-        hide = true,
-        value_parser = clap::builder::BoolishValueParser::new()
-    )]
+    /// `KNOT_LITE_DRY_RUN` (process environment or `.env`) takes on/off,
+    /// true/false, yes/no or 1/0; it is read by `resolve_dry_run`, not by clap.
+    #[arg(long, hide = true)]
     dry_run: bool,
 }
 
 #[tokio::main]
 async fn main() -> SdkResult<()> {
-    utils::init_logging(utils::MCP_LOG_LEVEL).expect("logging");
+    let env = EnvLayers::load();
+    utils::init_logging(utils::MCP_LOG_LEVEL, env.get(LOG_ENV).as_deref()).expect("logging");
     let cli = McpCli::parse();
-    let handler = if cli.dry_run {
+    let (dry_run, warning) = resolve_dry_run(cli.dry_run, &|key| env.get(key));
+    if let Some(warning) = warning {
+        tracing::warn!("{warning}");
+    }
+    let handler = if dry_run {
         KnotLiteMcpHandler::new_dry_run()
     } else {
         let cfg = Config::load_mcp(&cli.common, false).unwrap_or_else(|e| {
