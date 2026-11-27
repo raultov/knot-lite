@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.9] - 2026-11-27
 
 Each fix below goes into the one place its rule lives and covers the reported input together with its
 siblings; `AGENTS.md` ("Invariants") lists the rules, their place and the test that enumerates their cases.
