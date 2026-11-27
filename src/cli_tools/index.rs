@@ -7,10 +7,11 @@ use crate::config::{Config, OutputFormat};
 use crate::embed::EmbedBatch;
 use crate::embed::knot_embedder::{KnotEmbedder, validate_model_name};
 use crate::index::build::{BuildOptions, ProgressEvent, build_index};
+use crate::index::manifest::LspManifest;
 use crate::index::select::select_files;
 use crate::lsp::launch::start_pool;
 use crate::lsp::pool::LspPool;
-use crate::lsp::precompute::PrecomputePolicy;
+use crate::lsp::precompute::{PrecomputePolicy, removed_data_notes};
 use crate::models::params::IndexParams;
 use crate::query::render::{Column, RenderDoc, RenderSection, render, str_at, u64_at};
 use crate::query::session::CLI_READY_WAIT;
@@ -68,13 +69,42 @@ pub fn run_index_with(
     };
     let pool = pool.filter(|_| cfg.lsp.enabled);
     let mut report = build_index(cfg, embedder, &opts, pool, progress)?;
-    if !cfg.lsp.enabled && params.lsp.policy != PrecomputePolicy::None {
-        report.warnings.push(format!(
-            "language servers are off (KNOT_LITE_LSP=off): nothing was pre-computed (policy {}); languages whose files did not change keep their pre-computed data, the others are skipped",
-            params.lsp.policy.as_str()
-        ));
+    if params.lsp.policy != PrecomputePolicy::None {
+        let warnings = precompute_warnings(cfg, params.lsp.policy, report.lsp.as_ref());
+        report.warnings.extend(warnings);
     }
     serde_json::to_value(&report).context("failed to serialize the index report")
+}
+
+/// What the pre-computation stage did that the caller may not expect, read
+/// from the stage's own result (never a prediction): that nothing was
+/// computed with servers off, which languages kept their data, and every
+/// language whose earlier pre-computed data the run removed, with the reason.
+fn precompute_warnings(
+    cfg: &Config,
+    policy: PrecomputePolicy,
+    manifest: Option<&LspManifest>,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if !cfg.lsp.enabled {
+        let kept: Vec<&str> = manifest
+            .into_iter()
+            .flat_map(|manifest| &manifest.languages)
+            .filter(|(_, lang)| lang.status == "reused")
+            .map(|(name, _)| name.as_str())
+            .collect();
+        let kept = if kept.is_empty() {
+            String::new()
+        } else {
+            format!("; kept the pre-computed data of {}", kept.join(", "))
+        };
+        warnings.push(format!(
+            "language servers are off (KNOT_LITE_LSP=off): nothing was pre-computed (policy {}){kept}",
+            policy.as_str()
+        ));
+    }
+    warnings.extend(manifest.map(removed_data_notes).unwrap_or_default());
+    warnings
 }
 
 /// Render a `knot-lite/index-run/v1` document.
@@ -390,6 +420,80 @@ mod tests {
         assert_eq!(third["lsp"]["languages"]["rust"]["status"], "skipped");
         assert_eq!(third["counts"]["lsp_edges"], 0);
         assert!(!layout.lsp_edges().exists());
+    }
+
+    /// The report says what happened to earlier pre-computed data, read from
+    /// the run itself (#36): the default policy does not select Rust, so the
+    /// data of an earlier `--lsp-precompute all` goes, with servers on or off.
+    #[test]
+    fn a_policy_that_drops_a_language_says_its_data_was_removed() {
+        let (tmp, cfg, params) = precompute_setup();
+        let layout = IndexLayout::for_repo(tmp.path());
+        let auto = IndexParams {
+            lsp: PrecomputeOptions {
+                policy: PrecomputePolicy::Auto,
+                ..params.lsp.clone()
+            },
+            ..params.clone()
+        };
+        for servers_on in [false, true] {
+            index_with_fake_pool(tmp.path(), &cfg, &params);
+            assert!(layout.lsp_targets().exists());
+            let value = if servers_on {
+                index_with_fake_pool(tmp.path(), &cfg, &auto).0
+            } else {
+                index_with_servers_off(&cfg, &auto)
+            };
+            assert_eq!(value["lsp"]["languages"]["rust"]["status"], "none");
+            assert!(!layout.lsp_targets().exists());
+            let warnings = value["warnings"].to_string();
+            assert!(
+                warnings.contains(
+                    "rust: earlier pre-computed data removed: policy auto does not select rust"
+                ),
+                "{warnings}"
+            );
+            assert!(!warnings.contains("keep"), "{warnings}");
+            assert_eq!(warnings.contains("KNOT_LITE_LSP=off"), !servers_on);
+
+            // Nothing left to remove: the next run has nothing to say about it.
+            let again = index_with_fake_pool(tmp.path(), &cfg, &auto).0;
+            assert!(
+                !again["warnings"].to_string().contains("removed"),
+                "{again}"
+            );
+        }
+    }
+
+    #[test]
+    fn index_lsp_off_names_what_it_kept_and_what_it_removed() {
+        let (tmp, cfg, params) = precompute_setup();
+        index_with_fake_pool(tmp.path(), &cfg, &params);
+        let kept = index_with_servers_off(&cfg, &params)["warnings"].to_string();
+        assert!(
+            kept.contains("kept the pre-computed data of rust"),
+            "{kept}"
+        );
+        assert!(!kept.contains("removed"), "{kept}");
+
+        // Other flags: the data no longer answers the question asked.
+        let other = IndexParams {
+            lsp: PrecomputeOptions {
+                min_fanin: 3,
+                ..params.lsp.clone()
+            },
+            ..params
+        };
+        let value = index_with_servers_off(&cfg, &other);
+        assert_eq!(value["lsp"]["languages"]["rust"]["status"], "skipped");
+        let removed = value["warnings"].to_string();
+        assert!(
+            removed
+                .contains("earlier pre-computed data removed: the pre-computation flags changed"),
+            "{removed}"
+        );
+        assert!(!removed.contains("kept"), "{removed}");
+        assert!(!IndexLayout::for_repo(tmp.path()).lsp_targets().exists());
     }
 
     #[test]

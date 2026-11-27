@@ -188,6 +188,61 @@ pub fn fingerprint_for_lang(inventory: &Inventory, lang: LspLang) -> String {
     short16(sha256_hex(buf.as_bytes()))
 }
 
+/// Start of the `diagnostic` of a language whose earlier pre-computed data
+/// the run removed (see [`removed_data_notes`]).
+pub const REMOVED_NOTE: &str = "earlier pre-computed data removed";
+
+/// `<language>: <diagnostic>` for every language whose earlier pre-computed
+/// data the run that wrote `manifest` removed, so a report can say what
+/// happened instead of predicting it.
+pub fn removed_data_notes(manifest: &LspManifest) -> Vec<String> {
+    manifest
+        .languages
+        .iter()
+        .filter(|(_, lang)| lang.diagnostic.contains(REMOVED_NOTE))
+        .map(|(name, lang)| format!("{name}: {}", lang.diagnostic))
+        .collect()
+}
+
+/// Whether the previous run left pre-computed answers for a language (a
+/// `none`, `skipped` or `failed` language has nothing worth a note).
+fn had_answers(input: &PrecomputeInput<'_>, lang_dir_name: &str) -> bool {
+    input
+        .previous
+        .and_then(|prev| prev.languages.get(lang_dir_name))
+        .is_some_and(|lang| matches!(lang.status.as_str(), "computed" | "reused"))
+}
+
+/// The earlier manifest of a language when its data still fits this run
+/// (P3-D9: same flags, complete, same files), or why it does not.
+fn reusable(
+    input: &PrecomputeInput<'_>,
+    opts: &PrecomputeOptions,
+    lang_dir_name: &str,
+    fp: &str,
+) -> Result<LspLangManifest, &'static str> {
+    const INCOMPLETE: &str = "it was not a complete pre-computation";
+    let prev = input.previous.ok_or(INCOMPLETE)?;
+    let prev_lang = prev.languages.get(lang_dir_name).ok_or(INCOMPLETE)?;
+    if !matches!(prev_lang.status.as_str(), "computed" | "reused") {
+        return Err(INCOMPLETE);
+    }
+    let same_flags = prev.policy == opts.policy.as_str()
+        && prev.min_fanin == opts.min_fanin
+        && prev.max_targets == opts.max_targets
+        && prev.selection == opts.selection.as_str()
+        && prev.probe_min_fanin == opts.probe_min_fanin;
+    if !same_flags {
+        return Err("the pre-computation flags changed");
+    }
+    if prev_lang.files_fingerprint != fp {
+        return Err("its files changed");
+    }
+    let mut reused = prev_lang.clone();
+    reused.status = "reused".to_owned();
+    Ok(reused)
+}
+
 /// Run the pre-computation stage for all languages.
 pub fn run(
     input: &PrecomputeInput<'_>,
@@ -220,36 +275,38 @@ pub fn run(
         let fp = fingerprint_for_lang(input.inventory, lang);
 
         if !selected_languages.contains(&lang) {
-            clean_lang_data(layout, lang)?;
+            let removed = clean_lang_data(layout, lang)? && had_answers(input, &lang_dir_name);
             if present_languages.contains(&lang) {
-                lang_manifests.insert(lang_dir_name, idle_manifest(lang, "none", fp, ""));
+                let diagnostic = if removed {
+                    format!(
+                        "{REMOVED_NOTE}: policy {} does not select {lang_dir_name}",
+                        opts.policy.as_str()
+                    )
+                } else {
+                    String::new()
+                };
+                lang_manifests.insert(lang_dir_name, idle_manifest(lang, "none", fp, &diagnostic));
             }
             continue;
         }
 
-        // Check reuse (P3-D9)
-        if let Some(prev) = input.previous
-            && prev.policy == opts.policy.as_str()
-            && prev.min_fanin == opts.min_fanin
-            && prev.max_targets == opts.max_targets
-            && prev.selection == opts.selection.as_str()
-            && prev.probe_min_fanin == opts.probe_min_fanin
-            && let Some(prev_lang) = prev.languages.get(&lang_dir_name)
-            && matches!(prev_lang.status.as_str(), "computed" | "reused")
-            && prev_lang.files_fingerprint == fp
-        {
-            let mut reused = prev_lang.clone();
-            reused.status = "reused".to_owned();
-            lang_manifests.insert(lang_dir_name, reused);
-            continue;
-        }
+        let stale = match reusable(input, opts, &lang_dir_name, &fp) {
+            Ok(reused) => {
+                lang_manifests.insert(lang_dir_name, reused);
+                continue;
+            }
+            Err(why) => why,
+        };
 
         // Check if pool is available
         let Some(pool) = pool else {
-            clean_lang_data(layout, lang)?;
+            let mut diagnostic = "LSP is disabled (KNOT_LITE_LSP=off)".to_owned();
+            if clean_lang_data(layout, lang)? && had_answers(input, &lang_dir_name) {
+                diagnostic.push_str(&format!("; {REMOVED_NOTE}: {stale}"));
+            }
             lang_manifests.insert(
                 lang_dir_name,
-                idle_manifest(lang, "skipped", fp, "LSP is disabled (KNOT_LITE_LSP=off)"),
+                idle_manifest(lang, "skipped", fp, &diagnostic),
             );
             continue;
         };
@@ -299,22 +356,26 @@ fn idle_manifest(lang: LspLang, status: &str, fp: String, diagnostic: &str) -> L
     }
 }
 
-fn clean_lang_data(layout: &IndexLayout, lang: LspLang) -> anyhow::Result<()> {
+/// Remove the pre-computed data of `lang`; whether there was any.
+fn clean_lang_data(layout: &IndexLayout, lang: LspLang) -> anyhow::Result<bool> {
+    let mut removed = false;
     let lang_edges_dir = layout.lsp_edges_lang_dir(lang);
     if lang_edges_dir.exists() {
         std::fs::remove_dir_all(&lang_edges_dir)
             .with_context(|| format!("removing {}", lang_edges_dir.display()))?;
+        removed = true;
     }
     let targets_file = layout.lsp_targets_for(lang);
     if targets_file.exists() {
         std::fs::remove_file(&targets_file)
             .with_context(|| format!("removing {}", targets_file.display()))?;
+        removed = true;
     }
     // The parents go with the last language (`remove_dir` refuses a non-empty one).
     for parent in [layout.lsp_edges(), layout.lsp_targets()] {
         let _ = std::fs::remove_dir(parent);
     }
-    Ok(())
+    Ok(removed)
 }
 
 struct PrecomputeLangCtx<'a> {
