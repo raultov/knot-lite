@@ -66,9 +66,14 @@ Index flags:
 - `--lsp-min-fanin <N>` (default 20), `--lsp-max-targets <N>` (200), `--lsp-budget-secs <N>` (600): which targets, how many, and how long per language.
 - `--lsp-selection <heuristic|lsp-refs>`: how targets are chosen. `heuristic` (default) uses the heuristic caller count only (the 0.4.x rule). `lsp-refs` (opt-in) first asks the server for the references of a wider candidate pool (`--lsp-probe-min-fanin <N>`, default 3 heuristic callers, plus every interface, class and type; at most 4 × `--lsp-max-targets` candidates, within 40 % of the budget) and pre-computes the candidates with the most callers according to the server (≥ `--lsp-min-fanin`), reusing the probe's references in the answer; candidates the probe did not reach fall back to the heuristic rule. It picked better targets than `heuristic` in the Phase 5 measurements (overlap with the most-referenced targets 100 % vs 86 % on knot, 70 % vs 55 % on a spring-ai sample) but missed this release's bars (85 % overlap and +10 % callers covered), and its probe doubles the language-server time on knot, so it is not the default. `status --output json` shows the selection and how many candidates were probed per language.
 
-A warm re-index whose language files did not change reuses the pre-computed data and **starts no server**.
-With `KNOT_LITE_LSP=off` the index computes nothing: languages whose files did not change keep their pre-computed
-data (`reused`), the others lose it (`skipped`: it described the old files); only `--lsp-precompute none` removes it all.
+The policy describes what the index holds after the run, so each run applies it again. A language the policy
+selects keeps its pre-computed data (`reused`, and **no server is started**) when its files and the
+`--lsp-*` flags are the ones of the run that computed it; otherwise it is computed again. A language the policy
+does **not** select loses its earlier data: a plain `knot-lite index` (`auto`) after `--lsp-precompute all`
+removes the Rust and TypeScript data, and `--lsp-precompute none` removes it all. With `KNOT_LITE_LSP=off` the same
+rules hold, except that nothing can be computed: a selected language whose files or flags changed is `skipped`
+and its data, which described the old files, is removed. Whenever a run removes earlier pre-computed data, its
+report says so per language with the reason (`warnings`, and the language's `diagnostic` in `status`).
 
 ## Capability tiers
 
@@ -83,9 +88,13 @@ Every language row in `status` reports one of these tiers (Phase 0 §2):
 
 Symlinks that resolve outside the repository root are never followed: such files are not indexed, are never
 re-parsed or opened when they replace an indexed file, and `explore_file` does not outline them. The same holds
-for a file symlink inside the repository whose target the index would not select by its own path (a gitignored
-file, anything under `.git/`, `.knot-lite/` or a build-output directory), so its content never reaches
-`.knot-lite/`. Neither does `explore_file` outline a file excluded by the index scan (> 500 KiB, binary, lock file) or a gitignored file (`.gitignore`, the
+for a file reached through a symlink inside the repository (the file itself or a directory on the way) whose
+target the index would not select by its own path (a gitignored file, anything under `.git/`, `.knot-lite/` or a
+build-output directory), so its content never reaches `.knot-lite/`. It is one rule, applied by `index` and by
+everything that reads a file at query time, with or without a language server: the changed-file walk, the
+re-parse, the documents opened in a language server, the locations a server reports (dropped as external) and
+the `explore_file` outline. An indexed file swapped for such a link counts as removed: its declarations are
+`stale_target` and its outline stays the indexed one, with the stale note. Neither does `explore_file` outline a file excluded by the index scan (> 500 KiB, binary, lock file) or a gitignored file (`.gitignore`, the
 global git excludes, `.git/info/exclude`): it is `not_found`, with or without a language server.
 
 ## Language servers
@@ -128,13 +137,16 @@ server was considered but did not answer, why (`not_ready`, `no_server`, `failed
   `spring-ai` (it may grow up to its `-Xmx8g`), typescript-language-server ≈ 0.6 GiB on a 1.5 k-entity repository.
   `status` shows each running server's pid, readiness time and memory.
 - **Edit awareness (0.6.0).** Language servers no longer fall back to heuristic when a file is edited. On each query,
-  knot-lite detects modified or deleted files (`EditedFiles`) using coarse mtime and size filters confirmed by SHA-256 checks.
-  The target files of a call (and the file `explore_file` describes) are always hashed, all of them before the first target is
-  answered, so a same-size edit whose mtime was set back (`cp -p`, `rsync -t`, `tar x`, `touch -d`) is still seen there, as `status`
+  knot-lite detects modified or deleted files (`EditedFiles`) using coarse size and time filters confirmed by SHA-256 checks:
+  a file is hashed when its size differs, or when its mtime or (on Unix) its inode change time is not older than the index.
+  The inode change time cannot be set back, so on Unix a same-size edit whose mtime was restored (`cp -p`, `rsync -t`, `tar x`,
+  `touch -d`) is seen in every indexed file. On every platform the target files of a call (and the file `explore_file` describes)
+  are always hashed, all of them before the first target is answered, so such an edit is still seen there, as `status`
   sees it; such a file then counts as changed for the whole call (overlay attribution, edit synchronization, `.edits.changed_files`),
-  also for the targets listed before the one it declares. The target's document is re-opened in
-  the server (`didClose` + `didOpen`) when its mtime **or its content** differs from what the server was last sent, so a long-lived
-  server (`knot-lite-mcp`) never answers from an old buffer:
+  also for the targets listed before the one it declares. Before each request, every document knot-lite has open in
+  the server is re-opened (`didClose` + `didOpen`) when its mtime **or its content** differs from what the server was last sent,
+  and closed when its file is gone: the target's own document and the ones opened for earlier calls, which the server would
+  otherwise keep answering from. A long-lived server (`knot-lite-mcp`) therefore never answers from an old buffer:
   - *Re-anchoring:* If a target's declaration moved or its file changed, the file (up to 256 KiB) is re-parsed with knot's parser,
     the declaration is matched and repositioned (`lsp.reanchored = true`), and the request is sent to the server at its fresh position.
     At most 32 changed files are re-parsed per call; a target whose changed file is past that limit, or over 256 KiB, is never called
@@ -279,7 +291,7 @@ Measured with the release build of 0.6.1 (knot 1.11.3) on work copies of `knot`,
 - **Language servers are per call:** only the first `KNOT_LITE_LSP_MAX_LIVE_TARGETS` targets of a `find_callers` call are asked; `explore_file` asks at most 40 entities (references only, about 4 s, types and callables first) and the rest keep their pre-computed or heuristic count (`lsp.status = partial`); `search_hybrid_context` does not use servers. Pre-computed answers do not report self-references. On a changed file, live counts are attributed through fresh overlay containers.
 - **Changed-set cost scales with the repository (Gate E1 missed its target):** every `find_callers` / `explore_file` call `stat`s the indexed files of the language-server languages before hashing the candidates. That is ~12 µs per file, so on `spring-ai` (2,278 Java files) the walk costs p95 28 ms with 0 changes, above the 20 ms this release targeted. It ships under P6-D16 because the walk adds +0 ms when 20 files change (it is not an edit-dependent cost) and `knot` is unaffected (2 ms); the cost still grows linearly with repository size, so expect ~25 ms per 2,000 files.
 - **Java right after an edit:** jdtls is synchronized before each query via `workspace/didChangeWatchedFiles` (`KNOT_LITE_LSP_SYNC=watched`, measured 32/32 complete in Gate J1; `open` and `open+watched` also pass, `off` does not). `open`/`watched` cost time on the first answer: on S1 about 7.1–7.3 s against 4.5 s for `off`, on S3 about 17–18.5 s against 16.4 s, because they make jdtls re-read the changed files before answering. Set `KNOT_LITE_LSP_SYNC=off` to restore the 0.5.0 behaviour and accept stale answers.
-- **Same-size edits with an old mtime outside the target's file:** the changed-set walk hashes only files whose size differs or whose mtime is recent, so a same-size edit restored with an old mtime (`cp -p`, `rsync -t`, `tar x`) in a file other than the target's own is not synced to the server nor used by the freshness rule until re-indexed; the target's own file is always hashed.
+- **Same-size edits with an old mtime outside the target's file (Windows):** where the platform records no inode change time, the changed-set walk hashes only files whose size differs or whose mtime is recent, so a same-size edit restored with an old mtime (`cp -p`, `rsync -t`, `tar x`) in a file other than the target's own is not synced to the server nor used by the freshness rule until re-indexed; the target's own file is always hashed. On Unix the inode change time catches these edits in every file.
 - **Files created after the index:** newly created files not yet present in the index inventory are not walked during queries; run `knot-lite index` to index new files.
 - **References that never spell the target's name:** the freshness rule checks whether changed files contain the target's identifier name. References that never spell the name (such as anonymous lambdas implementing a single-method functional interface) may not trigger live re-querying until re-indexed.
 - **One target at a time per language:** queries of the same language are answered one after another; different languages run in parallel, and `status` never waits for a query.
@@ -320,7 +332,11 @@ stops with an error naming `ORT_DYLIB_PATH` and the minimum version.
 
 Resolution precedence: CLI flags → process environment → `~/.config/knot-lite/.env`
 (or `$KNOT_LITE_CONFIG_DIR/.env`) → defaults. The process environment is never
-modified and the `.env` file is never written.
+modified and the `.env` file is never written. Every variable of the table follows it,
+and a value that is empty or blank counts as unset at each level (`KNOT_LITE_LSP=` in the
+process environment does not hide the `.env` value). The one exception is
+`KNOT_LITE_CONFIG_DIR`: it says where the `.env` file is, so it is read from the process
+environment only. A switch with a value that is not a boolean keeps its default, with a warning.
 
 | Variable | Meaning |
 |---|---|
@@ -355,9 +371,14 @@ modified and the `.env` file is never written.
 ## MCP Server
 
 `knot-lite-mcp` speaks **MCP 2026-07-28** (stateless) over stdio and serves exactly one
-repository per instance. A line that is not JSON is answered with the JSON-RPC parse error
-(`-32700`, `id: null`), a line longer than 16 MiB (it is not read) with the invalid-request error
-(`-32600`, `id: null`), and the server keeps serving. A string argument outside the `minLength` /
+repository per instance. No line that calls for a reply goes unanswered, and the server keeps serving
+after each of them: a line that is not JSON gets the JSON-RPC parse error (`-32700`, `id: null`); a line
+longer than 16 MiB (it is not read) the invalid-request error (`-32600`, `id: null`); JSON that is not a
+JSON-RPC 2.0 request the server can read (a scalar, an object without `method`, another `jsonrpc`, a
+`params` that is a string or a number) gets `-32600` with the request's `id` when that is a string or an
+integer and `null` otherwise, or `-32602` when only the shape of `params` is wrong; a batch (an array) is
+not supported by MCP and gets one `-32600` per request in it. Only notifications (a `method` without an
+`id`), responses and blank lines get no reply. A string argument outside the `minLength` /
 `maxLength` its tool's `inputSchema` declares (an empty `entity_name`, a `query` over 500 characters, …)
 is a tool error (`isError: true`) naming the argument. Example for opencode 2 (`opencode.jsonc`):
 

@@ -65,6 +65,24 @@ absent in a fresh clone. This file is the standing contract.
 - Query tools fail as **tool errors** (`isError: true`), never as protocol errors, so
   the LLM can read the diagnostic and self-correct.
 
+## Invariants — one rule, one place
+
+Most bug reports so far were the same rule enforced in one code path and forgotten in its
+sibling. Each rule below has **one** implementation and a test that enumerates its cases; a fix
+goes into that place and adds its case to that test, never into the caller that was reported.
+
+| Rule | The one place | Its test |
+|---|---|---|
+| A repository file is read only when the index would read it (regular file; no symlink, of the file or of a directory on the way, to something outside the root, gitignored or under an excluded directory) | `lsp::uri::CanonicalRoot::contains_file`; `LspSession::did_open` takes the root and refuses the rest | `lsp::uri::tests::every_query_time_reader_applies_the_reading_rule` (add every new reader) |
+| Every setting is read process environment → `.env` → default, a blank value is unset; clap reads no environment variable | `config::layered` (`resolve`, `resolve_dry_run`, `EnvLayers`); booleans through `config::parse_switch` | `config::tests::documented_variables_are_the_ones_read` (the README table and the keys read are the same set) |
+| Every stdin line that calls for a reply gets exactly one (all but notifications, responses, blank lines) | `mcp_transport::classify` | `mcp_transport::tests::every_unreadable_line_that_calls_for_a_reply_gets_one` |
+| A language server never answers from a document older than its file | `LspSession::refresh_opened`, called by `lsp::target::run_target` before each request | `lsp::session::tests::refresh_reopens_edited_documents_and_closes_the_ones_that_are_gone` |
+| A report says what happened, read from the result; it never predicts it | e.g. `cli_tools::index::precompute_warnings` over `precompute::removed_data_notes` | `cli_tools::index::tests::a_policy_that_drops_a_language_says_its_data_was_removed` |
+
+When a report names one input (a string `params`, an empty `KNOT_LITE_DRY_RUN`, a link to a
+gitignored file), list its siblings first (every malformed shape, every variable, every reader) and
+fix the rule for all of them. A README sentence about behaviour is a contract: change both or neither.
+
 ## Layout
 
 ```
