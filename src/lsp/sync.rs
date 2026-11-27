@@ -14,7 +14,7 @@ use async_lsp::lsp_types::{FileChangeType, FileEvent};
 use serde::{Deserialize, Serialize};
 
 use super::session::LspSession;
-use super::uri::path_to_uri;
+use super::uri::{CanonicalRoot, path_to_uri};
 use crate::capability::languages::LspLang;
 
 /// Maximum files synced per request (P6-D10).
@@ -314,14 +314,13 @@ pub async fn sync_before(
     }
 
     if mode == SyncMode::Open || mode == SyncMode::OpenWatched {
+        let root = CanonicalRoot::new(repo_root);
         for rel in &diff {
             let abs = repo_root.join(rel);
-            if abs.is_file() {
-                let _ = session.did_open(&abs);
-                let _ = session.did_close(&abs);
-            } else {
-                let _ = session.did_close(&abs);
-            }
+            // Refused for a file that is gone or may not be read: it is then
+            // only closed.
+            let _ = session.did_open(&root, &abs);
+            let _ = session.did_close(&abs);
         }
     }
 

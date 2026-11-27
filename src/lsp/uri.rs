@@ -4,11 +4,19 @@
 //! (never string concatenation). Percent-encoding (e.g. spaces) is handled by
 //! the `Url` type; symlink escapes (knot-site's `node_modules` symlink) are
 //! rejected so LSP locations outside the repository classify as external.
+//!
+//! [`CanonicalRoot::contains_file`] is **the** rule for "may this repository
+//! file be read?". The index selection and every reader at query time (the
+//! changed-file walk, the re-parse, the documents opened in a language
+//! server, the outlines) ask it, so a file the index would not read is never
+//! read through another door.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use async_lsp::lsp_types::Url;
+
+use crate::capability::scan::walk_reaches;
 
 /// A repository root with its canonical form computed once.
 ///
@@ -49,11 +57,35 @@ impl CanonicalRoot {
             .is_ok_and(|canonical| canonical.starts_with(&self.canonical))
     }
 
-    /// Whether `path` is a regular file (after resolving symlinks) inside the
-    /// repository: a missing path, a non-regular file (FIFO, socket, directory)
-    /// or a symlink that leads out of the root is not.
+    /// Whether `path` is a regular file of the repository that may be read.
+    ///
+    /// It is not when it is missing or not a regular file (FIFO, socket,
+    /// directory), nor when a symlink — the file itself or a directory on the
+    /// way — takes it out of the root or to a file the index selection does
+    /// not reach by its own path (gitignored, under `.git/`, `.knot-lite/`
+    /// or a build-output directory): reading it would hand out content the
+    /// index never describes.
     pub fn contains_file(&self, path: &Path) -> bool {
-        path.is_file() && self.contains(path)
+        path.canonicalize()
+            .is_ok_and(|resolved| resolved.is_file() && self.admits(path, &resolved))
+    }
+
+    /// Whether `resolved`, the canonical form of `path`, is a place of the
+    /// repository `path` may stand for: `path` itself (no symlink below the
+    /// root), or a path the index selection reaches on its own.
+    fn admits(&self, path: &Path, resolved: &Path) -> bool {
+        let Ok(resolved_rel) = resolved.strip_prefix(&self.canonical) else {
+            return false;
+        };
+        let lexical_rel = path
+            .strip_prefix(&self.raw)
+            .or_else(|_| path.strip_prefix(&self.canonical));
+        if lexical_rel.is_ok_and(|rel| rel == resolved_rel) {
+            return true;
+        }
+        self.raw
+            .to_str()
+            .is_some_and(|root| walk_reaches(root, &self.raw.join(resolved_rel)))
     }
 }
 
@@ -73,7 +105,9 @@ pub fn path_to_uri(abs: &Path) -> Result<Url> {
 ///
 /// Returns `None` for non-`file` URIs, for paths outside `root`, and for paths
 /// whose canonical form escapes `root` (symlinked directories such as
-/// knot-site's `node_modules` point outside the repository and are external).
+/// knot-site's `node_modules` point outside the repository and are external)
+/// or is a file the index selection does not reach (a symlink to a gitignored
+/// file): see [`CanonicalRoot::contains_file`].
 pub fn uri_to_repo_relative(uri: &Url, root: &Path) -> Option<String> {
     uri_to_repo_relative_with(uri, &CanonicalRoot::new(root))
 }
@@ -86,7 +120,7 @@ pub fn uri_to_repo_relative(uri: &Url, root: &Path) -> Option<String> {
 pub fn uri_to_repo_relative_with(uri: &Url, root: &CanonicalRoot) -> Option<String> {
     let path = uri.to_file_path().ok()?;
     if let Ok(canonical) = path.canonicalize()
-        && !canonical.starts_with(&root.canonical)
+        && !root.admits(&path, &canonical)
     {
         return None;
     }
@@ -229,6 +263,121 @@ mod tests {
             uri_to_repo_relative(&uri, &link_root),
             Some("src/a.rs".to_owned())
         );
+    }
+
+    /// A git repository with a gitignored file, a gitignored directory, and
+    /// links into them, into `.git/`, to an ordinary file and out of the
+    /// repository. `None` when git is unavailable.
+    #[cfg(unix)]
+    fn repo_with_links() -> Option<(tempfile::TempDir, PathBuf)> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("repo");
+        let write = |rel: &str, body: &str| {
+            let path = dir.path().join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+            std::fs::write(path, body).expect("write");
+        };
+        write("repo/src/lib.rs", "pub fn f() {}\n");
+        write("repo/secret.rs", "pub fn secret_token_fn() {}\n");
+        write("repo/private/inner.rs", "pub fn private_fn() {}\n");
+        write("repo/.gitignore", "secret.rs\nprivate/\n");
+        write("outside/out.rs", "pub fn outside_fn() {}\n");
+        if !crate::index::fixture::git_init(&root) {
+            return None;
+        }
+        let link = |target: &str, rel: &str| {
+            std::os::unix::fs::symlink(target, root.join(rel)).expect("symlink");
+        };
+        link("lib.rs", "src/alias.rs");
+        link("../secret.rs", "src/leak.rs");
+        link("../.git/config", "src/gitcfg.rs");
+        link("../../outside/out.rs", "src/out.rs");
+        link("private", "linked");
+        link("src", "mirror");
+        Some((dir, root))
+    }
+
+    /// The reading rule (#4, #10, #30, #34): a path is read only when the
+    /// file it resolves to is one the index selection reaches by itself,
+    /// whether the symlink is the file or a directory on the way.
+    #[cfg(unix)]
+    #[test]
+    fn contains_file_follows_links_only_to_files_the_index_selects() {
+        let Some((_dir, root)) = repo_with_links() else {
+            eprintln!(
+                "git unavailable: skipped contains_file_follows_links_only_to_files_the_index_selects"
+            );
+            return;
+        };
+        let canonical = CanonicalRoot::new(&root);
+        let cases = [
+            ("src/lib.rs", true),
+            ("src/alias.rs", true),
+            ("mirror/lib.rs", true),
+            ("src/leak.rs", false),
+            ("src/gitcfg.rs", false),
+            ("src/out.rs", false),
+            ("linked/inner.rs", false),
+            ("src/missing.rs", false),
+            ("src", false),
+        ];
+        for (rel, expected) in cases {
+            assert_eq!(
+                canonical.contains_file(&join_rel(&root, rel)),
+                expected,
+                "{rel}"
+            );
+        }
+        // A file that is itself ignored but reached without a link is not
+        // this rule's business: the selection decides it by its own path.
+        assert!(canonical.contains_file(&root.join("secret.rs")));
+    }
+
+    /// Every reader of repository files at query time refuses what the rule
+    /// refuses: a new reader belongs in this list (#34).
+    #[cfg(unix)]
+    #[test]
+    fn every_query_time_reader_applies_the_reading_rule() {
+        let Some((_dir, root)) = repo_with_links() else {
+            eprintln!("git unavailable: skipped every_query_time_reader_applies_the_reading_rule");
+            return;
+        };
+        let canonical = CanonicalRoot::new(&root);
+        let parse_cfg = knot::pipeline::parser::ParseConfig {
+            repo_root: root.clone(),
+            custom_queries_path: None,
+            repo_name: "demo".to_owned(),
+            include_config_files: false,
+            repo_path: root.to_str().map(str::to_owned),
+        };
+        for (rel, allowed) in [
+            ("src/alias.rs", true),
+            ("src/leak.rs", false),
+            ("src/gitcfg.rs", false),
+            ("src/out.rs", false),
+            ("linked/inner.rs", false),
+        ] {
+            let path = join_rel(&root, rel);
+            // Locations a language server reports.
+            let uri = path_to_uri(&path).expect("URI");
+            assert_eq!(
+                uri_to_repo_relative_with(&uri, &canonical).is_some(),
+                allowed,
+                "location: {rel}"
+            );
+            // The source cache of `find_callers` (positions, freshness rule).
+            let mut sources = crate::lsp::request::SourceFiles::new(&root);
+            assert_eq!(sources.get(rel).is_ok(), allowed, "source: {rel}");
+            // The re-parse of a changed file (re-anchoring, overlay).
+            let fresh = crate::index::reparse::reparse(&root, rel, &parse_cfg);
+            assert_eq!(fresh.is_ok(), allowed, "re-parse: {rel}");
+            // The outline of a file the index does not hold.
+            assert_eq!(
+                crate::query::explore_refs::on_disk_candidate(&root, rel),
+                allowed,
+                "explore: {rel}"
+            );
+        }
     }
 
     #[test]

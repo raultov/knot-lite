@@ -1777,6 +1777,56 @@ mod lsp_tests {
         assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
+    /// The same for a link to a gitignored file of the repository (#34).
+    #[cfg(unix)]
+    #[test]
+    fn indexed_file_swapped_for_a_link_to_a_gitignored_file_is_not_outlined() {
+        let (tmp, index) = fixture_index();
+        if !crate::index::fixture::git_init(tmp.path()) {
+            eprintln!(
+                "git unavailable: skipped indexed_file_swapped_for_a_link_to_a_gitignored_file_is_not_outlined"
+            );
+            return;
+        }
+        std::fs::write(tmp.path().join(".gitignore"), "secret.rs\n").expect("write");
+        std::fs::write(
+            tmp.path().join("secret.rs"),
+            "pub fn secret_token_fn() -> u32 { 9 }\npub fn target() {}\n",
+        )
+        .expect("write");
+        let lib = tmp.path().join("src/lib.rs");
+        std::fs::remove_file(&lib).expect("rm");
+        std::os::unix::fs::symlink("../secret.rs", &lib).expect("symlink");
+
+        let servers = with_outline(
+            tmp.path(),
+            "src/lib.rs",
+            vec![symbol("secret_token_fn", SymbolKind::FUNCTION, (0, 7), 0)],
+        );
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let edits = crate::query::edits::EditedFiles::new(&index, tmp.path());
+        for maybe_edits in [None, Some(&edits)] {
+            let response = explore_response(&ExploreContext {
+                index: &index,
+                repo: "demo",
+                requested: "src/lib.rs",
+                include_markup: false,
+                lsp: LspContext {
+                    settings: &settings(),
+                    repo_root: tmp.path(),
+                    pool: Some(&pool),
+                },
+                edits: maybe_edits,
+            });
+            assert_eq!(response.resolution, "exact");
+            assert_eq!(response.outline.provenance, "index");
+            assert!(rows(&response).iter().all(|e| e.name != "secret_token_fn"));
+            assert!(response.notes.iter().any(|n| n == STALE_NOTE));
+        }
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
     /// A same-size edit whose mtime was set back (#18) is still stale; when a
     /// server outlines it, `.edits.changed_files` counts it (#21).
     #[test]

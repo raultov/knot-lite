@@ -47,8 +47,8 @@ use tower::ServiceBuilder;
 
 use super::readiness::ReadinessState;
 use super::spec::ServerSpec;
-use super::uri::path_to_uri;
-use crate::index::hash::sha256_hex;
+use super::uri::{CanonicalRoot, path_to_uri};
+use crate::index::hash::{inode_changed_at, sha256_hex};
 
 /// Loopback event that breaks the main loop.
 pub struct Stop;
@@ -250,6 +250,29 @@ struct OpenedDoc {
     /// SHA-256 of the text sent with `didOpen`: a copy can restore an older
     /// mtime (`cp -p`, `rsync -t`, `tar x`), so the mtime alone misses edits.
     sha256: String,
+    /// What says, without reading the file, that it was not written since.
+    stamp: Option<WriteStamp>,
+}
+
+/// A file's size, mtime and inode change time: equal stamps mean the file
+/// was not written in between (no tool can set the change time back).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WriteStamp {
+    len: u64,
+    mtime: SystemTime,
+    changed: SystemTime,
+}
+
+impl WriteStamp {
+    /// The stamp of `meta`; `None` where the platform records no inode
+    /// change time (the file is then read and hashed to compare).
+    fn of(meta: &std::fs::Metadata) -> Option<Self> {
+        Some(Self {
+            len: meta.len(),
+            mtime: meta.modified().ok()?,
+            changed: inode_changed_at(meta)?,
+        })
+    }
 }
 
 /// What [`LspSession::shutdown`] managed to do.
@@ -705,12 +728,29 @@ impl LspSession {
     /// (`didClose` + `didOpen`, P3-D18): a new mtime or new content, since a
     /// same-size edit may carry the old mtime back. Idempotent for an
     /// unchanged file; the client never sends `didChange`.
-    pub fn did_open(&mut self, abs: &Path) -> anyhow::Result<()> {
+    ///
+    /// This is the only way a file's content reaches the server from here,
+    /// so it is where the reading rule of the repository `root` is enforced
+    /// ([`CanonicalRoot::contains_file`]): a file that is missing, not
+    /// regular, or a symlink to something the index would not read is refused.
+    pub fn did_open(&mut self, root: &CanonicalRoot, abs: &Path) -> anyhow::Result<()> {
         let uri = path_to_uri(abs)?;
+        if !root.contains_file(abs) {
+            anyhow::bail!(
+                "{} is missing, not a regular file, or resolves outside the repository or to a file the index does not select",
+                abs.display()
+            );
+        }
         let meta = std::fs::metadata(abs)
             .with_context(|| format!("reading the metadata of {}", abs.display()))?;
-        if !meta.is_file() {
-            anyhow::bail!("{} is not a regular file", abs.display());
+        let stamp = WriteStamp::of(&meta);
+        if stamp.is_some()
+            && self
+                .opened
+                .get(&uri)
+                .is_some_and(|opened| opened.stamp == stamp)
+        {
+            return Ok(());
         }
         let mtime = meta
             .modified()
@@ -720,16 +760,18 @@ impl LspSession {
         let doc = OpenedDoc {
             mtime,
             sha256: sha256_hex(text.as_bytes()),
+            stamp,
         };
-        match self.opened.get(&uri) {
-            Some(opened) if *opened == doc => return Ok(()),
-            Some(_) => self
-                .server
+        if let Some(opened) = self.opened.get_mut(&uri) {
+            if opened.mtime == doc.mtime && opened.sha256 == doc.sha256 {
+                opened.stamp = doc.stamp;
+                return Ok(());
+            }
+            self.server
                 .notify::<DidCloseTextDocument>(DidCloseTextDocumentParams {
                     text_document: TextDocumentIdentifier { uri: uri.clone() },
                 })
-                .map_err(|error| anyhow!("didClose failed: {error}"))?,
-            None => {}
+                .map_err(|error| anyhow!("didClose failed: {error}"))?;
         }
         self.server
             .notify::<DidOpenTextDocument>(DidOpenTextDocumentParams {
@@ -743,6 +785,30 @@ impl LspSession {
             .map_err(|error| anyhow!("didOpen failed: {error}"))?;
         self.opened.insert(uri, doc);
         Ok(())
+    }
+
+    /// Bring every open document in line with its file: re-open the ones
+    /// written since they were sent, close the ones that are gone or may no
+    /// longer be read.
+    ///
+    /// A server answers from its open buffers, not from disk. Without this a
+    /// document opened for one call (a target's file) would keep its old text
+    /// in a long-lived server (`knot-lite-mcp`) and, once edited, give the
+    /// positions of that old text to every later request that merely
+    /// *references* it (#33). Called before each request.
+    pub fn refresh_opened(&mut self, root: &CanonicalRoot) {
+        let paths: Vec<_> = self
+            .opened
+            .keys()
+            .filter_map(|uri| uri.to_file_path().ok())
+            .collect();
+        for path in paths {
+            // `did_open` refuses a file that may no longer be read.
+            if let Err(error) = self.did_open(root, &path) {
+                tracing::debug!("closing {}: {error:#}", path.display());
+                let _ = self.did_close(&path);
+            }
+        }
     }
 
     /// `textDocument/didClose` for `abs`, if it was previously opened.
@@ -1330,8 +1396,12 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = source_file(&dir, "a.rs");
         let (mut session, handle) = connect_rust(references_script()).await;
-        session.did_open(&path).expect("first open");
-        session.did_open(&path).expect("second open");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("first open");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("second open");
         barrier(&session).await;
         assert_eq!(handle.counters.did_open_count(), 1);
         assert_eq!(handle.counters.did_close_count(), 0);
@@ -1343,7 +1413,9 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = source_file(&dir, "a.rs");
         let (mut session, handle) = connect_rust(references_script()).await;
-        session.did_open(&path).expect("open");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("open");
         let later = SystemTime::now() + Duration::from_secs(60);
         std::fs::File::options()
             .write(true)
@@ -1351,8 +1423,12 @@ mod tests {
             .expect("open for write")
             .set_modified(later)
             .expect("set mtime");
-        session.did_open(&path).expect("reopen");
-        session.did_open(&path).expect("unchanged since the reopen");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("reopen");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("unchanged since the reopen");
         barrier(&session).await;
         assert_eq!(handle.counters.did_close_count(), 1);
         assert_eq!(handle.counters.did_open_count(), 2);
@@ -1366,7 +1442,9 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = source_file(&dir, "a.rs");
         let (mut session, handle) = connect_rust(references_script()).await;
-        session.did_open(&path).expect("open");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("open");
         let mtime = std::fs::metadata(&path)
             .and_then(|meta| meta.modified())
             .expect("mtime");
@@ -1377,12 +1455,82 @@ mod tests {
             .expect("open for write")
             .set_modified(mtime)
             .expect("restore mtime");
-        session.did_open(&path).expect("reopen");
-        session.did_open(&path).expect("unchanged since the reopen");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("reopen");
+        session
+            .did_open(&CanonicalRoot::new(dir.path()), &path)
+            .expect("unchanged since the reopen");
         barrier(&session).await;
         assert_eq!(handle.counters.did_close_count(), 1);
         assert_eq!(handle.counters.did_open_count(), 2);
         assert_eq!(session.opened_count(), 1, "still one document");
+    }
+
+    /// A document opened for one request is brought up to date before the
+    /// next one, also when that request is about another file (#33).
+    #[tokio::test]
+    async fn refresh_reopens_edited_documents_and_closes_the_ones_that_are_gone() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = CanonicalRoot::new(dir.path());
+        let edited = source_file(&dir, "edited.rs");
+        let kept = source_file(&dir, "kept.rs");
+        let gone = source_file(&dir, "gone.rs");
+        let (mut session, handle) = connect_rust(references_script()).await;
+        for path in [&edited, &kept, &gone] {
+            session.did_open(&root, path).expect("open");
+        }
+        session.refresh_opened(&root);
+        barrier(&session).await;
+        assert_eq!(handle.counters.did_open_count(), 3, "nothing changed");
+        assert_eq!(handle.counters.did_close_count(), 0);
+
+        // Same size, old mtime: the hardest edit to see.
+        let mtime = std::fs::metadata(&edited)
+            .and_then(|meta| meta.modified())
+            .expect("mtime");
+        std::fs::write(&edited, "pub fn b() {}\n").expect("same-size edit");
+        std::fs::File::options()
+            .write(true)
+            .open(&edited)
+            .expect("open for write")
+            .set_modified(mtime)
+            .expect("restore mtime");
+        std::fs::remove_file(&gone).expect("delete");
+
+        session.refresh_opened(&root);
+        session.refresh_opened(&root);
+        barrier(&session).await;
+        assert_eq!(handle.counters.did_open_count(), 4, "edited.rs re-opened");
+        assert_eq!(
+            handle.counters.did_close_count(),
+            2,
+            "edited.rs and gone.rs"
+        );
+        assert_eq!(session.opened_count(), 2);
+    }
+
+    /// No file the index would not read is sent to a server (#34), and one
+    /// that turns into such a file is closed.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn did_open_refuses_links_out_of_the_repository() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let outside = tempfile::tempdir().expect("outside");
+        let root = CanonicalRoot::new(dir.path());
+        let secret = source_file(&outside, "secret.rs");
+        let path = source_file(&dir, "a.rs");
+        let (mut session, handle) = connect_rust(references_script()).await;
+        session.did_open(&root, &path).expect("open");
+
+        std::fs::remove_file(&path).expect("rm");
+        std::os::unix::fs::symlink(&secret, &path).expect("symlink");
+        assert!(session.did_open(&root, &path).is_err());
+        session.refresh_opened(&root);
+        barrier(&session).await;
+        assert_eq!(handle.counters.did_open_count(), 1);
+        assert_eq!(handle.counters.did_close_count(), 1);
+        assert_eq!(session.opened_count(), 0);
     }
 
     #[tokio::test]
@@ -1390,7 +1538,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let (mut session, handle) = connect_rust(references_script()).await;
         let error = session
-            .did_open(&dir.path().join("missing.rs"))
+            .did_open(
+                &CanonicalRoot::new(dir.path()),
+                &dir.path().join("missing.rs"),
+            )
             .expect_err("missing file");
         assert!(error.to_string().contains("missing.rs"), "{error:#}");
         barrier(&session).await;

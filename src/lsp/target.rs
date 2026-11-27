@@ -13,7 +13,7 @@
 //! is set (`explore_file`'s outline, P5.11); the position is then unused.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -225,12 +225,12 @@ impl Collected {
 
 /// Current source lines, read on first use (only Java's comment filter asks).
 struct SourceCache<'a> {
-    root: &'a Path,
+    root: &'a super::uri::CanonicalRoot,
     files: Mutex<HashMap<String, Option<Vec<String>>>>,
 }
 
 impl<'a> SourceCache<'a> {
-    fn new(root: &'a Path) -> Self {
+    fn new(root: &'a super::uri::CanonicalRoot) -> Self {
         Self {
             root,
             files: Mutex::new(HashMap::new()),
@@ -243,8 +243,9 @@ impl<'a> SourceCache<'a> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let lines = files.entry(rel.to_owned()).or_insert_with(|| {
-            let path = join_rel(self.root, rel);
-            path.is_file()
+            let path = join_rel(self.root.raw(), rel);
+            self.root
+                .contains_file(&path)
                 .then(|| std::fs::read_to_string(path).ok())
                 .flatten()
                 .map(|text| text.lines().map(str::to_owned).collect())
@@ -255,7 +256,8 @@ impl<'a> SourceCache<'a> {
 
 /// Ask the server everything about one target.
 ///
-/// Steps: open the document; run each operation of `req.ops` the server
+/// Steps: bring the documents already open in line with their files; open
+/// the target's document; run each operation of `req.ops` the server
 /// supports, in the order incoming → references → implementation, each within
 /// the call's deadline; normalise; and, when everything came back empty although
 /// the heuristic found callers and the server is not known to be idle, wait and
@@ -266,8 +268,9 @@ pub async fn run_target(
     filter: &LocationFilter<'_>,
 ) -> LiveOutcome {
     let started = Instant::now();
-    let sources = SourceCache::new(filter.root.raw());
+    let sources = SourceCache::new(filter.root);
     let mut retried_empty = false;
+    session.refresh_opened(filter.root);
     let result = match open_target(session, req, filter.root) {
         Ok(uri) => {
             let first = collect(session, req, &uri, filter, &sources).await;
@@ -333,15 +336,9 @@ fn open_target(
             "the language server is not running".to_owned(),
         ));
     }
-    if !root.contains_file(&req.abs_file) {
-        return Err(Failure::NoPosition(format!(
-            "{} is missing, not a regular file or resolves outside the repository",
-            req.abs_file.display()
-        )));
-    }
     let uri =
         path_to_uri(&req.abs_file).map_err(|error| Failure::NoPosition(format!("{error:#}")))?;
-    if let Err(error) = session.did_open(&req.abs_file) {
+    if let Err(error) = session.did_open(root, &req.abs_file) {
         if !session.is_alive() {
             return Err(Failure::Failed(format!("didOpen failed: {error:#}")));
         }

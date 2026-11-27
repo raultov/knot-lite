@@ -2784,6 +2784,47 @@ mod tests {
         assert!(notes_stale(&response.notes), "{:?}", response.notes);
     }
 
+    /// A link to a gitignored file of the repository is as unreadable as one
+    /// leading outside: nothing of it is parsed, opened or listed (#34).
+    #[cfg(unix)]
+    #[test]
+    fn link_to_a_gitignored_file_is_stale_target_with_a_live_pool() {
+        let (tmp, index) = fixture_index();
+        if !crate::index::fixture::git_init(tmp.path()) {
+            eprintln!(
+                "git unavailable: skipped link_to_a_gitignored_file_is_stale_target_with_a_live_pool"
+            );
+            return;
+        }
+        std::fs::write(tmp.path().join(".gitignore"), "secret.rs\n").expect("write");
+        std::fs::write(
+            tmp.path().join("secret.rs"),
+            "pub fn target() { }\npub fn secret_token_fn() { target(); }\n",
+        )
+        .expect("write");
+        std::fs::remove_file(tmp.path().join("src/lib.rs")).expect("delete");
+        std::os::unix::fs::symlink("../secret.rs", tmp.path().join("src/lib.rs")).expect("symlink");
+        let servers = FakeServers::new(fixture_target_script(tmp.path()));
+        let starts = servers.starts();
+        let pool = servers.pool();
+        let response = respond(
+            &index,
+            tmp.path(),
+            &default_settings(),
+            Some(&pool),
+            "target",
+        );
+        let target = &response.targets[0];
+        assert_eq!(
+            (target.provenance, status_of(target)),
+            ("heuristic", "stale_target")
+        );
+        assert!(notes_stale(&response.notes), "{:?}", response.notes);
+        let answer = serde_json::to_string(&response).expect("json");
+        assert!(!answer.contains("secret_token_fn"), "{answer}");
+        assert_eq!(starts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
     #[test]
     fn missing_name_in_an_unchanged_file_is_no_position() {
         // The file is unchanged (hash matches) but no longer declares the name:

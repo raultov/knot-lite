@@ -268,8 +268,9 @@ pub fn family_rank(family: super::explore::KindFamily) -> u8 {
 /// Whether `rel` is a file on disk that the index could describe: inside the
 /// repository (also once symlinks are resolved), not excluded by size, binary
 /// or lock-file rules, under no excluded directory, not ignored by the git
-/// ignore rules the index selection honours, and — for a symlink — leading
-/// to a file the index selection reaches by its own path.
+/// ignore rules the index selection honours, and — through a symlink —
+/// leading to a file the index selection reaches by its own path
+/// ([`CanonicalRoot::contains_file`]).
 pub fn on_disk_candidate(root: &Path, rel: &str) -> bool {
     let path = Path::new(rel);
     let inside = !rel.is_empty()
@@ -291,5 +292,4 @@ pub fn on_disk_candidate(root: &Path, rel: &str) -> bool {
         && root
             .to_str()
             .is_some_and(|root_str| crate::capability::scan::walk_reaches(root_str, &path))
-        && crate::index::select::link_target_selectable(root, &canonical_root, &path)
 }

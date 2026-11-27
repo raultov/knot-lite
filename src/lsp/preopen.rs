@@ -19,7 +19,7 @@ use std::str::Chars;
 
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
-use super::uri::join_rel;
+use super::uri::{CanonicalRoot, join_rel};
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
 
 /// Files pre-opened in tsserver, at most.
@@ -193,9 +193,17 @@ fn load_projects(repo_root: &Path, files: &[String], warnings: &mut Vec<String>)
         .map(String::as_str)
         .filter(|rel| TS_CONFIG_NAMES.contains(&file_name(rel)))
         .collect();
+    let canonical_root = CanonicalRoot::new(repo_root);
     let mut projects = Vec::new();
     for rel in configs {
-        let text = match std::fs::read_to_string(join_rel(repo_root, rel)) {
+        let path = join_rel(repo_root, rel);
+        if !canonical_root.contains_file(&path) {
+            warnings.push(format!(
+                "tsconfig: cannot read {rel}: missing, not a regular file or not a file the index would read"
+            ));
+            continue;
+        }
+        let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
             Err(error) => {
                 warnings.push(format!("tsconfig: cannot read {rel}: {error}"));

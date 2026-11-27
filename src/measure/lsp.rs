@@ -104,7 +104,10 @@ async fn l5_smoke_rust(repo: &Path, scratch: &Path) -> L5SmokeReport {
         + 1;
     let name = position::locate_name(&source, "parse_files", line_no, line_no, LspLang::Rust)
         .expect("parse_files located");
-    started.session.did_open(&abs).expect("didOpen");
+    started
+        .session
+        .did_open(&uri::CanonicalRoot::new(repo), &abs)
+        .expect("didOpen");
     let file_uri = uri::path_to_uri(&abs).expect("uri");
     let asked = std::time::Instant::now();
     let outcome = started
@@ -653,7 +656,9 @@ async fn start_ready_server(
         );
     };
     for rel in &preopen.ts_files {
-        let _ = started.session.did_open(&uri::join_rel(repo, rel));
+        let _ = started
+            .session
+            .did_open(&uri::CanonicalRoot::new(repo), &uri::join_rel(repo, rel));
     }
     let ready = wait_ready(
         &mut started.session.events,
@@ -714,7 +719,10 @@ async fn l1_language(repo: &str, lang: LspLang, max_files: usize) -> ColumnRepor
         let abs = uri::join_rel(&root, rel);
         let source = std::fs::read_to_string(&abs).expect("read source");
         let lines: Vec<&str> = source.lines().collect();
-        started.session.did_open(&abs).expect("didOpen");
+        started
+            .session
+            .did_open(&uri::CanonicalRoot::new(&root), &abs)
+            .expect("didOpen");
         let file_uri = uri::path_to_uri(&abs).expect("uri");
         let outcome = started
             .session

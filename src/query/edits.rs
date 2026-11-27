@@ -1,13 +1,15 @@
 //! Changed-file detection per tool call (P6-D3).
 //!
 //! A file is a **candidate** when it is missing from disk, its size differs
-//! from the inventory, or its mtime is at or after the index start minus 2 s
-//! (coarse file-system clocks).  A candidate is **changed** when missing or
-//! its content hash differs from the inventory.  Computed lazily, once per
-//! call, never cached across calls.
+//! from the inventory, or its mtime — or, where the platform records one, its
+//! inode change time — is at or after the index start minus 2 s (coarse
+//! file-system clocks).  A candidate is **changed** when missing or its
+//! content hash differs from the inventory.  Computed lazily, once per call,
+//! never cached across calls.
 //!
-//! The coarse filters miss a same-size edit whose mtime was set back (`cp -p`,
-//! `rsync -t`, `tar x`, `touch -d`), so [`EditedFiles::is_target_changed`]
+//! The inode change time catches a same-size edit whose mtime was set back
+//! (`cp -p`, `rsync -t`, `tar x`, `touch -d`).  Where there is none (Windows)
+//! the coarse filters miss such an edit, so [`EditedFiles::is_target_changed`]
 //! hashes the few target files of a call whatever their size and mtime.  A
 //! target file it finds changed joins the changed set for the rest of the
 //! call: it is synced with the language server, its references are mapped
@@ -19,6 +21,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::capability::languages::{LspLang, label_for, lsp_lang_for_label};
+use crate::index::hash::inode_changed_at;
 use crate::index::inventory::file_sha16;
 use crate::index::load::LoadedIndex;
 use crate::lsp::uri::CanonicalRoot;
@@ -206,12 +209,13 @@ impl EditedFiles {
         coarse: Option<(u64, Duration)>,
     ) -> Examined {
         let path = self.repo_root.join(rel);
-        // Deleted files, non-regular files (e.g. a FIFO) or symlinks
-        // resolving outside the repository are always changed.
+        // Deleted files, non-regular files (e.g. a FIFO) and symlinks to a
+        // file the index would not read (outside the repository, gitignored)
+        // are always changed.
         let Ok(meta) = std::fs::metadata(&path) else {
             return Examined::Gone;
         };
-        if !meta.is_file() || !root.contains(&path) {
+        if !root.contains_file(&path) {
             return Examined::Gone;
         }
         if let Some((inv_bytes, margin)) = coarse
@@ -228,12 +232,11 @@ impl EditedFiles {
         if inv_bytes > 0 && meta.len() != inv_bytes {
             return true;
         }
-        // Mtime check: mtime >= index_start - 2 s.
+        // Time check: mtime or inode change time >= index_start - 2 s.
         if let Some(start) = self.index_start {
             let boundary = start.checked_sub(margin).unwrap_or(start);
-            if let Ok(mtime) = meta.modified()
-                && mtime >= boundary
-            {
+            let recent = |time: Option<SystemTime>| time.is_some_and(|time| time >= boundary);
+            if recent(meta.modified().ok()) || recent(inode_changed_at(meta)) {
                 return true;
             }
         } else {
@@ -247,7 +250,8 @@ impl EditedFiles {
 
 /// Outcome of comparing one indexed file with the inventory.
 enum Examined {
-    /// Missing, not a regular file, or resolving outside the repository.
+    /// Missing, not a regular file, or resolving to a file the index would
+    /// not read (outside the repository, gitignored).
     Gone,
     /// Ruled out by the size and mtime filters; not hashed.
     Skipped,
@@ -412,14 +416,16 @@ mod tests {
         );
     }
 
-    /// Same-size edit with an mtime set back (`cp -p`, `touch -d`): the
-    /// coarse pass skips it, the target check hashes it.
+    /// Same-size edit with an mtime set back (`cp -p`, `touch -d`) on a
+    /// platform without an inode change time (the index start lies in the
+    /// future here, so no time check fires): the coarse pass skips it, the
+    /// target check hashes it.
     #[test]
     fn same_size_edit_with_old_mtime_is_a_changed_target() {
         let tmp = tempfile::tempdir().unwrap();
         write_file(tmp.path(), "src/lib.rs", "fn a() {}");
         write_file(tmp.path(), "src/main.rs", "fn b() {}");
-        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        let index = stub_index(tmp.path(), "2099-01-01T00:00:00Z");
         write_file(tmp.path(), "src/lib.rs", "fn z() {}");
         let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
         for rel in ["src/lib.rs", "src/main.rs"] {
@@ -438,6 +444,32 @@ mod tests {
         assert!(!edits.is_target_changed("README.md"), "not in the universe");
     }
 
+    /// Where the platform records an inode change time, a same-size edit
+    /// whose mtime was set back is a candidate like any other edit, in every
+    /// indexed file and not only in the targets' (the class of #18–#22, #33).
+    #[cfg(unix)]
+    #[test]
+    fn same_size_edit_with_old_mtime_is_seen_through_the_inode_change_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_file(tmp.path(), "src/lib.rs", "fn a() {}");
+        write_file(tmp.path(), "src/main.rs", "fn b() {}");
+        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        write_file(tmp.path(), "src/lib.rs", "fn z() {}");
+        let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        for rel in ["src/lib.rs", "src/main.rs"] {
+            let f = std::fs::OpenOptions::new()
+                .write(true)
+                .open(tmp.path().join(rel))
+                .unwrap();
+            f.set_modified(past).unwrap();
+        }
+
+        let edits = EditedFiles::new(&index, tmp.path());
+        assert!(edits.is_changed("src/lib.rs"), "no target check needed");
+        assert!(!edits.is_changed("src/main.rs"));
+        assert_eq!(edits.changed(LspLang::Rust), vec!["src/lib.rs".to_owned()]);
+    }
+
     /// A target file found changed by the exact check joins the changed set:
     /// the request syncs it, `build_lookup` re-parses it, and `.edits`
     /// counts it.
@@ -446,7 +478,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         write_file(tmp.path(), "src/lib.rs", "fn a() {}");
         write_file(tmp.path(), "src/main.rs", "fn b() {}");
-        let index = stub_index(tmp.path(), "2026-01-01T00:00:00Z");
+        let index = stub_index(tmp.path(), "2099-01-01T00:00:00Z");
         write_file(tmp.path(), "src/lib.rs", "fn z() {}");
         let past = UNIX_EPOCH + Duration::from_secs(1_000_000);
         for rel in ["src/lib.rs", "src/main.rs"] {

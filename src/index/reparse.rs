@@ -166,10 +166,13 @@ pub fn reparse_batch(
                     failed("the changed file is not a regular file".to_owned()),
                 );
             }
-            Ok(_) if !canonical_root.contains(&path) => {
+            Ok(_) if !canonical_root.contains_file(&path) => {
                 out.insert(
                     rel.clone(),
-                    failed("the changed file resolves outside the repository".to_owned()),
+                    failed(
+                        "the changed file resolves outside the repository or to a file the index does not select"
+                            .to_owned(),
+                    ),
                 );
             }
             Ok(meta) if meta.len() > MAX_REPARSE_BYTES => {

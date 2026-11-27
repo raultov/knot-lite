@@ -9,7 +9,7 @@ use anyhow::Context as _;
 
 use super::chunk::is_tier1_candidate;
 use super::layout::is_reserved_rel;
-use crate::capability::scan::{walk_reaches, walk_repository};
+use crate::capability::scan::walk_repository;
 use crate::lsp::uri::CanonicalRoot;
 
 /// The files one index run considers.
@@ -35,12 +35,11 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
     // walk never selects by its own path (gitignored, under `.git/` or
     // `.knot-lite/`), is never read: its content would end up in
     // `.knot-lite/` (directory symlinks are already not followed by the
-    // walkers).
+    // walkers). The readers at query time apply the same rule.
     let canonical_root = CanonicalRoot::new(root);
     let mut parse: Vec<(String, PathBuf)> = knot::pipeline::input::discover_files(root_str, false)?
         .into_iter()
-        .filter(|path| canonical_root.contains(path))
-        .filter(|path| link_target_selectable(root, &canonical_root, path))
+        .filter(|path| canonical_root.contains_file(path))
         .map(|path| (relative(&path, root), path))
         .filter(|(rel, _)| !is_reserved_rel(rel))
         .collect();
@@ -64,31 +63,6 @@ pub fn select_files(root: &Path) -> anyhow::Result<Selection> {
         parse_rel,
         tier1_candidates,
     })
-}
-
-/// Whether the file at `path` may be read for `root`'s index as far as
-/// symlinks go: it is no symlink, or it resolves to a regular file inside the
-/// repository that the walk reaches by its own path (not under a reserved or
-/// build-output directory such as `.git/`, not gitignored).
-pub(crate) fn link_target_selectable(
-    root: &Path,
-    canonical_root: &CanonicalRoot,
-    path: &Path,
-) -> bool {
-    let is_link = std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink());
-    if !is_link {
-        return true;
-    }
-    let Ok(target) = path.canonicalize() else {
-        return false;
-    };
-    let Ok(target_rel) = target.strip_prefix(canonical_root.canonical()) else {
-        return false;
-    };
-    target.is_file()
-        && root
-            .to_str()
-            .is_some_and(|root_str| walk_reaches(root_str, &root.join(target_rel)))
 }
 
 /// Repo-relative path with `/` separators on every platform.
@@ -221,16 +195,10 @@ mod tests {
         );
         assert_eq!(tier1_rels(&selection), vec![".gitignore"]);
         let canonical = CanonicalRoot::new(root);
-        assert!(!link_target_selectable(
-            root,
-            &canonical,
-            &root.join("notes.md")
-        ));
-        assert!(link_target_selectable(
-            root,
-            &canonical,
-            &root.join("README.md")
-        ));
+        assert!(!canonical.contains_file(&root.join("notes.md")));
+        assert!(!canonical.contains_file(&root.join("gitcfg.md")));
+        assert!(canonical.contains_file(&root.join("alias.md")));
+        assert!(canonical.contains_file(&root.join("README.md")));
     }
 
     #[test]

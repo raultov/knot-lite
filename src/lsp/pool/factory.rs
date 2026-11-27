@@ -10,7 +10,7 @@ use crate::lsp::preopen::{PreopenPlan, plan};
 use crate::lsp::process::{StartContext, Started, start_or_degrade, stop};
 use crate::lsp::readiness::wait_ready;
 use crate::lsp::spec::{Degraded, SpecInputs, resolve_program, spec_for};
-use crate::lsp::uri::join_rel;
+use crate::lsp::uri::{CanonicalRoot, join_rel};
 
 /// Production factory spawning real language-server processes.
 pub struct ProcessFactory {
@@ -53,9 +53,10 @@ impl ProcessFactory {
 }
 
 fn preopen_ts_files(started: &mut Started, repo_root: &Path, ts_files: &[String]) {
+    let root = CanonicalRoot::new(repo_root);
     for rel in ts_files {
         let abs = join_rel(repo_root, rel);
-        let _ = started.session.did_open(&abs);
+        let _ = started.session.did_open(&root, &abs);
     }
 }
 
