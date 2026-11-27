@@ -5,7 +5,7 @@ All notable changes to `knot-lite` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.8] - 2026-11-27
 
 ### Fixed
 - **Every target file of a multi-target `find_callers` counts as changed from the first target on** ([#22](https://github.com/raultov/knot-lite/issues/22)). A target file edited under its old mtime joined the call's changed set only when its own target was described, so the live callers of the targets listed before it were mapped to that file's stale indexed line ranges (`callers _area`: `total_area` listed `summary` instead of `scene_area`, `pair_area` gained `scene_area`). `callers_response` now runs `EditedFiles::examine_targets` over the files of every shown target before describing the first one, so the answer no longer depends on the target order.
