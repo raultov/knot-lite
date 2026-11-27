@@ -2,11 +2,23 @@
 //!
 //! It behaves like the SDK's `StdioTransport` (one JSON-RPC message per line
 //! on stdin, replies on stdout, lines over the size cap dropped) with one
-//! difference: a line that is not JSON gets the JSON-RPC 2.0 parse error
-//! (`-32700`, `id: null`) and a line over the size cap the invalid-request
-//! error (`-32600`, `id: null`) instead of being dropped without a word, so
-//! the client learns why its request went unanswered. The reply goes through
-//! the same writer as every other message, so it never interleaves with one.
+//! difference: **no line that calls for a reply goes unanswered**. Only a
+//! notification (a `method` without an `id`), a response and a blank line
+//! get none. Everything else the server cannot serve is answered here, so the
+//! client learns why its request failed instead of waiting for ever:
+//!
+//! - not JSON: the parse error (`-32700`, `id: null`);
+//! - over the size cap: invalid request (`-32600`, `id: null`; the line is
+//!   never read, so its id is unknown);
+//! - JSON that is no JSON-RPC message the server reads (a scalar, an object
+//!   without `method`, a wrong `jsonrpc`, an `id` or `params` of the wrong
+//!   type): `-32600`, or `-32602` when only the shape of `params` is wrong,
+//!   with the request's `id` when it is a string or an integer;
+//! - a batch (an array): MCP dropped JSON-RPC batching and the SDK ignores
+//!   them, so every request in it gets its own `-32600`.
+//!
+//! The replies go through the same writer as every other message, so they
+//! never interleave with one.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,6 +26,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use rust_mcp_sdk::schema::RequestId;
+use rust_mcp_sdk::schema::schema_utils::McpMessage as _;
 use rust_mcp_sdk::schema::schema_utils::{
     ClientMessage, ClientMessages, MessageFromServer, SdkError, ServerMessage, ServerMessages,
 };
@@ -21,6 +34,7 @@ use rust_mcp_sdk::{
     IoStream, McpDispatch, MessageDispatcher, Transport, TransportDispatcher, TransportError,
     TransportOptions,
 };
+use serde_json::Value;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt as _, AsyncRead, AsyncReadExt as _, BufReader};
 use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -38,15 +52,11 @@ pub const PARSE_ERROR_REPLY: &str =
 /// The JSON-RPC 2.0 reply to a line over the size cap of `max` bytes: it is
 /// never read, so its id is unknown.
 pub fn too_long_reply(max: usize) -> String {
-    serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": null,
-        "error": {
-            "code": -32600,
-            "message": format!("Invalid Request: message exceeds {max} bytes"),
-        },
-    })
-    .to_string()
+    error_reply(
+        &Value::Null,
+        INVALID_REQUEST,
+        &format!("Invalid Request: message exceeds {max} bytes"),
+    )
 }
 
 /// Server-side stdio transport that answers unparseable lines.
@@ -73,15 +83,30 @@ impl StdioServerTransport {
     }
 }
 
+/// JSON-RPC 2.0 `Invalid Request`.
+const INVALID_REQUEST: i64 = -32600;
+/// JSON-RPC 2.0 `Invalid params`.
+const INVALID_PARAMS: i64 = -32602;
+
+/// A JSON-RPC 2.0 error reply for the request `id` (`null` when unknown).
+fn error_reply(id: &Value, code: i64, message: &str) -> String {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message },
+    })
+    .to_string()
+}
+
 /// What one input line is.
 #[derive(Debug)]
 enum Incoming {
     /// A JSON-RPC message for the server.
     Message(Box<ClientMessages>),
-    /// Not JSON: answered with [`PARSE_ERROR_REPLY`].
-    ParseError,
-    /// JSON that is no client message (no reply: it may be a notification).
-    Unrecognised,
+    /// Nothing the server can serve: answered with these error replies.
+    Rejected(Vec<String>),
+    /// A notification or a response the server cannot read: no reply is due.
+    Ignored,
     /// A blank line.
     Blank,
 }
@@ -90,12 +115,103 @@ fn classify(line: &[u8]) -> Incoming {
     if line.iter().all(u8::is_ascii_whitespace) {
         return Incoming::Blank;
     }
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(line) else {
-        return Incoming::ParseError;
+    let Ok(value) = serde_json::from_slice::<Value>(line) else {
+        return Incoming::Rejected(vec![PARSE_ERROR_REPLY.to_owned()]);
     };
-    serde_json::from_value(value).map_or(Incoming::Unrecognised, |message| {
-        Incoming::Message(Box::new(message))
+    match value {
+        Value::Array(items) => Incoming::Rejected(batch_replies(&items)),
+        Value::Object(_) => match serde_json::from_value::<ClientMessage>(value.clone()) {
+            // The SDK reads a request whose id it cannot use (`null`, a
+            // fraction, an object) as a notification and never answers it.
+            Ok(message) if message.is_request() || !is_request_shaped(&value) => {
+                Incoming::Message(Box::new(ClientMessages::Single(message)))
+            }
+            _ => {
+                rejection(&value).map_or(Incoming::Ignored, |reply| Incoming::Rejected(vec![reply]))
+            }
+        },
+        _ => Incoming::Rejected(vec![error_reply(
+            &Value::Null,
+            INVALID_REQUEST,
+            "Invalid Request: a JSON-RPC message is a JSON object",
+        )]),
+    }
+}
+
+/// The id to answer `message` with: its `id` when that is a string or an
+/// integer, `null` otherwise (JSON-RPC 2.0 §5.1).
+fn reply_id(message: &Value) -> Value {
+    match message.get("id") {
+        Some(id @ Value::String(_)) => id.clone(),
+        Some(id @ Value::Number(number)) if number.is_i64() || number.is_u64() => id.clone(),
+        _ => Value::Null,
+    }
+}
+
+/// Whether `message` is an object with both a `method` and an `id`: a
+/// request, whatever the types of the two.
+fn is_request_shaped(message: &Value) -> bool {
+    message
+        .as_object()
+        .is_some_and(|object| object.contains_key("method") && object.contains_key("id"))
+}
+
+/// Whether a reply is due for `message`: not for a notification (a `method`
+/// without an `id`) nor for a response (`result` or `error` without a `method`).
+fn expects_reply(message: &Value) -> bool {
+    let Some(object) = message.as_object() else {
+        return true;
+    };
+    if object.contains_key("method") {
+        object.contains_key("id")
+    } else {
+        !(object.contains_key("result") || object.contains_key("error"))
+    }
+}
+
+/// The error reply for a JSON object the server cannot read as a message, or
+/// `None` when no reply is due.
+fn rejection(message: &Value) -> Option<String> {
+    if !expects_reply(message) {
+        return None;
+    }
+    let id = reply_id(message);
+    let well_formed_but_for_params = message.get("jsonrpc") == Some(&Value::from("2.0"))
+        && message.get("method").is_some_and(Value::is_string)
+        && !id.is_null()
+        && message
+            .get("params")
+            .is_some_and(|params| params.is_object() || params.is_array());
+    Some(if well_formed_but_for_params {
+        error_reply(
+            &id,
+            INVALID_PARAMS,
+            "Invalid params: the request's params do not fit its method",
+        )
+    } else {
+        error_reply(
+            &id,
+            INVALID_REQUEST,
+            "Invalid Request: not a JSON-RPC 2.0 request the server can read",
+        )
     })
+}
+
+/// The replies to a batch: one per request in it, or one with `id: null`
+/// when it holds none.
+fn batch_replies(items: &[Value]) -> Vec<String> {
+    const MESSAGE: &str =
+        "Invalid Request: JSON-RPC batches are not supported; send one message per line";
+    let replies: Vec<String> = items
+        .iter()
+        .filter(|item| item.is_object() && expects_reply(item))
+        .map(|item| error_reply(&reply_id(item), INVALID_REQUEST, MESSAGE))
+        .collect();
+    if replies.is_empty() {
+        vec![error_reply(&Value::Null, INVALID_REQUEST, MESSAGE)]
+    } else {
+        replies
+    }
 }
 
 /// One line read with a size cap.
@@ -207,12 +323,19 @@ where
                     return Ok(());
                 }
             }
-            Incoming::ParseError => {
-                tracing::warn!("incoming line is not JSON; replied with a parse error");
-                reply(&sender, PARSE_ERROR_REPLY).await?;
+            Incoming::Rejected(replies) => {
+                tracing::warn!(
+                    "incoming line is not a JSON-RPC message the server can serve; replied with {} error(s)",
+                    replies.len()
+                );
+                for payload in &replies {
+                    reply(&sender, payload).await?;
+                }
             }
-            Incoming::Unrecognised => {
-                tracing::warn!("incoming JSON is not a JSON-RPC client message; ignored");
+            Incoming::Ignored => {
+                tracing::warn!(
+                    "incoming notification or response is not one the server reads; ignored"
+                );
             }
             Incoming::Blank => {}
         }
@@ -383,25 +506,151 @@ mod tests {
         );
     }
 
-    #[test]
-    fn non_json_lines_are_parse_errors() {
-        assert!(matches!(
-            classify(b"this is not json"),
-            Incoming::ParseError
-        ));
-        assert!(matches!(
-            classify(br#"{"jsonrpc":"2.0","id":1,"#),
-            Incoming::ParseError
-        ));
-        assert!(matches!(classify(b"\xff\xfe"), Incoming::ParseError));
+    /// The `(id, code)` of the replies to one line.
+    type Replies = Vec<(Value, i64)>;
+
+    /// The `(id, code)` of every reply `line` is rejected with; `None` when
+    /// the line is not rejected.
+    fn rejected(line: &[u8]) -> Option<Replies> {
+        let Incoming::Rejected(replies) = classify(line) else {
+            return None;
+        };
+        Some(
+            replies
+                .iter()
+                .map(|reply| {
+                    let reply: Value = serde_json::from_str(reply).expect("a JSON reply");
+                    assert_eq!(reply["jsonrpc"], "2.0", "{reply}");
+                    assert!(reply["error"]["message"].is_string(), "{reply}");
+                    (
+                        reply["id"].clone(),
+                        reply["error"]["code"].as_i64().expect("an error code"),
+                    )
+                })
+                .collect(),
+        )
     }
 
     #[test]
-    fn requests_blank_and_foreign_json_are_told_apart() {
+    fn non_json_lines_are_parse_errors() {
+        for line in [
+            &b"this is not json"[..],
+            br#"{"jsonrpc":"2.0","id":1,"#,
+            b"\xff\xfe",
+        ] {
+            assert_eq!(
+                rejected(line),
+                Some(vec![(Value::Null, -32700)]),
+                "{line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn requests_and_blank_lines_are_told_apart() {
         let request = br#"{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}"#;
         assert!(matches!(classify(request), Incoming::Message(_)));
         assert!(matches!(classify(b"  \r"), Incoming::Blank));
-        assert!(matches!(classify(b"42"), Incoming::Unrecognised));
+    }
+
+    /// The rule of the module: whatever calls for a reply gets one (#32).
+    /// Every line here is JSON the server cannot serve.
+    #[test]
+    fn every_unreadable_line_that_calls_for_a_reply_gets_one() {
+        let id = |id: i64| Value::from(id);
+        let cases: &[(&str, Replies)] = &[
+            // A request whose params is no structured value (#32).
+            (
+                r#"{"jsonrpc":"2.0","id":14,"method":"tools/call","params":"x"}"#,
+                vec![(id(14), -32600)],
+            ),
+            (
+                r#"{"jsonrpc":"2.0","id":"s20","method":"tools/list","params":5}"#,
+                vec![(Value::from("s20"), -32600)],
+            ),
+            // Broken envelopes: the id is echoed when it is usable.
+            (
+                r#"{"jsonrpc":"2.0","id":16,"method":42}"#,
+                vec![(id(16), -32600)],
+            ),
+            (r#"{"jsonrpc":"2.0","id":17}"#, vec![(id(17), -32600)]),
+            (
+                r#"{"jsonrpc":"1.0","id":18,"method":"tools/list"}"#,
+                vec![(id(18), -32600)],
+            ),
+            (r#"{"id":19,"method":"tools/list"}"#, vec![(id(19), -32600)]),
+            (
+                r#"{"jsonrpc":"2.0","id":1.5,"method":"tools/list"}"#,
+                vec![(Value::Null, -32600)],
+            ),
+            (
+                r#"{"jsonrpc":"2.0","id":{"a":1},"method":"tools/list"}"#,
+                vec![(Value::Null, -32600)],
+            ),
+            // Not a JSON-RPC message at all.
+            ("42", vec![(Value::Null, -32600)]),
+            (r#""text""#, vec![(Value::Null, -32600)]),
+            ("null", vec![(Value::Null, -32600)]),
+            ("true", vec![(Value::Null, -32600)]),
+            ("{}", vec![(Value::Null, -32600)]),
+            (r#"{"foo":1}"#, vec![(Value::Null, -32600)]),
+            // Batches: one reply per request, or one when there is none.
+            ("[]", vec![(Value::Null, -32600)]),
+            ("[1,2]", vec![(Value::Null, -32600)]),
+            (
+                r#"[{"jsonrpc":"2.0","id":21,"method":"tools/list","params":{}},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":"b","method":"tools/call","params":"x"}]"#,
+                vec![(id(21), -32600), (Value::from("b"), -32600)],
+            ),
+        ];
+        for (line, expected) in cases {
+            assert_eq!(rejected(line.as_bytes()).as_ref(), Some(expected), "{line}");
+        }
+    }
+
+    /// Notifications and responses never get a reply, readable or not.
+    #[test]
+    fn unreadable_notifications_and_responses_get_no_reply() {
+        for line in [
+            r#"{"jsonrpc":"2.0","method":"notifications/x","params":"x"}"#,
+            r#"{"method":42}"#,
+            r#"{"jsonrpc":"2.0","id":24,"result":"x","extra":{"a":[1]}}"#,
+            r#"{"jsonrpc":"1.0","id":25,"error":"x"}"#,
+        ] {
+            assert!(
+                matches!(
+                    classify(line.as_bytes()),
+                    Incoming::Ignored | Incoming::Message(_)
+                ),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rejected_request_is_answered_with_its_id_and_the_next_one_served() {
+        let bad = r#"{"jsonrpc":"2.0","id":14,"method":"tools/call","params":"x"}"#;
+        let good = r#"{"jsonrpc":"2.0","id":99,"method":"tools/list","params":{}}"#;
+        let batch = format!("[{good}]");
+        let input = format!("{bad}\n{batch}\n{good}\n");
+        let (replies, forwarded) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+            .block_on(run_read_loop(input.as_bytes(), 64 * 1024));
+        assert_eq!(forwarded, 1, "only the readable request is served");
+        let answered: Vec<(Value, i64)> = replies
+            .iter()
+            .map(|reply| {
+                (
+                    reply["id"].clone(),
+                    reply["error"]["code"].as_i64().expect("code"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            answered,
+            vec![(Value::from(14), -32600), (Value::from(99), -32600)]
+        );
     }
 
     /// The replies `read_loop` writes for `input` (size cap `max`) and how
